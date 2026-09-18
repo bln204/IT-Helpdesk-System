@@ -33,3 +33,9 @@ build/
 .vscode/
 AGENTS.md
 .env.local
+
+
+# Project documentation
+docs/
+WORKING_RULES.md
+RUN.md

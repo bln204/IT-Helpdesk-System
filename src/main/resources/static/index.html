@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ticketing Console</title>
+  <title>Bảng điều khiển Phiếu hỗ trợ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -15,29 +15,29 @@
     <aside class="nav-card" id="nav-card">
       <div class="logo">
         <span class="logo-mark" id="logo-mark">
-          <img id="logo-mark-img" alt="User avatar" />
+          <img id="logo-mark-img" alt="Ảnh đại diện người dùng" />
           <span class="logo-mark-fallback" id="logo-mark-fallback">IT</span>
         </span>
         <div>
-          <strong id="sidebar-username">Ticketing</strong>
-          <span id="sidebar-role">Console</span>
+          <strong id="sidebar-username">Phiếu hỗ trợ</strong>
+          <span id="sidebar-role">Bảng điều khiển</span>
         </div>
       </div>
-      <button class="ghost nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu">Menu</button>
+      <button class="ghost nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu">Trình đơn</button>
       <div class="nav-menu" id="nav-menu">
-      <button class="ghost theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle dark mode">
-        <span class="theme-label">Dark mode</span>
+      <button class="ghost theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Chuyển đổi chế độ tối">
+        <span class="theme-label">Chế độ tối</span>
         <span class="toggle-track">
           <span class="toggle-thumb"></span>
         </span>
       </button>
       <nav class="nav-links">
-        <a href="#/tickets" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Tickets</a>
-        <a href="#/reports" data-role="ROLE_ENGINEER,ROLE_ADMIN">Reports</a>
-        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_ENGINEER">Users</a>
-        <a href="#/profile" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Profile</a>
+        <a href="#/tickets" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Phiếu hỗ trợ</a>
+        <a href="#/reports" data-role="ROLE_ENGINEER,ROLE_ADMIN">Báo cáo</a>
+        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_ENGINEER">Người dùng</a>
+        <a href="#/profile" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Hồ sơ</a>
       </nav>
-      <button class="ghost" id="logout-btn" type="button">Sign out</button>
+      <button class="ghost" id="logout-btn" type="button">Đăng xuất</button>
       </div>
     </aside>
 
@@ -45,146 +45,146 @@
       <main class="grid">
     <section class="panel view" id="login-view" data-view="login">
       <header>
-        <h3>Sign in</h3>
-        <p>Authenticate to access tickets, reports, and admin tools.</p>
+        <h3>Đăng nhập</h3>
+        <p>Xác thực để truy cập phiếu hỗ trợ, báo cáo và công cụ quản trị.</p>
       </header>
       <form id="login-form" class="stack">
         <div id="login-error" class="error-banner hidden" role="alert"></div>
         <label>
-          Username
+          Tên đăng nhập
           <input type="text" name="username" autocomplete="username" required />
         </label>
         <label>
-          Password
+          Mật khẩu
           <input type="password" name="password" autocomplete="current-password" required />
         </label>
         <p id="login-prefill-note" class="info-banner hidden">
-          Demo login: engineer credentials are pre-filled and ready to sign in.
+          Đăng nhập thử nghiệm: thông tin đăng nhập của kỹ sư đã được điền sẵn và sẵn sàng đăng nhập.
         </p>
-        <button type="submit">Login</button>
+        <button type="submit">Đăng nhập</button>
       </form>
     </section>
 
     <section class="panel view" id="tickets-panel" data-view="tickets">
       <header class="panel-header">
         <div>
-          <h3>Tickets</h3>
-          <p>Browse and select a ticket to manage.</p>
+          <h3>Phiếu hỗ trợ</h3>
+          <p>Duyệt và chọn một phiếu hỗ trợ để quản lý.</p>
         </div>
-        <button id="open-create-modal" class="icon-btn" type="button" aria-label="Create ticket">
+        <button id="open-create-modal" class="icon-btn" type="button" aria-label="Tạo phiếu hỗ trợ">
           +
         </button>
       </header>
       <div class="toolbar">
-        <input id="filter-search" placeholder="Search tickets" />
+        <input id="filter-search" placeholder="Tìm kiếm phiếu hỗ trợ" />
         <select id="filter-assignee">
-          <option value="">All assignees</option>
-          <option value="UNASSIGNED">Unassigned</option>
+          <option value="">Tất cả người được phân công</option>
+          <option value="UNASSIGNED">Chưa phân công</option>
         </select>
         <select id="filter-status">
-          <option value="">All statuses</option>
-          <option value="NEW">New</option>
-          <option value="IN_PROGRESS">In progress</option>
-          <option value="BLOCKED">Blocked</option>
-          <option value="CLOSED">Closed</option>
+          <option value="">Tất cả trạng thái</option>
+          <option value="NEW">Mới</option>
+          <option value="IN_PROGRESS">Đang xử lý</option>
+          <option value="BLOCKED">Bị chặn</option>
+          <option value="CLOSED">Đã đóng</option>
         </select>
         <select id="filter-sort">
-          <option value="createdAt,desc">Newest</option>
-          <option value="createdAt,asc">Oldest</option>
-          <option value="priority,desc">Priority (high → low)</option>
-          <option value="priority,asc">Priority (low → high)</option>
-          <option value="status,asc">Status</option>
-          <option value="assigneeDisplay,asc">Assignee (A → Z)</option>
+          <option value="createdAt,desc">Mới nhất</option>
+          <option value="createdAt,asc">Cũ nhất</option>
+          <option value="priority,desc">Độ ưu tiên (cao → thấp)</option>
+          <option value="priority,asc">Độ ưu tiên (thấp → cao)</option>
+          <option value="status,asc">Trạng thái</option>
+          <option value="assigneeDisplay,asc">Người được phân công (A → Z)</option>
         </select>
-        <button id="refresh-btn" class="secondary" type="button">Refresh</button>
-        <button id="clear-filters-btn" class="ghost" type="button">Clear filters</button>
+        <button id="refresh-btn" class="secondary" type="button">Làm mới</button>
+        <button id="clear-filters-btn" class="ghost" type="button">Xóa bộ lọc</button>
         <label class="inline-toggle">
           <input type="checkbox" id="auto-refresh-toggle" />
-          Auto refresh
+          Tự động làm mới
         </label>
         <span class="muted" id="refresh-status"></span>
       </div>
       <div class="ticket-board" id="ticket-board">
         <div class="ticket-list-pane">
           <div id="tickets-list" class="ticket-list"></div>
-          <div id="tickets-sentinel" class="muted">Loading more…</div>
+          <div id="tickets-sentinel" class="muted">Đang tải thêm…</div>
         </div>
         <div class="ticket-detail-pane">
           <div id="ticket-details-panel" class="ticket-drawer hidden">
             <header class="drawer-header">
-              <h3>Ticket details</h3>
-              <button id="close-details" class="ghost" type="button">Close</button>
+              <h3>Chi tiết phiếu hỗ trợ</h3>
+              <button id="close-details" class="ghost" type="button">Đóng</button>
             </header>
-            <div id="ticket-details" class="empty">Select a ticket to view details.</div>
+            <div id="ticket-details" class="empty">Chọn một phiếu hỗ trợ để xem chi tiết.</div>
             <div id="ticket-actions" class="stack hidden">
               <div class="split">
                 <label>
-                  Status
+                  Trạng thái
                   <select id="status-select">
-                    <option value="NEW">New</option>
-                    <option value="IN_PROGRESS">In progress</option>
-                    <option value="BLOCKED">Blocked</option>
-                    <option value="CLOSED">Closed</option>
+                    <option value="NEW">Mới</option>
+                    <option value="IN_PROGRESS">Đang xử lý</option>
+                    <option value="BLOCKED">Bị chặn</option>
+                    <option value="CLOSED">Đã đóng</option>
                   </select>
                 </label>
                 <label>
-                  Priority
+                  Độ ưu tiên
                   <select id="priority-select">
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent</option>
+                    <option value="LOW">Thấp</option>
+                    <option value="MEDIUM">Trung bình</option>
+                    <option value="HIGH">Cao</option>
+                    <option value="URGENT">Khẩn cấp</option>
                   </select>
                 </label>
               </div>
               <div class="split">
                 <label class="full-span">
-                  Assignee
+                  Người được phân công
                   <select id="assignee-input">
-                    <option value="UNASSIGNED">Unassigned</option>
+                    <option value="UNASSIGNED">Chưa phân công</option>
                   </select>
                 </label>
               </div>
               <div class="button-row">
-                <button id="update-status-btn" type="button">Update status</button>
-                <button id="update-priority-btn" class="secondary" type="button">Update priority</button>
-                <button id="update-assignee-btn" class="secondary" type="button">Update assignee</button>
-                <button id="assign-me-btn" class="ghost" type="button">Assign to me</button>
+                <button id="update-status-btn" type="button">Cập nhật trạng thái</button>
+                <button id="update-priority-btn" class="secondary" type="button">Cập nhật độ ưu tiên</button>
+                <button id="update-assignee-btn" class="secondary" type="button">Cập nhật người phân công</button>
+                <button id="assign-me-btn" class="ghost" type="button">Giao cho tôi</button>
               </div>
             </div>
             <div class="stack hidden" id="comment-panel">
-              <h4>Add comment</h4>
+              <h4>Thêm bình luận</h4>
               <label>
-                Visibility
+                Phạm vi hiển thị
                 <select id="comment-visibility">
-                  <option value="PUBLIC">Public</option>
-                  <option value="INTERNAL">Internal</option>
+                  <option value="PUBLIC">Công khai</option>
+                  <option value="INTERNAL">Nội bộ</option>
                 </select>
               </label>
               <label>
-                Comment
+                Bình luận
                 <textarea id="comment-body" rows="3" maxlength="2000" required></textarea>
               </label>
-              <button id="add-comment-btn" type="button">Add comment</button>
+              <button id="add-comment-btn" type="button">Thêm bình luận</button>
             </div>
             <div class="ticket-tabs">
-              <button class="tab-btn active" type="button" data-tab="comments">Comments</button>
-              <button class="tab-btn" type="button" data-tab="audit">Audit</button>
-              <button class="tab-btn" type="button" data-tab="assignments">Assignments</button>
+              <button class="tab-btn active" type="button" data-tab="comments">Bình luận</button>
+              <button class="tab-btn" type="button" data-tab="audit">Nhật ký kiểm tra</button>
+              <button class="tab-btn" type="button" data-tab="assignments">Phân công</button>
             </div>
             <div class="tab-panel active" data-tab-panel="comments">
-              <h4>Comments</h4>
+              <h4>Bình luận</h4>
               <div id="comments-list" class="list"></div>
             </div>
             <div class="tab-panel" data-tab-panel="audit">
               <div class="panel-header compact">
-                <h4>Audit</h4>
-                <button id="audit-download-btn" class="ghost" type="button">Download CSV</button>
+                <h4>Nhật ký kiểm tra</h4>
+                <button id="audit-download-btn" class="ghost" type="button">Tải CSV</button>
               </div>
               <div id="audit-list" class="list"></div>
             </div>
             <div class="tab-panel" data-tab-panel="assignments">
-              <h4>Assignments</h4>
+              <h4>Phân công</h4>
               <div id="assignments-list" class="list"></div>
             </div>
           </div>
@@ -194,24 +194,24 @@
 
     <section class="panel view" id="reports-panel" data-view="reports">
       <header>
-        <h3>Reports</h3>
-        <p>Quick operational snapshots (defaults to the last 30 days).</p>
+        <h3>Báo cáo</h3>
+        <p>Tổng quan vận hành nhanh (mặc định trong 30 ngày qua).</p>
       </header>
       <div class="stack">
         <label>
-          Date from
+          Từ ngày
           <input id="report-from" type="date" />
         </label>
         <label>
-          Date to
+          Đến ngày
           <input id="report-to" type="date" />
         </label>
         <div class="button-row report-buttons">
-          <button id="engineer-report-btn" class="secondary" type="button">Engineer report</button>
-          <button id="requester-report-btn" class="secondary" type="button">Requester report</button>
-          <button id="backlog-report-btn" class="secondary" type="button">Backlog aging</button>
-          <button id="sla-report-btn" class="secondary" type="button">SLA buckets</button>
-          <button id="report-download-btn" class="ghost" type="button">Download CSV</button>
+          <button id="engineer-report-btn" class="secondary" type="button">Báo cáo kỹ sư</button>
+          <button id="requester-report-btn" class="secondary" type="button">Báo cáo người yêu cầu</button>
+          <button id="backlog-report-btn" class="secondary" type="button">Thời gian tồn đọng</button>
+          <button id="sla-report-btn" class="secondary" type="button">Nhóm SLA</button>
+          <button id="report-download-btn" class="ghost" type="button">Tải CSV</button>
         </div>
       </div>
       <div id="report-output" class="list"></div>
@@ -219,38 +219,38 @@
 
     <section class="panel view" id="admin-panel" data-view="admin">
       <header>
-        <h3>User admin</h3>
-        <p>Manage users and review user audit events.</p>
+        <h3>Quản trị người dùng</h3>
+        <p>Quản lý người dùng và xem xét các sự kiện kiểm tra người dùng.</p>
       </header>
       <div class="stack">
         <div class="split-row">
           <div>
             <div class="panel-header compact">
-              <h4>Users</h4>
-              <button id="open-user-modal" class="icon-btn" type="button" aria-label="Create user">
+              <h4>Người dùng</h4>
+              <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
                 +
               </button>
             </div>
             <div class="toolbar">
-              <input id="user-search" placeholder="Search username" />
-              <button id="user-search-btn" class="secondary" type="button">Search</button>
+              <input id="user-search" placeholder="Tìm kiếm tên đăng nhập" />
+              <button id="user-search-btn" class="secondary" type="button">Tìm kiếm</button>
             </div>
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Enabled</th>
+                    <th>Tên đăng nhập</th>
+                    <th>Vai trò</th>
+                    <th>Kích hoạt</th>
                   </tr>
                 </thead>
                 <tbody id="admin-users"></tbody>
               </table>
             </div>
             <div class="pager">
-              <button id="users-prev" class="secondary" type="button">Prev</button>
-              <span id="users-page">Page 1</span>
-              <button id="users-next" class="secondary" type="button">Next</button>
+              <button id="users-prev" class="secondary" type="button">Trước</button>
+              <span id="users-page">Trang 1</span>
+              <button id="users-next" class="secondary" type="button">Sau</button>
             </div>
           </div>
         </div>
@@ -259,27 +259,27 @@
 
     <section class="panel view" id="profile-panel" data-view="profile">
       <header>
-        <h3>My profile</h3>
-        <p>View your account and update your password.</p>
+        <h3>Hồ sơ của tôi</h3>
+        <p>Xem tài khoản của bạn và cập nhật mật khẩu.</p>
       </header>
       <div class="profile-layout">
         <div class="profile-summary" id="profile-card">
           <div class="avatar" id="profile-avatar">
-            <img id="profile-avatar-preview" alt="User avatar" />
+            <img id="profile-avatar-preview" alt="Ảnh đại diện người dùng" />
             <div class="avatar-fallback" id="profile-avatar-fallback">U</div>
           </div>
           <div class="list" id="profile-details"></div>
         </div>
         <div class="profile-forms">
           <div class="profile-panel">
-            <h4>Profile details</h4>
+            <h4>Chi tiết hồ sơ</h4>
             <div class="stack">
               <label>
-                Display name
+                Tên hiển thị
                 <input type="text" id="profile-display-name" maxlength="120" />
               </label>
               <label>
-                Title
+                Chức danh
                 <input type="text" id="profile-title" maxlength="120" />
               </label>
               <label>
@@ -287,22 +287,22 @@
                 <input type="email" id="profile-email" maxlength="160" required />
               </label>
               <div class="button-row">
-                <button id="profile-save-btn" type="button">Save profile</button>
+                <button id="profile-save-btn" type="button">Lưu hồ sơ</button>
               </div>
             </div>
           </div>
           <div class="profile-panel">
-            <h4>Security</h4>
+            <h4>Bảo mật</h4>
             <form id="profile-password-form" class="stack">
               <label>
-                Current password
+                Mật khẩu hiện tại
                 <input type="password" name="currentPassword" required />
               </label>
               <label>
-                New password
+                Mật khẩu mới
                 <input type="password" name="newPassword" minlength="8" required />
               </label>
-              <button type="submit">Change password</button>
+              <button type="submit">Đổi mật khẩu</button>
             </form>
           </div>
         </div>
@@ -310,63 +310,63 @@
     </section>
       </main>
       <footer class="footer">
-        <span>Ticketing Console • Internal demo</span>
-        <span id="api-status">API status: idle</span>
+        <span>Bảng điều khiển Phiếu hỗ trợ • Bản thử nghiệm nội bộ</span>
+        <span id="api-status">Trạng thái API: chờ</span>
       </footer>
       <div class="modal hidden" id="create-modal" aria-hidden="true">
         <div class="modal-content">
           <header class="panel-header">
             <div>
-              <h3>Create ticket</h3>
-              <p>Start a new request with priority and category.</p>
+              <h3>Tạo phiếu hỗ trợ</h3>
+              <p>Bắt đầu một yêu cầu mới với độ ưu tiên và danh mục.</p>
             </div>
-            <button id="close-create-modal" class="ghost" type="button">Close</button>
+            <button id="close-create-modal" class="ghost" type="button">Đóng</button>
           </header>
           <form id="create-form" class="stack">
             <label>
-              Title
+              Tiêu đề
               <input type="text" name="title" maxlength="160" required />
             </label>
             <label>
-              Description
+              Mô tả
               <textarea name="description" rows="4" required></textarea>
             </label>
             <div class="split">
               <label>
-                Priority
+                Độ ưu tiên
                 <select name="priority" required>
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="URGENT">Urgent</option>
+                  <option value="LOW">Thấp</option>
+                  <option value="MEDIUM">Trung bình</option>
+                  <option value="HIGH">Cao</option>
+                  <option value="URGENT">Khẩn cấp</option>
                 </select>
               </label>
               <label>
-                Category
+                Danh mục
                 <select name="category" required>
-                  <option value="SOFTWARE">Software</option>
-                  <option value="ACCESS">Access</option>
-                  <option value="NETWORK">Network</option>
-                  <option value="HARDWARE">Hardware</option>
-                  <option value="OTHER">Other</option>
+                  <option value="SOFTWARE">Phần mềm</option>
+                  <option value="ACCESS">Quyền truy cập</option>
+                  <option value="NETWORK">Mạng</option>
+                  <option value="HARDWARE">Phần cứng</option>
+                  <option value="OTHER">Khác</option>
                 </select>
               </label>
             </div>
             <label>
-              Requester name
+              Tên người yêu cầu
               <input type="text" name="requesterName" maxlength="120" required />
             </label>
             <label>
-              Requester email
+              Email người yêu cầu
               <input type="email" name="requesterEmail" maxlength="160" />
             </label>
             <label>
-              Assignee (optional)
+              Người được phân công (tùy chọn)
               <select name="assigneeName" id="assignee-create">
-                <option value="UNASSIGNED">Unassigned</option>
+                <option value="UNASSIGNED">Chưa phân công</option>
               </select>
             </label>
-            <button type="submit">Create ticket</button>
+            <button type="submit">Tạo phiếu hỗ trợ</button>
           </form>
         </div>
       </div>
@@ -377,14 +377,14 @@
     <div class="modal-content">
       <header class="panel-header">
         <div>
-          <h3>Create user</h3>
-          <p>Invite a teammate with the right access.</p>
+          <h3>Tạo người dùng</h3>
+          <p>Mời đồng nghiệp với quyền truy cập phù hợp.</p>
         </div>
-        <button id="close-user-modal" class="ghost" type="button">Close</button>
+        <button id="close-user-modal" class="ghost" type="button">Đóng</button>
       </header>
       <form id="admin-create-form" class="stack">
         <label>
-          Username
+          Tên đăng nhập
           <input name="username" required />
         </label>
         <label>
@@ -392,26 +392,26 @@
           <input name="email" type="email" maxlength="160" required />
         </label>
         <label>
-          Password
+          Mật khẩu
           <input name="password" type="password" minlength="8" required />
         </label>
         <label>
-          Display name
+          Tên hiển thị
           <input name="displayName" maxlength="120" required />
         </label>
         <label>
-          Title
+          Chức danh
           <input name="title" maxlength="120" required />
         </label>
         <label>
-          Role
+          Vai trò
           <select name="role" id="admin-role-select" required>
-            <option value="REQUESTER">Requester</option>
-            <option value="ENGINEER">Engineer</option>
-            <option value="ADMIN">Admin</option>
+            <option value="REQUESTER">Người yêu cầu</option>
+            <option value="ENGINEER">Kỹ sư</option>
+            <option value="ADMIN">Quản trị viên</option>
           </select>
         </label>
-        <button type="submit">Create user</button>
+        <button type="submit">Tạo người dùng</button>
       </form>
     </div>
   </div>
@@ -420,19 +420,19 @@
     <div class="modal-content">
       <header class="panel-header">
         <div>
-          <h3>User details</h3>
-          <p id="user-detail-header">Select a user to manage.</p>
+          <h3>Chi tiết người dùng</h3>
+          <p id="user-detail-header">Chọn một người dùng để quản lý.</p>
         </div>
-        <button id="close-user-detail" class="ghost" type="button">Close</button>
+        <button id="close-user-detail" class="ghost" type="button">Đóng</button>
       </header>
       <div class="stack">
         <div class="split">
           <label>
-            Display name
+            Tên hiển thị
             <input type="text" id="user-display-name" maxlength="120" required />
           </label>
           <label>
-            Title
+            Chức danh
             <input type="text" id="user-title" maxlength="120" required />
           </label>
         </div>
@@ -442,33 +442,33 @@
         </label>
         <div class="split">
           <label>
-            Role
+            Vai trò
             <select id="user-role-select"></select>
           </label>
           <label>
-            Enabled
+            Kích hoạt
             <select id="user-enabled-select">
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
+              <option value="true">Đã kích hoạt</option>
+              <option value="false">Vô hiệu hóa</option>
             </select>
           </label>
         </div>
         <div class="split">
           <label>
-            New password
+            Mật khẩu mới
             <input type="password" id="user-password-input" minlength="8" />
           </label>
         </div>
         <div class="button-row full-width">
-          <button id="user-save-profile" type="button">Save changes</button>
+          <button id="user-save-profile" type="button">Lưu thay đổi</button>
         </div>
         <div>
-          <h4>User audit</h4>
+          <h4>Nhật ký người dùng</h4>
           <div id="user-audit" class="list"></div>
           <div class="pager">
-            <button id="user-audit-prev" class="secondary" type="button">Prev</button>
-            <span id="user-audit-page">Page 1</span>
-            <button id="user-audit-next" class="secondary" type="button">Next</button>
+            <button id="user-audit-prev" class="secondary" type="button">Trước</button>
+            <span id="user-audit-page">Trang 1</span>
+            <button id="user-audit-next" class="secondary" type="button">Sau</button>
           </div>
         </div>
       </div>

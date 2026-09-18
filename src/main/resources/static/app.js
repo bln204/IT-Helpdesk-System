@@ -140,7 +140,12 @@ const LIVE_ENGINEER_CREDENTIALS = {
 };
 
 const setApiStatus = (text) => {
-  apiStatus.textContent = `API status: ${text}`;
+  let viText = text;
+  if (text === 'idle') viText = 'chờ';
+  else if (text === 'working') viText = 'đang xử lý';
+  else if (text === 'ok') viText = 'sẵn sàng';
+  else if (typeof text === 'string' && text.startsWith('error')) viText = text.replace('error', 'lỗi');
+  apiStatus.textContent = `Trạng thái API: ${viText}`;
 };
 
 const shouldPrefillEngineerLogin = () => window.location.protocol !== 'file:';
@@ -215,7 +220,7 @@ const updateTokenStatus = () => {
     clearToken();
   }
   if (tokenStatus) {
-    tokenStatus.textContent = token ? 'Signed in' : 'Signed out';
+    tokenStatus.textContent = token ? 'Đã đăng nhập' : 'Đã đăng xuất';
   }
   if (navCard) {
     navCard.classList.toggle('hidden', !token);
@@ -224,7 +229,7 @@ const updateTokenStatus = () => {
     appShell.classList.toggle('logged-out', !token);
   }
   const payload = token ? parseJwt(token) : null;
-  const username = payload && payload.sub ? payload.sub : 'Ticketing';
+  const username = payload && payload.sub ? payload.sub : 'Phiếu hỗ trợ';
   const roles = payload && payload.roles ? payload.roles : [];
   if (logoMarkFallback) {
     const initial = username ? username.trim().charAt(0).toUpperCase() : 'T';
@@ -240,8 +245,8 @@ const updateTokenStatus = () => {
   }
   if (sidebarRole) {
     sidebarRole.textContent = roles.length
-      ? roles.map((role) => formatName(role.replace('ROLE_', ''))).join(', ')
-      : 'Console';
+      ? roles.map((role) => formatRole(role)).join(', ')
+      : 'Bảng điều khiển';
   }
   if (userDisplay) {
     userDisplay.textContent = token ? formatName(username) : '—';
@@ -256,8 +261,94 @@ const formatName = (value) => {
     .join(' ');
 };
 
+const STATUS_LABELS = {
+  NEW: 'Mới',
+  IN_PROGRESS: 'Đang xử lý',
+  BLOCKED: 'Bị chặn',
+  CLOSED: 'Đã đóng',
+  LOW: 'Thấp',
+  MEDIUM: 'Trung bình',
+  HIGH: 'Cao',
+  URGENT: 'Khẩn cấp',
+  SOFTWARE: 'Phần mềm',
+  ACCESS: 'Quyền truy cập',
+  NETWORK: 'Mạng',
+  HARDWARE: 'Phần cứng',
+  OTHER: 'Khác',
+};
+
+const ROLE_LABELS = {
+  REQUESTER: 'Người yêu cầu',
+  ENGINEER: 'Kỹ sư',
+  ADMIN: 'Quản trị viên',
+};
+
+const formatRole = (role) => {
+  if (!role) return '';
+  const clean = role.replace('ROLE_', '').toUpperCase();
+  return ROLE_LABELS[clean] || formatName(clean);
+};
+
+const AUDIT_ACTION_LABELS = {
+  CREATED: 'Đã tạo',
+  STATUS_CHANGED: 'Thay đổi trạng thái',
+  ASSIGNEE_CHANGED: 'Thay đổi người phân công',
+  COMMENT_ADDED: 'Đã thêm bình luận',
+  PRIORITY_CHANGED: 'Thay đổi độ ưu tiên',
+  LOGIN: 'Đăng nhập',
+  PASSWORD_CHANGED: 'Đổi mật khẩu',
+  PASSWORD_RESET: 'Đặt lại mật khẩu',
+  USER_CREATED: 'Tạo người dùng',
+  USER_DELETED: 'Xóa người dùng',
+  USER_DISABLED: 'Vô hiệu hóa người dùng',
+  USER_ENABLED: 'Kích hoạt người dùng',
+  ROLE_CHANGED: 'Thay đổi vai trò',
+  PROFILE_UPDATED: 'Cập nhật hồ sơ',
+};
+
+const formatAuditAction = (action) => {
+  if (!action) return '';
+  const upper = String(action).toUpperCase();
+  return AUDIT_ACTION_LABELS[upper] || formatName(action.replace(/_/g, ' '));
+};
+
+const formatFieldName = (field) => {
+  if (!field) return '';
+  const map = {
+    status: 'trạng thái',
+    priority: 'độ ưu tiên',
+    assignee: 'người phân công',
+    comment: 'bình luận',
+  };
+  return map[field.toLowerCase()] || field;
+};
+
+const formatAuditValue = (field, value) => {
+  if (!value) return '';
+  const upper = String(value).toUpperCase();
+  if (STATUS_LABELS[upper]) {
+    return STATUS_LABELS[upper];
+  }
+  if (ROLE_LABELS[upper]) {
+    return ROLE_LABELS[upper];
+  }
+  if (upper === 'UNASSIGNED') {
+    return 'Chưa phân công';
+  }
+  return value;
+};
+
+const formatSlaBucket = (bucket) => {
+  if (!bucket) return '';
+  return bucket.replace(/days/g, 'ngày');
+};
+
 const formatStatus = (value) => {
   if (!value) return '';
+  const upper = String(value).toUpperCase();
+  if (STATUS_LABELS[upper]) {
+    return STATUS_LABELS[upper];
+  }
   return formatName(value.replace(/_/g, ' '));
 };
 
@@ -270,7 +361,7 @@ const applyAdminRoleOptions = () => {
   roles.forEach((role) => {
     const option = document.createElement('option');
     option.value = role;
-    option.textContent = formatName(role);
+    option.textContent = formatRole(role);
     adminRoleSelect.appendChild(option);
   });
 };
@@ -330,7 +421,7 @@ const applyUserDetailControls = () => {
     roles.forEach((role) => {
       const option = document.createElement('option');
       option.value = role;
-      option.textContent = formatName(role);
+      option.textContent = formatRole(role);
       userRoleSelect.appendChild(option);
     });
     userRoleSelect.value = selectedUser.role;
@@ -375,12 +466,12 @@ const validateProfileFields = (fields) => {
     if (!input) return;
     clearFieldError(input);
     if (!input.value || !input.value.trim()) {
-      setFieldError(input, `${label} is required.`);
+      setFieldError(input, `${label} là bắt buộc.`);
       valid = false;
       return;
     }
     if (!input.checkValidity()) {
-      setFieldError(input, input.validationMessage || `${label} is invalid.`);
+      setFieldError(input, input.validationMessage || `${label} không hợp lệ.`);
       valid = false;
     }
   });
@@ -426,7 +517,7 @@ const validateForm = (form) => {
   inputs.forEach((input) => {
     if (input.disabled || input.type === 'button' || input.type === 'submit') return;
     if (!input.checkValidity()) {
-      setFieldError(input, input.validationMessage || 'Required');
+      setFieldError(input, input.validationMessage || 'Bắt buộc');
       valid = false;
     }
   });
@@ -480,13 +571,13 @@ const populateAssigneeSelect = (
   if (includeAll) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'All assignees';
+    option.textContent = 'Tất cả người được phân công';
     select.appendChild(option);
   }
   if (includeUnassigned) {
     const option = document.createElement('option');
     option.value = UNASSIGNED_VALUE;
-    option.textContent = 'Unassigned';
+    option.textContent = 'Chưa phân công';
     select.appendChild(option);
   }
   engineerOptions.forEach((username) => {
@@ -590,7 +681,7 @@ const request = async (path, options = {}) => {
       showView('login');
     }
     const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new Error(message || `Yêu cầu thất bại: ${response.status}`);
   }
   if (response.status === 204) {
     return null;
@@ -691,14 +782,14 @@ const renderTickets = (rows, { append = false } = {}) => {
     const row = document.createElement('div');
     row.className = 'ticket-row';
     row.style.animationDelay = `${index * 40}ms`;
-    const createdAt = ticket.createdAt ? new Date(ticket.createdAt).toLocaleString() : 'Unknown time';
+    const createdAt = ticket.createdAt ? new Date(ticket.createdAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
     const priorityClass = ticket.priority ? ticket.priority.toLowerCase() : 'low';
     const statusClass = ticket.status ? ticket.status.toLowerCase().replace(/_/g, '-') : 'new';
     const assigneeKey = ticket.assigneeName ? ticket.assigneeName.toLowerCase() : '';
     const assigneeProfile = assigneeKey ? userAvatarMap.get(assigneeKey) : null;
     const assigneeLabel = assigneeProfile && assigneeProfile.displayName
       ? assigneeProfile.displayName
-      : (ticket.assigneeName ? formatName(ticket.assigneeName) : 'Unassigned');
+      : (ticket.assigneeName ? formatName(ticket.assigneeName) : 'Chưa phân công');
     const avatarLetter = assigneeLabel.charAt(0).toUpperCase();
     const avatarImage = assigneeProfile && assigneeProfile.avatarUrl
       ? `<img src="${assigneeProfile.avatarUrl}" alt="${assigneeLabel}" />`
@@ -739,7 +830,7 @@ const loadTickets = async ({ reset = false } = {}) => {
   if (!ticketHasMore) return;
   ticketLoading = true;
   if (refreshStatus) {
-    refreshStatus.textContent = 'Refreshing…';
+    refreshStatus.textContent = 'Đang làm mới…';
   }
   const params = new URLSearchParams();
   let assigneeFallback = null;
@@ -787,11 +878,11 @@ const loadTickets = async ({ reset = false } = {}) => {
   ticketHasMore = !data.last;
   ticketPage = data.number + 1;
   if (ticketsSentinel) {
-    ticketsSentinel.textContent = ticketHasMore ? 'Loading more…' : 'End of list';
+    ticketsSentinel.textContent = ticketHasMore ? 'Đang tải thêm…' : 'Hết danh sách';
     ticketsSentinel.classList.toggle('hidden', !ticketHasMore);
   }
   if (refreshStatus) {
-    refreshStatus.textContent = `Last updated ${new Date().toLocaleTimeString()}`;
+    refreshStatus.textContent = `Cập nhật lần cuối lúc ${new Date().toLocaleTimeString('vi-VN')}`;
   }
   ticketLoading = false;
 };
@@ -799,9 +890,9 @@ const loadTickets = async ({ reset = false } = {}) => {
 const selectTicket = async (ticket) => {
   const full = await request(`/api/tickets/${ticket.id}`);
   selectedTicket = full;
-  const createdAt = full.createdAt ? new Date(full.createdAt).toLocaleString() : 'Unknown time';
-  const updatedAt = full.updatedAt ? new Date(full.updatedAt).toLocaleString() : 'Unknown time';
-  const assignee = full.assigneeName ? formatName(full.assigneeName) : 'Unassigned';
+  const createdAt = full.createdAt ? new Date(full.createdAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
+  const updatedAt = full.updatedAt ? new Date(full.updatedAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
+  const assignee = full.assigneeName ? formatName(full.assigneeName) : 'Chưa phân công';
   ticketDetails.innerHTML = `
     <div class="ticket-detail-card">
       <div class="ticket-detail-header">
@@ -815,23 +906,23 @@ const selectTicket = async (ticket) => {
       <p>${full.description}</p>
       <div class="ticket-detail-grid">
         <div class="ticket-detail-field">
-          <span>Assignee</span>
+          <span>Người được phân công</span>
           <strong>${assignee}</strong>
         </div>
         <div class="ticket-detail-field">
-          <span>Requester</span>
+          <span>Người yêu cầu</span>
           <strong>${formatName(full.requesterName)}</strong>
         </div>
         <div class="ticket-detail-field">
-          <span>Ticket</span>
+          <span>Mã phiếu</span>
           <strong>${full.ticketNumber}</strong>
         </div>
         <div class="ticket-detail-field">
-          <span>Created</span>
+          <span>Ngày tạo</span>
           <strong>${createdAt}</strong>
         </div>
         <div class="ticket-detail-field">
-          <span>Updated</span>
+          <span>Cập nhật</span>
           <strong>${updatedAt}</strong>
         </div>
       </div>
@@ -863,7 +954,7 @@ const loadComments = async (ticketId) => {
   data.forEach((comment) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    item.textContent = `${comment.actorName || 'System'}: ${comment.body}`;
+    item.textContent = `${comment.actorName || 'Hệ thống'}: ${comment.body}`;
     commentsList.appendChild(item);
   });
 };
@@ -874,10 +965,10 @@ const loadAudit = async (ticketId) => {
   data.forEach((entry) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'unknown time';
-    const actor = entry.actorName ? `by ${entry.actorName}` : '';
-    const detail = `${entry.fieldName || ''} ${entry.oldValue || ''} → ${entry.newValue || ''}`.trim();
-    item.textContent = `${when} • ${entry.action} ${actor} ${detail}`.trim();
+    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
+    const actor = entry.actorName ? `bởi ${entry.actorName}` : '';
+    const detail = `${formatFieldName(entry.fieldName)} ${formatAuditValue(entry.fieldName, entry.oldValue)} → ${formatAuditValue(entry.fieldName, entry.newValue)}`.trim();
+    item.textContent = `${when} • ${formatAuditAction(entry.action)} ${actor} ${detail}`.trim();
     auditList.appendChild(item);
   });
 };
@@ -890,13 +981,13 @@ const downloadAuditCsv = async () => {
     },
   });
   if (!response.ok) {
-    throw new Error(`Export failed: ${response.status}`);
+    throw new Error(`Xuất dữ liệu thất bại: ${response.status}`);
   }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `ticket-${selectedTicket.id}-audit.csv`;
+  link.download = `phieu-${selectedTicket.id}-kiem-tra.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -909,7 +1000,9 @@ const loadAssignments = async (ticketId) => {
   data.forEach((assignment) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    item.textContent = `${assignment.previousAssignee || 'Unassigned'} → ${assignment.newAssignee || 'Unassigned'}`;
+    const prev = assignment.previousAssignee ? formatName(assignment.previousAssignee) : 'Chưa phân công';
+    const next = assignment.newAssignee ? formatName(assignment.newAssignee) : 'Chưa phân công';
+    item.textContent = `${prev} → ${next}`;
     assignmentsList.appendChild(item);
   });
 };
@@ -962,11 +1055,11 @@ const addComment = async () => {
   if (!selectedTicket) return;
   clearFieldError(commentBody);
   if (!commentBody.value || !commentBody.value.trim()) {
-    setFieldError(commentBody, 'Comment is required.');
+    setFieldError(commentBody, 'Bình luận là bắt buộc.');
     return;
   }
   if (!commentBody.checkValidity()) {
-    setFieldError(commentBody, commentBody.validationMessage || 'Comment is invalid.');
+    setFieldError(commentBody, commentBody.validationMessage || 'Bình luận không hợp lệ.');
     return;
   }
   await request(`/api/tickets/${selectedTicket.id}/comments`, {
@@ -1066,7 +1159,7 @@ const initReportDates = () => {
 const renderReportTable = (columns, rows) => {
   reportOutput.innerHTML = '';
   if (!rows.length) {
-    reportOutput.textContent = 'No results.';
+    reportOutput.textContent = 'Không có kết quả.';
     return;
   }
   const wrap = document.createElement('div');
@@ -1092,7 +1185,7 @@ const setCurrentReport = (title, columns, rows) => {
 
 const downloadReportCsv = () => {
   if (!currentReport || !currentReport.rows.length) {
-    alert('Run a report before downloading.');
+    alert('Hãy chạy báo cáo trước khi tải xuống.');
     return;
   }
   const escapeCsv = (value) => {
@@ -1138,19 +1231,19 @@ const loadDashboard = async () => {
   const data = await request(`/api/tickets/reports/dashboard?${buildDashboardParams()}`);
   dashboardCards.innerHTML = `
     <div class="dashboard-card">
-      <h5>Open</h5>
+      <h5>Đang mở</h5>
       <strong>${data.openCount}</strong>
     </div>
     <div class="dashboard-card">
-      <h5>Closed (30d)</h5>
+      <h5>Đã đóng (30 ngày)</h5>
       <strong>${data.closedCount}</strong>
     </div>
     <div class="dashboard-card">
-      <h5>Overdue</h5>
+      <h5>Quá hạn</h5>
       <strong>${data.overdueCount}</strong>
     </div>
     <div class="dashboard-card">
-      <h5>Avg Close (hrs)</h5>
+      <h5>TG xử lý TB (giờ)</h5>
       <strong>${formatHours(data.avgCompletionHours)}</strong>
     </div>
   `;
@@ -1184,7 +1277,7 @@ const loadQueue = async () => {
   if (!data.length) {
     const line = document.createElement('div');
     line.className = 'list-item';
-    line.textContent = 'Unassigned queue is empty.';
+    line.textContent = 'Hàng đợi chưa phân công đang trống.';
     queueList.appendChild(line);
     return;
   }
@@ -1200,23 +1293,23 @@ const loadQueue = async () => {
 const loadEngineerReport = async () => {
   const data = await request(`/api/tickets/reports/engineer-summary?${buildReportParams()}`);
   const rows = data.map((row) => ({
-    Engineer: getDisplayName(row.engineer),
-    'Tickets Assigned': row.ticketsAssigned,
-    'Tickets Completed': row.ticketsCompleted,
-    'Avg Assigned/Day': formatHours(row.avgAssignedPerDay),
-    'Avg Completed/Day': formatHours(row.avgCompletedPerDay),
-    'Avg Completion (hrs)': formatHours(row.avgCompletionHours),
+    'Kỹ sư': getDisplayName(row.engineer),
+    'Phiếu được phân công': row.ticketsAssigned,
+    'Phiếu đã hoàn thành': row.ticketsCompleted,
+    'TB phân công/ngày': formatHours(row.avgAssignedPerDay),
+    'TB hoàn thành/ngày': formatHours(row.avgCompletedPerDay),
+    'TG hoàn thành TB (giờ)': formatHours(row.avgCompletionHours),
   }));
   const columns = [
-    'Engineer',
-    'Tickets Assigned',
-    'Tickets Completed',
-    'Avg Assigned/Day',
-    'Avg Completed/Day',
-    'Avg Completion (hrs)',
+    'Kỹ sư',
+    'Phiếu được phân công',
+    'Phiếu đã hoàn thành',
+    'TB phân công/ngày',
+    'TB hoàn thành/ngày',
+    'TG hoàn thành TB (giờ)',
   ];
   setActiveReportButton(engineerReportBtn);
-  setCurrentReport('engineer-report', columns, rows);
+  setCurrentReport('bao-cao-ky-su', columns, rows);
   renderReportTable(
     columns,
     rows
@@ -1226,38 +1319,38 @@ const loadEngineerReport = async () => {
 const loadRequesterReport = async () => {
   const data = await request(`/api/tickets/reports/requester-summary?${buildReportParams()}`);
   const rows = data.map((row) => ({
-    Requester: getDisplayName(row.requester),
-    'Tickets Submitted': row.ticketsSubmitted,
-    'Avg Completion (hrs)': formatHours(row.avgCompletionHours),
+    'Người yêu cầu': getDisplayName(row.requester),
+    'Phiếu đã gửi': row.ticketsSubmitted,
+    'TG hoàn thành TB (giờ)': formatHours(row.avgCompletionHours),
   }));
-  const columns = ['Requester', 'Tickets Submitted', 'Avg Completion (hrs)'];
+  const columns = ['Người yêu cầu', 'Phiếu đã gửi', 'TG hoàn thành TB (giờ)'];
   setActiveReportButton(requesterReportBtn);
-  setCurrentReport('requester-report', columns, rows);
+  setCurrentReport('bao-cao-nguoi-yeu-cau', columns, rows);
   renderReportTable(columns, rows);
 };
 
 const loadBacklogReport = async () => {
   const data = await request(`/api/tickets/reports/backlog-aging?${buildReportParams()}`);
   const rows = data.map((row) => ({
-    Status: formatStatus(row.status),
-    'Open Count': row.openCount,
-    'Avg Age (hrs)': formatHours(row.avgAgeHours),
+    'Trạng thái': formatStatus(row.status),
+    'Số lượng mở': row.openCount,
+    'Thời gian tồn đọng TB (giờ)': formatHours(row.avgAgeHours),
   }));
-  const columns = ['Status', 'Open Count', 'Avg Age (hrs)'];
+  const columns = ['Trạng thái', 'Số lượng mở', 'Thời gian tồn đọng TB (giờ)'];
   setActiveReportButton(backlogReportBtn);
-  setCurrentReport('backlog-aging', columns, rows);
+  setCurrentReport('thoi-gian-ton-dong', columns, rows);
   renderReportTable(columns, rows);
 };
 
 const loadSlaReport = async () => {
   const data = await request(`/api/tickets/reports/sla-buckets?${buildReportParams()}`);
   const rows = data.map((row) => ({
-    Bucket: row.bucket,
-    Count: row.count,
+    'Nhóm thời gian': formatSlaBucket(row.bucket),
+    'Số lượng': row.count,
   }));
-  const columns = ['Bucket', 'Count'];
+  const columns = ['Nhóm thời gian', 'Số lượng'];
   setActiveReportButton(slaReportBtn);
-  setCurrentReport('sla-buckets', columns, rows);
+  setCurrentReport('nhom-sla', columns, rows);
   renderReportTable(columns, rows);
 };
 
@@ -1276,8 +1369,8 @@ const loadAdminUsers = async () => {
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${user.username}</td>
-      <td>${formatName(user.role)}</td>
-      <td>${user.enabled ? 'Yes' : 'No'}</td>
+      <td>${formatRole(user.role)}</td>
+      <td>${user.enabled ? 'Có' : 'Không'}</td>
     `;
     row.addEventListener('click', () => selectUser(user));
 
@@ -1285,7 +1378,7 @@ const loadAdminUsers = async () => {
   });
 
   if (usersPage) {
-    usersPage.textContent = `Page ${data.number + 1} of ${data.totalPages || 1}`;
+    usersPage.textContent = `Trang ${data.number + 1} / ${data.totalPages || 1}`;
   }
   if (usersPrev) {
     usersPrev.disabled = data.first;
@@ -1301,7 +1394,7 @@ const selectUser = async (user) => {
     userDetailModal.classList.remove('hidden');
   }
   if (userDetailHeader) {
-    userDetailHeader.textContent = `${formatName(user.username)} (${formatName(user.role)})`;
+    userDetailHeader.textContent = `${formatName(user.username)} (${formatRole(user.role)})`;
   }
   applyUserDetailControls();
   if (userPasswordInput) {
@@ -1330,7 +1423,7 @@ const renderUserAuditPage = () => {
   if (!userAuditEntries.length) {
     const item = document.createElement('div');
     item.className = 'list-item';
-    item.textContent = 'No audit entries yet.';
+    item.textContent = 'Chưa có nhật ký kiểm tra.';
     userAudit.appendChild(item);
   } else {
     const start = userAuditPage * userAuditPageSize;
@@ -1338,14 +1431,14 @@ const renderUserAuditPage = () => {
     pageItems.forEach((entry) => {
       const item = document.createElement('div');
       item.className = 'list-item';
-      const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'unknown time';
-      item.textContent = `${when} • ${entry.action} by ${entry.actorUsername} (${entry.actorRole})`;
+      const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
+      item.textContent = `${when} • ${formatAuditAction(entry.action)} bởi ${entry.actorUsername} (${formatRole(entry.actorRole)})`;
       userAudit.appendChild(item);
     });
   }
   const totalPages = Math.max(1, Math.ceil(userAuditEntries.length / userAuditPageSize));
   if (userAuditPageLabel) {
-    userAuditPageLabel.textContent = `Page ${Math.min(userAuditPage + 1, totalPages)} of ${totalPages}`;
+    userAuditPageLabel.textContent = `Trang ${Math.min(userAuditPage + 1, totalPages)} / ${totalPages}`;
   }
   if (userAuditPrev) {
     userAuditPrev.disabled = userAuditPage <= 0;
@@ -1363,8 +1456,8 @@ const loadAdminAudit = async () => {
   data.forEach((entry) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'unknown time';
-    item.textContent = `${when} • ${entry.action} by ${entry.actorUsername} (${entry.actorRole}) → ${entry.targetUsername}`;
+    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
+    item.textContent = `${when} • ${formatAuditAction(entry.action)} bởi ${entry.actorUsername} (${formatRole(entry.actorRole)}) → ${entry.targetUsername}`;
     adminAudit.appendChild(item);
   });
 };
@@ -1456,7 +1549,7 @@ loginForm.addEventListener('submit', async (event) => {
   } catch (error) {
     if (error.message.includes('403')) {
       if (loginError) {
-        loginError.textContent = 'Invalid username or password.';
+        loginError.textContent = 'Tên đăng nhập hoặc mật khẩu không hợp lệ.';
         loginError.classList.remove('hidden');
       }
     } else {
@@ -1779,11 +1872,11 @@ if (userSavePassword) {
     if (!selectedUser) return;
     clearFieldError(userPasswordInput);
     if (!userPasswordInput.value || !userPasswordInput.value.trim()) {
-      setFieldError(userPasswordInput, 'Password is required.');
+      setFieldError(userPasswordInput, 'Mật khẩu là bắt buộc.');
       return;
     }
     if (!userPasswordInput.checkValidity()) {
-      setFieldError(userPasswordInput, userPasswordInput.validationMessage || 'Password is invalid.');
+      setFieldError(userPasswordInput, userPasswordInput.validationMessage || 'Mật khẩu không hợp lệ.');
       return;
     }
     await request(`/api/users/${selectedUser.id}/password`, {
@@ -1799,15 +1892,15 @@ if (userSaveProfile) {
     if (!selectedUser) return;
     clearFieldError(userPasswordInput);
     if (!validateProfileFields([
-      { label: 'Display name', input: userDisplayName },
-      { label: 'Title', input: userTitle },
+      { label: 'Tên hiển thị', input: userDisplayName },
+      { label: 'Chức danh', input: userTitle },
       { label: 'Email', input: userEmail },
     ])) {
       return;
     }
     if (userPasswordInput && userPasswordInput.value.trim()) {
       if (!userPasswordInput.checkValidity()) {
-        setFieldError(userPasswordInput, userPasswordInput.validationMessage || 'Password is invalid.');
+        setFieldError(userPasswordInput, userPasswordInput.validationMessage || 'Mật khẩu không hợp lệ.');
         return;
       }
     }
@@ -1873,7 +1966,7 @@ if (userSaveProfile) {
     }
     applyUserDetailControls();
     if (userDetailHeader && selectedUser) {
-      userDetailHeader.textContent = `${formatName(selectedUser.username)} (${formatName(selectedUser.role)})`;
+      userDetailHeader.textContent = `${formatName(selectedUser.username)} (${formatRole(selectedUser.role)})`;
     }
     await loadAdminUsers();
     await loadUserAvatarMap();
@@ -1883,7 +1976,7 @@ if (userSaveProfile) {
 if (userDelete) {
   userDelete.addEventListener('click', async () => {
     if (!selectedUser) return;
-    if (!confirm(`Delete ${selectedUser.username}?`)) return;
+    if (!confirm(`Bạn có chắc muốn xóa người dùng ${selectedUser.username}?`)) return;
     await request(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
     selectedUser = null;
     if (userDetailModal) {
@@ -1941,8 +2034,8 @@ profilePasswordForm.addEventListener('submit', async (event) => {
 if (profileSaveBtn) {
   profileSaveBtn.addEventListener('click', async () => {
     if (!validateProfileFields([
-      { label: 'Display name', input: profileDisplayName },
-      { label: 'Title', input: profileTitle },
+      { label: 'Tên hiển thị', input: profileDisplayName },
+      { label: 'Chức danh', input: profileTitle },
       { label: 'Email', input: profileEmail },
     ])) {
       return;
@@ -2011,7 +2104,7 @@ const themeKey = 'ticketing.theme';
 const applyTheme = (theme) => {
   document.body.classList.toggle('dark', theme === 'dark');
   if (themeToggle) {
-    const label = theme === 'dark' ? 'Light mode' : 'Dark mode';
+    const label = theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối';
     const labelNode = themeToggle.querySelector('.theme-label');
     if (labelNode) {
       labelNode.textContent = label;
