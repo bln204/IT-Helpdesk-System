@@ -1,5 +1,6 @@
 package com.example.ticketing.auth;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -27,7 +28,7 @@ public class UserAccount implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @Column(nullable = false, unique = true, length = 80)
     private String username;
 
@@ -37,7 +38,7 @@ public class UserAccount implements UserDetails {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private UserRole.Role role;
-
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     private Department department;
@@ -47,7 +48,7 @@ public class UserAccount implements UserDetails {
 
     @Column(name = "title", length = 120)
     private String title;
-
+    
     @Column(name = "avatar_url", length = 255)
     private String avatarUrl;
 
@@ -56,6 +57,10 @@ public class UserAccount implements UserDetails {
 
     @Column(nullable = false)
     private boolean enabled = true;
+    
+    // Track password changes to invalidate old tokens
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
 
     // ==================== Getters & Setters ====================
 
@@ -133,6 +138,18 @@ public class UserAccount implements UserDetails {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+    
+    public LocalDateTime getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+    
+    public void setPasswordChangedAt(LocalDateTime passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
+    }
+    
+    public void markPasswordChanged() {
+        this.passwordChangedAt = LocalDateTime.now();
     }
 
     // ==================== UserDetails Implementation ====================

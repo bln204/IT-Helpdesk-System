@@ -35,6 +35,7 @@ public class UserSelfService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.markPasswordChanged(); // Invalidate all existing tokens
         userAuditService.log(
             UserAuditAction.PASSWORD_CHANGED,
             user.getUsername(),

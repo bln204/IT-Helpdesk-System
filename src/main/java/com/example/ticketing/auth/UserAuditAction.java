@@ -2,6 +2,7 @@ package com.example.ticketing.auth;
 
 public enum UserAuditAction {
     LOGIN,
+    LOGOUT,
     PASSWORD_CHANGED,
     PASSWORD_RESET,
     USER_CREATED,
@@ -9,5 +10,6 @@ public enum UserAuditAction {
     USER_DISABLED,
     USER_ENABLED,
     ROLE_CHANGED,
-    PROFILE_UPDATED
+    PROFILE_UPDATED,
+    TOKEN_REVOKED
 }
