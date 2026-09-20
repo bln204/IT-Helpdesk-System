@@ -1,7 +1,5 @@
 package com.example.ticketing.auth;
 
-import com.example.ticketing.ticket.TicketTypes;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -21,7 +19,7 @@ public final class UserDtos {
         private String password;
 
         @NotNull
-        private TicketTypes.TicketRole role;
+        private UserRole.Role role;
 
         private Boolean enabled;
 
@@ -36,10 +34,12 @@ public final class UserDtos {
         @Size(max = 255)
         private String avatarUrl;
 
-        @NotBlank
         @Email
         @Size(max = 160)
         private String email;
+
+        @NotNull
+        private Long departmentId;
 
         public String getUsername() {
             return username;
@@ -57,11 +57,11 @@ public final class UserDtos {
             this.password = password;
         }
 
-        public TicketTypes.TicketRole getRole() {
+        public UserRole.Role getRole() {
             return role;
         }
 
-        public void setRole(TicketTypes.TicketRole role) {
+        public void setRole(UserRole.Role role) {
             this.role = role;
         }
 
@@ -104,6 +104,14 @@ public final class UserDtos {
         public void setEmail(String email) {
             this.email = email;
         }
+
+        public Long getDepartmentId() {
+            return departmentId;
+        }
+
+        public void setDepartmentId(Long departmentId) {
+            this.departmentId = departmentId;
+        }
     }
 
     public static class UserEnabledRequest {
@@ -121,13 +129,13 @@ public final class UserDtos {
 
     public static class UserRoleUpdateRequest {
         @NotNull
-        private TicketTypes.TicketRole role;
+        private UserRole.Role role;
 
-        public TicketTypes.TicketRole getRole() {
+        public UserRole.Role getRole() {
             return role;
         }
 
-        public void setRole(TicketTypes.TicketRole role) {
+        public void setRole(UserRole.Role role) {
             this.role = role;
         }
     }
@@ -144,7 +152,6 @@ public final class UserDtos {
         @Size(max = 255)
         private String avatarUrl;
 
-        @NotBlank
         @Email
         @Size(max = 160)
         private String email;
@@ -224,7 +231,10 @@ public final class UserDtos {
     public static class UserResponse {
         private Long id;
         private String username;
-        private TicketTypes.TicketRole role;
+        private UserRole.Role role;
+        private Long departmentId;
+        private String departmentCode;
+        private String departmentName;
         private boolean enabled;
         private String displayName;
         private String title;
@@ -236,6 +246,9 @@ public final class UserDtos {
             response.id = user.getId();
             response.username = user.getUsername();
             response.role = user.getRole();
+            response.departmentId = user.getDepartmentId();
+            response.departmentCode = user.getDepartmentCode();
+            response.departmentName = user.getDepartmentName();
             response.enabled = user.isEnabled();
             response.displayName = user.getDisplayName();
             response.title = user.getTitle();
@@ -252,8 +265,20 @@ public final class UserDtos {
             return username;
         }
 
-        public TicketTypes.TicketRole getRole() {
+        public UserRole.Role getRole() {
             return role;
+        }
+
+        public Long getDepartmentId() {
+            return departmentId;
+        }
+
+        public String getDepartmentCode() {
+            return departmentCode;
+        }
+
+        public String getDepartmentName() {
+            return departmentName;
         }
 
         public boolean isEnabled() {
@@ -281,7 +306,7 @@ public final class UserDtos {
         private Long id;
         private UserAuditAction action;
         private String actorUsername;
-        private TicketTypes.TicketRole actorRole;
+        private String actorRole;
         private String targetUsername;
         private java.time.LocalDateTime createdAt;
 
@@ -308,7 +333,7 @@ public final class UserDtos {
             return actorUsername;
         }
 
-        public TicketTypes.TicketRole getActorRole() {
+        public String getActorRole() {
             return actorRole;
         }
 

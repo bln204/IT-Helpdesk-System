@@ -21,6 +21,7 @@
         <div>
           <strong id="sidebar-username">Phiếu hỗ trợ</strong>
           <span id="sidebar-role">Bảng điều khiển</span>
+          <span id="sidebar-dept" class="sidebar-dept hidden"></span>
         </div>
       </div>
       <button class="ghost nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu">Trình đơn</button>
@@ -32,10 +33,10 @@
         </span>
       </button>
       <nav class="nav-links">
-        <a href="#/tickets" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Phiếu hỗ trợ</a>
-        <a href="#/reports" data-role="ROLE_ENGINEER,ROLE_ADMIN">Báo cáo</a>
-        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_ENGINEER">Người dùng</a>
-        <a href="#/profile" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Hồ sơ</a>
+        <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
+        <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
+        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Quản lý</a>
+        <a href="#/profile" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Hồ sơ</a>
       </nav>
       <button class="ghost" id="logout-btn" type="button">Đăng xuất</button>
       </div>
@@ -59,7 +60,7 @@
           <input type="password" name="password" autocomplete="current-password" required />
         </label>
         <p id="login-prefill-note" class="info-banner hidden">
-          Đăng nhập thử nghiệm: thông tin đăng nhập của kỹ sư đã được điền sẵn và sẵn sàng đăng nhập.
+          Thông tin đăng nhập đã được điền sẵn. Thử nghiệm với tài khoản nhân viên.
         </p>
         <button type="submit">Đăng nhập</button>
       </form>
@@ -207,7 +208,7 @@
           <input id="report-to" type="date" />
         </label>
         <div class="button-row report-buttons">
-          <button id="engineer-report-btn" class="secondary" type="button">Báo cáo kỹ sư</button>
+          <button id="engineer-report-btn" class="secondary" type="button">Báo cáo nhân viên IT</button>
           <button id="requester-report-btn" class="secondary" type="button">Báo cáo người yêu cầu</button>
           <button id="backlog-report-btn" class="secondary" type="button">Thời gian tồn đọng</button>
           <button id="sla-report-btn" class="secondary" type="button">Nhóm SLA</button>
@@ -219,8 +220,8 @@
 
     <section class="panel view" id="admin-panel" data-view="admin">
       <header>
-        <h3>Quản trị người dùng</h3>
-        <p>Quản lý người dùng và xem xét các sự kiện kiểm tra người dùng.</p>
+        <h3>Quản lý người dùng</h3>
+        <p>Quản lý người dùng và xem xét các sự kiện kiểm tra.</p>
       </header>
       <div class="stack">
         <div class="split-row">
@@ -241,6 +242,7 @@
                   <tr>
                     <th>Tên đăng nhập</th>
                     <th>Vai trò</th>
+                    <th>Phòng ban</th>
                     <th>Kích hoạt</th>
                   </tr>
                 </thead>
@@ -360,7 +362,7 @@
               Email người yêu cầu
               <input type="email" name="requesterEmail" maxlength="160" />
             </label>
-            <label>
+            <label class="hidden" id="assignee-create-label">
               Người được phân công (tùy chọn)
               <select name="assigneeName" id="assignee-create">
                 <option value="UNASSIGNED">Chưa phân công</option>
@@ -406,9 +408,13 @@
         <label>
           Vai trò
           <select name="role" id="admin-role-select" required>
-            <option value="REQUESTER">Người yêu cầu</option>
-            <option value="ENGINEER">Kỹ sư</option>
-            <option value="ADMIN">Quản trị viên</option>
+            <option value="NHAN_VIEN">Nhân viên</option>
+          </select>
+        </label>
+        <label>
+          Phòng ban
+          <select name="departmentId" id="admin-dept-select">
+            <option value="">— Chọn phòng ban —</option>
           </select>
         </label>
         <button type="submit">Tạo người dùng</button>
@@ -446,14 +452,20 @@
             <select id="user-role-select"></select>
           </label>
           <label>
+            Phòng ban
+            <select id="user-dept-select" disabled>
+              <option value="">— Chọn phòng ban —</option>
+            </select>
+          </label>
+        </div>
+        <div class="split">
+          <label>
             Kích hoạt
             <select id="user-enabled-select">
               <option value="true">Đã kích hoạt</option>
               <option value="false">Vô hiệu hóa</option>
             </select>
           </label>
-        </div>
-        <div class="split">
           <label>
             Mật khẩu mới
             <input type="password" id="user-password-input" minlength="8" />

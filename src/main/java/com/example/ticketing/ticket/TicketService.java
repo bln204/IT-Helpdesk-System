@@ -5,13 +5,22 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.department.Department;
+import com.example.ticketing.department.DepartmentRepository;
+
+import org.springframework.http.HttpStatus;
 
 @Service
 @Transactional
@@ -20,35 +29,49 @@ public class TicketService {
     private final TicketAssignmentRepository ticketAssignmentRepository;
     private final TicketAuditRepository ticketAuditRepository;
     private final TicketCommentRepository ticketCommentRepository;
-    private final com.example.ticketing.auth.UserAccountRepository userAccountRepository;
+    private final UserAccountRepository userAccountRepository;
+    private final DepartmentRepository departmentRepository;
 
     public TicketService(
         TicketRepository ticketRepository,
         TicketAssignmentRepository ticketAssignmentRepository,
         TicketAuditRepository ticketAuditRepository,
         TicketCommentRepository ticketCommentRepository,
-        com.example.ticketing.auth.UserAccountRepository userAccountRepository
+        UserAccountRepository userAccountRepository,
+        DepartmentRepository departmentRepository
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketAssignmentRepository = ticketAssignmentRepository;
         this.ticketAuditRepository = ticketAuditRepository;
         this.ticketCommentRepository = ticketCommentRepository;
         this.userAccountRepository = userAccountRepository;
+        this.departmentRepository = departmentRepository;
     }
 
+    /**
+     * Tạo ticket - auto-assign department từ requester
+     */
     public Ticket createTicket(
         Ticket ticket,
-        TicketTypes.TicketRole actorRole,
-        String actorUsername
+        String actorUsername,
+        UserRole.Role actorRole
     ) {
         ticket.setTicketNumber(generateTicketNumber());
         ticket.setStatus(TicketTypes.TicketStatus.NEW);
         ticket.setRequesterUsername(actorUsername);
-        ticket.setAssigneeName(normalizeAssignee(ticket.getAssigneeName()));
-        if (actorRole == TicketTypes.TicketRole.REQUESTER) {
-            ticket.setRequesterName(actorUsername);
+
+        // Lấy department từ requester
+        UserAccount requester = userAccountRepository.findByUsername(actorUsername)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+        ticket.setDepartment(requester.getDepartment());
+
+        // NHAN_VIEN không thể tự assign, để null
+        if (actorRole == UserRole.Role.NHAN_VIEN) {
             ticket.setAssigneeName(null);
+        } else {
+            ticket.setAssigneeName(normalizeAssignee(ticket.getAssigneeName()));
         }
+
         Ticket created = ticketRepository.save(ticket);
         logAudit(
             created.getId(),
@@ -62,17 +85,31 @@ public class TicketService {
         return created;
     }
 
+    /**
+     * Lấy tickets với department filter
+     */
     @Transactional(readOnly = true)
     public Page<Ticket> listTickets(
         String assigneeName,
         TicketTypes.TicketStatus status,
         String search,
         boolean excludeClosed,
-        Pageable pageable
+        Pageable pageable,
+        String userRole,
+        Long userDepartmentId
     ) {
         String normalizedAssignee = normalizeAssignee(assigneeName);
         boolean hasSearch = search != null && !search.isBlank();
         boolean applyExcludeClosed = excludeClosed && status == null;
+
+        // NHAN_VIEN và TRUONG_PHONG thấy tất cả tickets (không filter theo department)
+        // Department filter chỉ áp dụng cho ADMIN và GIAM_DOC
+        if ("NHAN_VIEN".equals(userRole) || "TRUONG_PHONG".equals(userRole)) {
+            // Use the same filtering logic as ADMIN/GIAM_DOC but without department restriction
+            // Fall through to the common logic below
+        }
+
+        // GIAM_DOC và ADMIN thấy tất cả
         if (normalizedAssignee != null && normalizedAssignee.equalsIgnoreCase("UNASSIGNED")) {
             if (hasSearch) {
                 if (applyExcludeClosed) {
@@ -96,6 +133,7 @@ public class TicketService {
             }
             return ticketRepository.findByAssigneeNameIsNullOrAssigneeName("", pageable);
         }
+
         if (hasSearch) {
             if (applyExcludeClosed) {
                 return ticketRepository.searchTicketsExcludeStatus(
@@ -107,9 +145,11 @@ public class TicketService {
             }
             return ticketRepository.searchTickets(search.trim(), status, normalizedAssignee, pageable);
         }
+
         if (normalizedAssignee != null && status != null) {
             return ticketRepository.findByAssigneeNameAndStatus(normalizedAssignee, status, pageable);
         }
+
         if (normalizedAssignee != null) {
             if (applyExcludeClosed) {
                 return ticketRepository.findByAssigneeNameAndStatusNot(
@@ -120,13 +160,144 @@ public class TicketService {
             }
             return ticketRepository.findByAssigneeName(normalizedAssignee, pageable);
         }
+
         if (status != null) {
             return ticketRepository.findByStatus(status, pageable);
         }
+
         if (applyExcludeClosed) {
             return ticketRepository.findByStatusNot(TicketTypes.TicketStatus.CLOSED, pageable);
         }
+
         return ticketRepository.findAll(pageable);
+    }
+
+    private Page<Ticket> listTicketsForNhanVien(
+        TicketTypes.TicketStatus status,
+        String search,
+        boolean excludeClosed,
+        Pageable pageable,
+        Long departmentId,
+        String assigneeName
+    ) {
+        if (departmentId == null) {
+            return Page.empty();
+        }
+
+        String normalizedAssignee = normalizeAssignee(assigneeName);
+        boolean isUnassignedFilter = assigneeName != null && assigneeName.equalsIgnoreCase("UNASSIGNED");
+        boolean hasSearch = search != null && !search.isBlank();
+        boolean applyExcludeClosed = excludeClosed && status == null;
+
+        // Handle UNASSIGNED filter: show tickets where assigneeName is null or empty
+        if (isUnassignedFilter) {
+            if (hasSearch) {
+                // Search within unassigned tickets
+                String searchPattern = "%" + search.trim().toLowerCase() + "%";
+                if (applyExcludeClosed) {
+                    return ticketRepository.findByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+                }
+                return ticketRepository.findUnassignedByDepartmentIdAndStatus(departmentId, status, pageable);
+            }
+            if (status != null) {
+                return ticketRepository.findUnassignedByDepartmentIdAndStatus(departmentId, status, pageable);
+            }
+            if (applyExcludeClosed) {
+                return ticketRepository.findUnassignedByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+            }
+            return ticketRepository.findUnassignedByDepartmentId(departmentId, pageable);
+        }
+
+        if (hasSearch) {
+            if (applyExcludeClosed) {
+                return ticketRepository.searchTicketsByDepartmentExcludeStatus(
+                    departmentId, search.trim(), normalizedAssignee, TicketTypes.TicketStatus.CLOSED, pageable);
+            }
+            return ticketRepository.searchTicketsByDepartment(
+                departmentId, search.trim(), status, normalizedAssignee, pageable);
+        }
+
+        if (normalizedAssignee != null && status != null) {
+            return ticketRepository.findByDepartmentIdAndAssigneeNameAndStatus(departmentId, normalizedAssignee, status, pageable);
+        }
+
+        if (normalizedAssignee != null) {
+            return ticketRepository.findByDepartmentIdAndAssigneeName(departmentId, normalizedAssignee, pageable);
+        }
+
+        if (status != null) {
+            return ticketRepository.findByDepartmentIdAndStatus(departmentId, status, pageable);
+        }
+
+        if (applyExcludeClosed) {
+            return ticketRepository.findByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+        }
+
+        return ticketRepository.findByDepartmentId(departmentId, pageable);
+    }
+
+    private Page<Ticket> listTicketsForTruongPhong(
+        TicketTypes.TicketStatus status,
+        String search,
+        boolean excludeClosed,
+        Pageable pageable,
+        Long departmentId,
+        String assigneeName
+    ) {
+        if (departmentId == null) {
+            return Page.empty();
+        }
+
+        String normalizedAssignee = normalizeAssignee(assigneeName);
+        boolean isUnassignedFilter = assigneeName != null && assigneeName.equalsIgnoreCase("UNASSIGNED");
+        boolean hasSearch = search != null && !search.isBlank();
+        boolean applyExcludeClosed = excludeClosed && status == null;
+
+        // Handle UNASSIGNED filter: show tickets where assigneeName is null or empty
+        if (isUnassignedFilter) {
+            if (hasSearch) {
+                // Search within unassigned tickets
+                String searchPattern = "%" + search.trim().toLowerCase() + "%";
+                if (applyExcludeClosed) {
+                    return ticketRepository.findByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+                }
+                return ticketRepository.findUnassignedByDepartmentIdAndStatus(departmentId, status, pageable);
+            }
+            if (status != null) {
+                return ticketRepository.findUnassignedByDepartmentIdAndStatus(departmentId, status, pageable);
+            }
+            if (applyExcludeClosed) {
+                return ticketRepository.findUnassignedByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+            }
+            return ticketRepository.findUnassignedByDepartmentId(departmentId, pageable);
+        }
+
+        if (hasSearch) {
+            if (applyExcludeClosed) {
+                return ticketRepository.searchTicketsByDepartmentExcludeStatus(
+                    departmentId, search.trim(), normalizedAssignee, TicketTypes.TicketStatus.CLOSED, pageable);
+            }
+            return ticketRepository.searchTicketsByDepartment(
+                departmentId, search.trim(), status, normalizedAssignee, pageable);
+        }
+
+        if (normalizedAssignee != null && status != null) {
+            return ticketRepository.findByDepartmentIdAndAssigneeNameAndStatus(departmentId, normalizedAssignee, status, pageable);
+        }
+
+        if (normalizedAssignee != null) {
+            return ticketRepository.findByDepartmentIdAndAssigneeName(departmentId, normalizedAssignee, pageable);
+        }
+
+        if (status != null) {
+            return ticketRepository.findByDepartmentIdAndStatus(departmentId, status, pageable);
+        }
+
+        if (applyExcludeClosed) {
+            return ticketRepository.findByDepartmentIdAndStatusNot(departmentId, TicketTypes.TicketStatus.CLOSED, pageable);
+        }
+
+        return ticketRepository.findByDepartmentId(departmentId, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -135,14 +306,19 @@ public class TicketService {
             .orElseThrow(() -> new TicketNotFoundException(id));
     }
 
+    /**
+     * Assign ticket - chỉ TRUONG_PHONG (đặc biệt IT) và ADMIN/GIAM_DOC
+     */
     public Ticket assignTicket(
         Long id,
         String newAssignee,
-        TicketTypes.TicketRole actorRole,
+        UserRole.Role actorRole,
+        Long actorDepartmentId,
         String actorName
     ) {
-        if (actorRole == TicketTypes.TicketRole.REQUESTER) {
-            throw new TicketRuleViolationException("Requesters cannot assign tickets.");
+        // Check permission: chỉ ADMIN, GIAM_DOC, hoặc TRUONG_PHONG IT mới có thể assign
+        if (!canAssignTickets(actorRole, actorDepartmentId)) {
+            throw new TicketRuleViolationException("You don't have permission to assign tickets.");
         }
 
         Ticket ticket = getTicket(id);
@@ -150,13 +326,19 @@ public class TicketService {
         String normalizedAssignee = normalizeAssignee(newAssignee);
         ticket.setAssigneeName(normalizedAssignee);
 
+        // Tự động chuyển status sang IN_PROGRESS khi assign
+        if (ticket.getStatus() == TicketTypes.TicketStatus.NEW) {
+            ticket.setStatus(TicketTypes.TicketStatus.IN_PROGRESS);
+        }
+
         TicketAssignment assignment = new TicketAssignment();
         assignment.setTicketId(ticket.getId());
         assignment.setPreviousAssignee(previousAssignee);
         assignment.setNewAssignee(newAssignee);
-        assignment.setActorRole(actorRole);
+        assignment.setActorRole(actorRole.name());
         assignment.setActorName(actorName);
         ticketAssignmentRepository.save(assignment);
+
         logAudit(
             ticket.getId(),
             TicketTypes.AuditAction.ASSIGNEE_CHANGED,
@@ -168,6 +350,24 @@ public class TicketService {
         );
 
         return ticket;
+    }
+
+    /**
+     * Kiểm tra có quyền assign tickets không
+     */
+    private boolean canAssignTickets(UserRole.Role actorRole, Long actorDepartmentId) {
+        return switch (actorRole) {
+            case ADMIN, GIAM_DOC -> true;
+            case TRUONG_PHONG -> {
+                // Chỉ TRUONG_PHONG IT mới có quyền assign
+                if (actorDepartmentId == null) {
+                    yield false;
+                }
+                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
+                yield dept != null && "IT".equals(dept.getCode());
+            }
+            case NHAN_VIEN -> false;
+        };
     }
 
     @Transactional(readOnly = true)
@@ -188,8 +388,15 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<TicketDtos.EngineerReportRow> buildEngineerReport(LocalDateTime from, LocalDateTime to) {
-        List<com.example.ticketing.auth.UserAccount> engineers =
-            userAccountRepository.findByRoleAndEnabledTrueOrderByUsernameAsc(TicketTypes.TicketRole.ENGINEER);
+        // Lấy tất cả IT staff (NHAN_VIEN và TRUONG_PHONG trong IT department)
+        Department itDept = departmentRepository.findByCode("IT").orElse(null);
+        List<UserAccount> itStaff;
+        if (itDept != null) {
+            itStaff = userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(itDept.getId());
+        } else {
+            itStaff = List.of();
+        }
+
         List<TicketAssignment> assignments = ticketAssignmentRepository.findByCreatedAtBetween(from, to);
         List<Ticket> closedTickets = ticketRepository.findByClosedAtBetween(from, to);
         double days = Math.max(1.0, Duration.between(from, to).toHours() / 24.0);
@@ -205,7 +412,7 @@ public class TicketService {
             .filter(ticket -> ticket.getAssigneeName() != null && !ticket.getAssigneeName().isBlank())
             .collect(Collectors.groupingBy(Ticket::getAssigneeName));
 
-        return engineers.stream()
+        return itStaff.stream()
             .map(engineer -> {
                 String name = engineer.getUsername();
                 Set<Long> assignedIds = assignedTicketIds.getOrDefault(name, Set.of());
@@ -233,8 +440,8 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<TicketDtos.RequesterReportRow> buildRequesterReport(LocalDateTime from, LocalDateTime to) {
-        List<com.example.ticketing.auth.UserAccount> requesters =
-            userAccountRepository.findByRoleAndEnabledTrueOrderByUsernameAsc(TicketTypes.TicketRole.REQUESTER);
+        // Lấy tất cả NHAN_VIEN
+        List<UserAccount> requesters = userAccountRepository.findByRoleAndEnabledTrueOrderByUsernameAsc(UserRole.Role.NHAN_VIEN);
         List<Ticket> createdTickets = ticketRepository.findByCreatedAtBetween(from, to);
         List<Ticket> closedTickets = ticketRepository.findByClosedAtBetween(from, to);
 
@@ -372,12 +579,13 @@ public class TicketService {
         Long ticketId,
         TicketTypes.CommentVisibility visibility,
         String body,
-        TicketTypes.TicketRole actorRole,
+        UserRole.Role actorRole,
         String actorName
     ) {
+        // NHAN_VIEN không thể add internal comment
         if (visibility == TicketTypes.CommentVisibility.INTERNAL
-            && actorRole == TicketTypes.TicketRole.REQUESTER) {
-            throw new TicketRuleViolationException("Requesters cannot add internal comments.");
+            && actorRole == UserRole.Role.NHAN_VIEN) {
+            throw new TicketRuleViolationException("Only IT staff can add internal comments.");
         }
 
         Ticket ticket = getTicket(ticketId);
@@ -385,7 +593,7 @@ public class TicketService {
         comment.setTicketId(ticket.getId());
         comment.setVisibility(visibility);
         comment.setBody(body);
-        comment.setActorRole(actorRole);
+        comment.setActorRole(actorRole.name());
         comment.setActorName(actorName);
         TicketComment saved = ticketCommentRepository.save(comment);
 
@@ -404,11 +612,12 @@ public class TicketService {
     @Transactional(readOnly = true)
     public List<TicketComment> listComments(
         Long ticketId,
-        TicketTypes.TicketRole actorRole,
+        UserRole.Role actorRole,
         TicketTypes.CommentVisibility visibility
     ) {
         getTicket(ticketId);
-        if (actorRole == TicketTypes.TicketRole.REQUESTER) {
+        // NHAN_VIEN chỉ thấy PUBLIC comments
+        if (actorRole == UserRole.Role.NHAN_VIEN) {
             return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
                 ticketId,
                 TicketTypes.CommentVisibility.PUBLIC
@@ -426,8 +635,10 @@ public class TicketService {
     public Ticket updateStatus(
         Long id,
         TicketTypes.TicketStatus newStatus,
-        TicketTypes.TicketRole actorRole,
-        String actorName
+        UserRole.Role actorRole,
+        Long actorDepartmentId,
+        String actorName,
+        String actorUsername
     ) {
         Ticket ticket = getTicket(id);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
@@ -436,12 +647,13 @@ public class TicketService {
             throw new TicketRuleViolationException("Closed tickets cannot be modified.");
         }
 
-        if (actorRole == TicketTypes.TicketRole.REQUESTER) {
-            if (!actorName.equalsIgnoreCase(ticket.getRequesterUsername())) {
-                throw new TicketRuleViolationException("Requesters can only close their own tickets.");
+        // NHAN_VIEN chỉ có thể đóng ticket của mình
+        if (actorRole == UserRole.Role.NHAN_VIEN) {
+            if (!actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
+                throw new TicketRuleViolationException("You can only close your own tickets.");
             }
             if (newStatus != TicketTypes.TicketStatus.CLOSED) {
-                throw new TicketRuleViolationException("Requesters can only close tickets.");
+                throw new TicketRuleViolationException("You can only close tickets.");
             }
             ticket.setClosedAt(LocalDateTime.now());
             ticket.setStatus(newStatus);
@@ -457,10 +669,11 @@ public class TicketService {
             return ticket;
         }
 
-        if (currentStatus == TicketTypes.TicketStatus.NEW
-            && actorRole != TicketTypes.TicketRole.ENGINEER
-            && actorRole != TicketTypes.TicketRole.ADMIN) {
-            throw new TicketRuleViolationException("Only engineers or admins can move tickets out of NEW.");
+        // Chỉ IT staff (NHAN_VIEN in IT, TRUONG_PHONG IT) và ADMIN/GIAM_DOC mới có thể chuyển ticket từ NEW
+        if (currentStatus == TicketTypes.TicketStatus.NEW) {
+            if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+                throw new TicketRuleViolationException("You don't have permission to move tickets out of NEW status.");
+            }
         }
 
         if (newStatus == TicketTypes.TicketStatus.CLOSED) {
@@ -483,14 +696,41 @@ public class TicketService {
         return ticket;
     }
 
+    private boolean canModifyTicketStatus(UserRole.Role actorRole, Long actorDepartmentId) {
+        return switch (actorRole) {
+            case ADMIN, GIAM_DOC -> true;
+            case TRUONG_PHONG -> {
+                if (actorDepartmentId == null) {
+                    yield false;
+                }
+                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
+                yield dept != null && "IT".equals(dept.getCode());
+            }
+            case NHAN_VIEN -> {
+                if (actorDepartmentId == null) {
+                    yield false;
+                }
+                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
+                yield dept != null && "IT".equals(dept.getCode());
+            }
+        };
+    }
+
     public Ticket updatePriority(
         Long id,
         TicketTypes.TicketPriority newPriority,
-        TicketTypes.TicketRole actorRole,
+        UserRole.Role actorRole,
+        Long actorDepartmentId,
         String actorName
     ) {
-        if (actorRole == TicketTypes.TicketRole.REQUESTER) {
-            throw new TicketRuleViolationException("Requesters cannot change ticket priority.");
+        // NHAN_VIEN không thể đổi priority
+        if (actorRole == UserRole.Role.NHAN_VIEN) {
+            throw new TicketRuleViolationException("You cannot change ticket priority.");
+        }
+
+        // Check permission
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+            throw new TicketRuleViolationException("You don't have permission to change priority.");
         }
 
         Ticket ticket = getTicket(id);
@@ -520,7 +760,7 @@ public class TicketService {
         String fieldName,
         String oldValue,
         String newValue,
-        TicketTypes.TicketRole actorRole,
+        UserRole.Role actorRole,
         String actorName
     ) {
         TicketAudit audit = new TicketAudit();
@@ -529,7 +769,7 @@ public class TicketService {
         audit.setFieldName(fieldName);
         audit.setOldValue(oldValue);
         audit.setNewValue(newValue);
-        audit.setActorRole(actorRole);
+        audit.setActorRole(actorRole.name());
         audit.setActorName(actorName);
         ticketAuditRepository.save(audit);
     }

@@ -2,8 +2,6 @@ package com.example.ticketing.auth;
 
 import java.time.LocalDateTime;
 
-import com.example.ticketing.ticket.TicketTypes;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -28,9 +26,8 @@ public class UserAudit {
     @Column(name = "actor_username", nullable = false, length = 80)
     private String actorUsername;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "actor_role", nullable = false, length = 16)
-    private TicketTypes.TicketRole actorRole;
+    private String actorRole;
 
     @Column(name = "target_username", nullable = false, length = 80)
     private String targetUsername;
@@ -63,11 +60,11 @@ public class UserAudit {
         this.actorUsername = actorUsername;
     }
 
-    public TicketTypes.TicketRole getActorRole() {
+    public String getActorRole() {
         return actorRole;
     }
 
-    public void setActorRole(TicketTypes.TicketRole actorRole) {
+    public void setActorRole(String actorRole) {
         this.actorRole = actorRole;
     }
 

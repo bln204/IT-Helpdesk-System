@@ -29,9 +29,8 @@ public class TicketComment {
     @Column(name = "body", nullable = false, length = 2000)
     private String body;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "actor_role", nullable = false, length = 16)
-    private TicketTypes.TicketRole actorRole;
+    private String actorRole;
 
     @Column(name = "actor_name", length = 120)
     private String actorName;
@@ -72,11 +71,11 @@ public class TicketComment {
         this.body = body;
     }
 
-    public TicketTypes.TicketRole getActorRole() {
+    public String getActorRole() {
         return actorRole;
     }
 
-    public void setActorRole(TicketTypes.TicketRole actorRole) {
+    public void setActorRole(String actorRole) {
         this.actorRole = actorRole;
     }
 

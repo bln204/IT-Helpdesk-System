@@ -5,8 +5,6 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.ticketing.ticket.TicketTypes;
-
 @Service
 @Transactional
 public class UserAuditService {
@@ -19,7 +17,7 @@ public class UserAuditService {
     public void log(
         UserAuditAction action,
         String actorUsername,
-        TicketTypes.TicketRole actorRole,
+        String actorRole,
         String targetUsername
     ) {
         UserAudit audit = new UserAudit();

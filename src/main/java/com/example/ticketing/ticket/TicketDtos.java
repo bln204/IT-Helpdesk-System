@@ -104,7 +104,6 @@ public final class TicketDtos {
         public void setStatus(TicketTypes.TicketStatus status) {
             this.status = status;
         }
-
     }
 
     public static class TicketPriorityUpdateRequest {
@@ -118,7 +117,6 @@ public final class TicketDtos {
         public void setPriority(TicketTypes.TicketPriority priority) {
             this.priority = priority;
         }
-
     }
 
     public static class TicketAssigneeUpdateRequest {
@@ -132,7 +130,6 @@ public final class TicketDtos {
         public void setAssigneeName(String assigneeName) {
             this.assigneeName = assigneeName;
         }
-
     }
 
     public static class TicketCommentCreateRequest {
@@ -158,7 +155,6 @@ public final class TicketDtos {
         public void setBody(String body) {
             this.body = body;
         }
-
     }
 
     public static class TicketResponse {
@@ -172,6 +168,9 @@ public final class TicketDtos {
         private String requesterName;
         private String requesterEmail;
         private String assigneeName;
+        private Long departmentId;
+        private String departmentCode;
+        private String departmentName;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
         private LocalDateTime resolvedAt;
@@ -189,6 +188,9 @@ public final class TicketDtos {
             response.requesterName = ticket.getRequesterName();
             response.requesterEmail = ticket.getRequesterEmail();
             response.assigneeName = ticket.getAssigneeName();
+            response.departmentId = ticket.getDepartmentId();
+            response.departmentCode = ticket.getDepartmentCode();
+            response.departmentName = ticket.getDepartment() != null ? ticket.getDepartment().getName() : null;
             response.createdAt = ticket.getCreatedAt();
             response.updatedAt = ticket.getUpdatedAt();
             response.resolvedAt = ticket.getResolvedAt();
@@ -234,6 +236,18 @@ public final class TicketDtos {
 
         public String getAssigneeName() {
             return assigneeName;
+        }
+
+        public Long getDepartmentId() {
+            return departmentId;
+        }
+
+        public String getDepartmentCode() {
+            return departmentCode;
+        }
+
+        public String getDepartmentName() {
+            return departmentName;
         }
 
         public LocalDateTime getCreatedAt() {
@@ -433,7 +447,7 @@ public final class TicketDtos {
         private Long ticketId;
         private String previousAssignee;
         private String newAssignee;
-        private TicketTypes.TicketRole actorRole;
+        private String actorRole;
         private String actorName;
         private LocalDateTime createdAt;
 
@@ -465,7 +479,7 @@ public final class TicketDtos {
             return newAssignee;
         }
 
-        public TicketTypes.TicketRole getActorRole() {
+        public String getActorRole() {
             return actorRole;
         }
 
@@ -483,7 +497,7 @@ public final class TicketDtos {
         private Long ticketId;
         private TicketTypes.CommentVisibility visibility;
         private String body;
-        private TicketTypes.TicketRole actorRole;
+        private String actorRole;
         private String actorName;
         private LocalDateTime createdAt;
 
@@ -515,7 +529,7 @@ public final class TicketDtos {
             return body;
         }
 
-        public TicketTypes.TicketRole getActorRole() {
+        public String getActorRole() {
             return actorRole;
         }
 
@@ -606,7 +620,7 @@ public final class TicketDtos {
         private String fieldName;
         private String oldValue;
         private String newValue;
-        private TicketTypes.TicketRole actorRole;
+        private String actorRole;
         private String actorName;
         private LocalDateTime createdAt;
 
@@ -648,7 +662,7 @@ public final class TicketDtos {
             return newValue;
         }
 
-        public TicketTypes.TicketRole getActorRole() {
+        public String getActorRole() {
             return actorRole;
         }
 
