@@ -61,6 +61,43 @@ public class UserAccount implements UserDetails {
     // Track password changes to invalidate old tokens
     @Column(name = "password_changed_at")
     private LocalDateTime passwordChangedAt;
+    
+    // ============ NEW: Approval System Fields ============
+    
+    /**
+     * Account approval status.
+     * - FALSE: Account is pending approval (created by TRUONG_PHONG, needs ADMIN approval)
+     * - TRUE: Account has been approved (can login if enabled)
+     */
+    @Column(nullable = false)
+    private boolean approved = false;
+    
+    /**
+     * Timestamp when the account was approved or rejected.
+     */
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+    
+    /**
+     * Username of the admin who approved/rejected this account.
+     */
+    @Column(name = "approved_by", length = 80)
+    private String approvedBy;
+    
+    /**
+     * Reason for rejection (if rejected).
+     */
+    @Column(name = "rejection_reason", length = 255)
+    private String rejectionReason;
+    
+    /**
+     * Username of the user who created this account.
+     * Used to send notifications when account is approved/rejected.
+     */
+    @Column(name = "created_by", length = 80)
+    private String createdBy;
+    
+    // ============ END NEW Fields ============
 
     // ==================== Getters & Setters ====================
 
@@ -151,7 +188,73 @@ public class UserAccount implements UserDetails {
     public void markPasswordChanged() {
         this.passwordChangedAt = LocalDateTime.now();
     }
+    
+    // ============ NEW: Approval System Getters and Setters ============
+    
+    public boolean isApproved() {
+        return approved;
+    }
 
+    public void setApproved(boolean approved) {
+        this.approved = approved;
+    }
+
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public String getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+    
+    /**
+     * Mark this account as approved by an admin.
+     */
+    public void markApproved(String approvedByUsername) {
+        this.approved = true;
+        this.approvedAt = LocalDateTime.now();
+        this.approvedBy = approvedByUsername;
+        this.rejectionReason = null;
+        this.enabled = true;
+    }
+    
+    /**
+     * Mark this account as rejected by an admin.
+     */
+    public void markRejected(String rejectedByUsername, String reason) {
+        this.approved = false;
+        this.approvedAt = LocalDateTime.now();
+        this.approvedBy = rejectedByUsername;
+        this.rejectionReason = reason;
+        this.enabled = false;
+    }
+    
+    // ============ END Approval System ============
+    
     // ==================== UserDetails Implementation ====================
 
     @Override

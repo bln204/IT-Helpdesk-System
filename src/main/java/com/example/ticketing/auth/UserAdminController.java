@@ -38,13 +38,26 @@ public class UserAdminController {
         this.userAccountRepository = userAccountRepository;
     }
 
+    /**
+     * Tạo user mới.
+     * - ADMIN/GIAM_DOC: tạo user (tự động duyệt)
+     * - TRUONG_PHONG: tạo user (cần duyệt, chỉ NHAN_VIEN)
+     * - NHAN_VIEN: không được tạo
+     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<UserDtos.UserResponse> createUser(
         @Valid @RequestBody UserDtos.UserCreateRequest request,
         Authentication authentication
     ) {
         UserAccount actor = getCurrentUser(authentication);
+        
+        // GIAM_DOC chỉ được tạo user, không được tự động duyệt
+        // (Admin duyệt giúp)
+        if ("GIAM_DOC".equals(actor.getRole().name())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Giám đốc không có quyền tạo tài khoản người dùng.");
+        }
         
         UserAccount user = userAdminService.createUser(
             request.getUsername(),
@@ -59,9 +72,16 @@ public class UserAdminController {
             actor.getUsername(),
             actor.getRole().name()
         );
+        
         return ResponseEntity.status(HttpStatus.CREATED).body(UserDtos.UserResponse.from(user));
     }
 
+    /**
+     * Lấy danh sách users.
+     * - ADMIN: xem tất cả
+     * - GIAM_DOC: xem tất cả
+     * - TRUONG_PHONG: xem users trong phòng mình
+     */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public Page<UserDtos.UserResponse> listUsers(
@@ -72,6 +92,18 @@ public class UserAdminController {
     ) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("username").ascending());
         return userAdminService.listUsers(pageRequest, search).map(UserDtos.UserResponse::from);
+    }
+    
+    /**
+     * Lấy danh sách users đang chờ duyệt.
+     * Chỉ ADMIN mới xem được.
+     */
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<UserDtos.UserResponse> listPendingUsers(Authentication authentication) {
+        return userAdminService.listPendingApproval().stream()
+            .map(UserDtos.UserResponse::from)
+            .toList();
     }
 
     @GetMapping("/engineers")
@@ -108,9 +140,27 @@ public class UserAdminController {
             .map(UserDtos.UserAuditResponse::from)
             .toList();
     }
-
-    @PatchMapping("/{id}/enabled")
+    
+    /**
+     * Xem chi tiết một user.
+     */
+    @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    public UserDtos.UserResponse getUser(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        return UserDtos.UserResponse.from(userAdminService.getUser(id));
+    }
+
+    /**
+     * Cập nhật enabled status.
+     * - ADMIN: enable/disable tất cả
+     * - GIAM_DOC: enable/disable tất cả (trừ ADMIN)
+     * - TRUONG_PHONG: không được thay đổi trực tiếp
+     */
+    @PatchMapping("/{id}/enabled")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
     public UserDtos.UserResponse updateEnabled(
         @PathVariable Long id,
         @Valid @RequestBody UserDtos.UserEnabledRequest request,
@@ -128,6 +178,12 @@ public class UserAdminController {
         );
     }
 
+    /**
+     * Cập nhật role.
+     * - ADMIN: đổi tất cả
+     * - GIAM_DOC: đổi tất cả (trừ ADMIN)
+     * - TRUONG_PHONG: không được đổi
+     */
     @PatchMapping("/{id}/role")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
     public UserDtos.UserResponse updateRole(
@@ -146,6 +202,11 @@ public class UserAdminController {
         );
     }
 
+    /**
+     * Cập nhật profile.
+     * - User tự sửa profile của mình (sau khi được duyệt)
+     * - ADMIN/GIAM_DOC sửa profile user khác
+     */
     @PatchMapping("/{id}/profile")
     public UserDtos.UserResponse updateProfile(
         @PathVariable Long id,
@@ -166,6 +227,10 @@ public class UserAdminController {
         );
     }
 
+    /**
+     * Reset password.
+     * - ADMIN/GIAM_DOC: reset password tất cả users
+     */
     @PatchMapping("/{id}/password")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
     public ResponseEntity<Void> resetPassword(
@@ -183,6 +248,12 @@ public class UserAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Xóa user.
+     * - ADMIN: xóa tất cả (trừ admin khác)
+     * - GIAM_DOC: xóa được NHAN_VIEN, TRUONG_PHONG
+     * - TRUONG_PHONG: xóa NHAN_VIEN trong phòng mình
+     */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<Void> deleteUser(

@@ -1,5 +1,6 @@
 package com.example.ticketing.auth;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -11,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.exception.UserNotApprovedActionException;
 
 import org.springframework.http.HttpStatus;
 
@@ -21,21 +23,28 @@ public class UserAdminService {
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserAuditService userAuditService;
+    private final NotificationService notificationService;
 
     public UserAdminService(
         UserAccountRepository userAccountRepository,
         DepartmentRepository departmentRepository,
         PasswordEncoder passwordEncoder,
-        UserAuditService userAuditService
+        UserAuditService userAuditService,
+        NotificationService notificationService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.userAuditService = userAuditService;
+        this.notificationService = notificationService;
     }
 
     /**
-     * Tạo user mới với department
+     * Tạo user mới với department.
+     * - ADMIN tạo: tự động duyệt (approved = true, enabled = true)
+     * - GIAM_DOC tạo: tự động duyệt (approved = true, enabled = true)
+     * - TRUONG_PHONG tạo: cần duyệt (approved = false, enabled = false)
+     * - NHAN_VIEN: không được tạo
      */
     public UserAccount createUser(
         String username,
@@ -50,9 +59,11 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
+        // Check if user already exists
         if (userAccountRepository.findByUsername(username).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists.");
         }
+        
         rejectAvatarChange(avatarUrl);
 
         // Validate department
@@ -76,18 +87,56 @@ public class UserAdminService {
         user.setDisplayName(displayName);
         user.setTitle(title);
         user.setEmail(email);
-        if (enabled != null) {
-            user.setEnabled(enabled);
+        
+        // ============ NEW: Approval Logic ============
+        
+        // ADMIN và GIAM_DOC tạo: tự động duyệt
+        if ("ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole)) {
+            user.setApproved(true);
+            user.setApprovedAt(LocalDateTime.now());
+            user.setApprovedBy(actorUsername);
+            user.setEnabled(true); // Tự động enabled khi admin tạo
+            
+            userAuditService.log(
+                UserAuditAction.USER_CREATED,
+                actorUsername,
+                actorRole,
+                username
+            );
+        }
+        // TRUONG_PHONG tạo: cần duyệt
+        else if ("TRUONG_PHONG".equals(actorRole)) {
+            // TRUONG_PHONG chỉ có thể tạo NHAN_VIEN
+            if (role != UserRole.Role.NHAN_VIEN) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Trưởng phòng chỉ có thể tạo tài khoản cho nhân viên.");
+            }
+            
+            user.setApproved(false);
+            user.setApprovedAt(null);
+            user.setApprovedBy(null);
+            user.setEnabled(false); // Mặc định disabled cho đến khi duyệt
+            user.setCreatedBy(actorUsername); // Track creator for notifications
+            
+            userAuditService.log(
+                UserAuditAction.USER_PENDING_CREATED,
+                actorUsername,
+                actorRole,
+                username,
+                null,
+                "Tạo bởi " + actorUsername + ", cần Admin duyệt"
+            );
+            
+            // Gửi thông báo cho ADMIN
+            notificationService.notifyAdminOfPendingAccount(username, displayName, actorUsername);
+        }
+        // NHAN_VIEN: không được tạo user
+        else {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Bạn không có quyền tạo tài khoản người dùng.");
         }
 
-        UserAccount created = userAccountRepository.save(user);
-        userAuditService.log(
-            UserAuditAction.USER_CREATED,
-            actorUsername,
-            actorRole,
-            created.getUsername()
-        );
-        return created;
+        return userAccountRepository.save(user);
     }
 
     @Transactional(readOnly = true)
@@ -97,13 +146,37 @@ public class UserAdminService {
         }
         return userAccountRepository.findAll(pageable);
     }
+    
+    /**
+     * List all pending approval users (for Admin)
+     */
+    @Transactional(readOnly = true)
+    public List<UserAccount> listPendingApproval() {
+        return userAccountRepository.findPendingApproval();
+    }
+    
+    /**
+     * List pending approval users by department (for Admin)
+     */
+    @Transactional(readOnly = true)
+    public List<UserAccount> listPendingApprovalByDepartment(Long departmentId) {
+        return userAccountRepository.findPendingApprovalByDepartment(departmentId);
+    }
+    
+    /**
+     * Count pending approval users
+     */
+    @Transactional(readOnly = true)
+    public long countPendingApproval() {
+        return userAccountRepository.countPendingApproval();
+    }
 
     /**
-     * Lấy users theo department
+     * Lấy users theo department (bao gồm cả pending và disabled)
      */
     @Transactional(readOnly = true)
     public List<UserAccount> listUsersByDepartment(Long departmentId) {
-        return userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(departmentId);
+        return userAccountRepository.findAllByDepartment(departmentId);
     }
 
     /**
@@ -134,12 +207,104 @@ public class UserAdminService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "IT department not found."));
         return userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(itDept.getId());
     }
+    
+    // ============ NEW: Approval Methods ============
+    
+    /**
+     * Approve a pending user account.
+     * Only ADMIN can approve users.
+     */
+    public UserAccount approveUser(
+        Long id,
+        String actorUsername,
+        String actorRole
+    ) {
+        // Only ADMIN can approve
+        if (!"ADMIN".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Chỉ Admin mới có quyền phê duyệt tài khoản.");
+        }
+
+        UserAccount user = getUser(id);
+
+        // Check if already approved
+        if (user.isApproved()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Tài khoản đã được phê duyệt trước đó.");
+        }
+
+        user.setApproved(true);
+        user.setApprovedAt(LocalDateTime.now());
+        user.setApprovedBy(actorUsername);
+        user.setRejectionReason(null);
+        user.setEnabled(true); // Auto-enable when approved
+
+        userAuditService.log(
+            UserAuditAction.USER_APPROVED,
+            actorUsername,
+            actorRole,
+            user.getUsername(),
+            "pending",
+            "approved"
+        );
+
+        return userAccountRepository.save(user);
+    }
+    
+    /**
+     * Reject a pending user account.
+     * Only ADMIN can reject users.
+     */
+    public UserAccount rejectUser(
+        Long id,
+        String reason,
+        String actorUsername,
+        String actorRole
+    ) {
+        // Only ADMIN can reject
+        if (!"ADMIN".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Chỉ Admin mới có quyền từ chối tài khoản.");
+        }
+
+        if (reason == null || reason.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Lý do từ chối không được để trống.");
+        }
+
+        UserAccount user = getUser(id);
+
+        // Check if already approved
+        if (user.isApproved()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể từ chối tài khoản đã được phê duyệt.");
+        }
+
+        user.setApproved(false);
+        user.setApprovedAt(LocalDateTime.now());
+        user.setApprovedBy(actorUsername);
+        user.setRejectionReason(reason);
+        user.setEnabled(false);
+
+        userAuditService.log(
+            UserAuditAction.USER_REJECTED,
+            actorUsername,
+            actorRole,
+            user.getUsername(),
+            null,
+            reason
+        );
+
+        return userAccountRepository.save(user);
+    }
+    
+    // ============ END Approval Methods ============
 
     /**
-     * Cập nhật enabled status
+     * Cập nhật enabled status.
      * - ADMIN: có thể enable/disable tất cả
      * - GIAM_DOC: có thể enable/disable tất cả (trừ ADMIN)
-     * - TRUONG_PHONG: chỉ enable/disable NHAN_VIEN trong phòng mình
+     * - TRUONG_PHONG: không được trực tiếp thay đổi, cần gửi yêu cầu
      */
     public UserAccount updateEnabled(
         Long id,
@@ -155,14 +320,10 @@ public class UserAdminService {
             case "ADMIN" -> true;
             case "GIAM_DOC" -> user.getRole() != UserRole.Role.ADMIN;
             case "TRUONG_PHONG" -> {
-                // Chỉ được sửa user cùng department và là NHAN_VIEN
-                if (user.getRole() != UserRole.Role.NHAN_VIEN) {
-                    yield false;
-                }
-                if (user.getDepartment() == null || !user.getDepartment().getId().equals(actorDepartmentId)) {
-                    yield false;
-                }
-                yield true;
+                // TRUONG_PHONG không được trực tiếp thay đổi enabled status
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Trưởng phòng không có quyền trực tiếp thay đổi trạng thái tài khoản. " +
+                    "Vui lòng gửi yêu cầu đến Admin.");
             }
             default -> false;
         };
@@ -172,18 +333,27 @@ public class UserAdminService {
                 "You don't have permission to modify this user's status.");
         }
 
+        // Cannot disable approved = false users (they are not active yet)
+        if (!enabled && !user.isApproved()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Không thể vô hiệu hoá tài khoản chưa được phê duyệt.");
+        }
+
         user.setEnabled(enabled);
         userAuditService.log(
             enabled ? UserAuditAction.USER_ENABLED : UserAuditAction.USER_DISABLED,
             actorUsername,
             actorRole,
-            user.getUsername()
+            user.getUsername(),
+            String.valueOf(!enabled),
+            String.valueOf(enabled)
         );
-        return user;
+        
+        return userAccountRepository.save(user);
     }
 
     /**
-     * Cập nhật role
+     * Cập nhật role.
      * - ADMIN: có thể đổi tất cả
      * - GIAM_DOC: có thể đổi tất cả (trừ ADMIN)
      * - TRUONG_PHONG: không được đổi role
@@ -205,19 +375,30 @@ public class UserAdminService {
         if (user.getRole() == UserRole.Role.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot change ADMIN role.");
         }
+        
+        // Cannot change role of unapproved users to ADMIN or GIAM_DOC
+        if (!user.isApproved() && (role == UserRole.Role.ADMIN || role == UserRole.Role.GIAM_DOC)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Không thể phân quyền ADMIN hoặc GIAM_DOC cho tài khoản chưa được phê duyệt.");
+        }
 
         user.setRole(role);
         userAuditService.log(
             UserAuditAction.ROLE_CHANGED,
             actorUsername,
             actorRole,
-            user.getUsername()
+            user.getUsername(),
+            user.getRole().name(),
+            role.name()
         );
-        return user;
+        
+        return userAccountRepository.save(user);
     }
 
     /**
-     * Cập nhật profile
+     * Cập nhật profile.
+     * - User có thể tự sửa profile của mình (sau khi được duyệt)
+     * - ADMIN/GIAM_DOC có thể sửa profile của user khác
      */
     public UserAccount updateProfile(
         Long id,
@@ -232,12 +413,24 @@ public class UserAdminService {
         rejectAvatarChange(user.getAvatarUrl(), avatarUrl);
 
         // Check if actor can modify this user
-        // User có thể tự sửa profile của mình, hoặc ADMIN/GIAM_DOC sửa user khác
         boolean isSelf = user.getUsername().equals(actorUsername);
         boolean isElevated = "ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole);
 
         if (!isSelf && !isElevated) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own profile.");
+        }
+        
+        // Self-edit: check if account is approved
+        if (isSelf && !user.isApproved()) {
+            userAuditService.log(
+                UserAuditAction.PROFILE_EDIT_REJECTED,
+                actorUsername,
+                actorRole,
+                user.getUsername(),
+                null,
+                "Tài khoản chưa được phê duyệt"
+            );
+            throw new UserNotApprovedActionException("chỉnh sửa profile");
         }
 
         // Non-elevated users cannot change email
@@ -253,13 +446,34 @@ public class UserAdminService {
             UserAuditAction.PROFILE_UPDATED,
             actorUsername,
             actorRole,
+            user.getUsername(),
+            null,
+            "profile updated"
+        );
+        
+        return userAccountRepository.save(user);
+    }
+    
+    /**
+     * Get account status for a user (for self-service status view).
+     */
+    @Transactional(readOnly = true)
+    public UserAccount getAccountStatus(Long id, String actorUsername, String actorRole) {
+        UserAccount user = getUser(id);
+        
+        // Log status view
+        userAuditService.log(
+            UserAuditAction.STATUS_VIEWED,
+            actorUsername,
+            actorRole,
             user.getUsername()
         );
+        
         return user;
     }
 
     /**
-     * Reset password
+     * Reset password.
      * - ADMIN/GIAM_DOC: reset được password tất cả users
      * - User thường: không reset được
      */
@@ -278,17 +492,20 @@ public class UserAdminService {
         }
 
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.markPasswordChanged();
+        
         userAuditService.log(
             UserAuditAction.PASSWORD_RESET,
             actorUsername,
             actorRole,
             user.getUsername()
         );
-        return user;
+        
+        return userAccountRepository.save(user);
     }
 
     /**
-     * Xóa user
+     * Xóa user.
      * - Không thể xóa chính mình
      * - ADMIN: xóa được tất cả (trừ admin khác)
      * - GIAM_DOC: xóa được NHAN_VIEN, TRUONG_PHONG (không phải cùng department)

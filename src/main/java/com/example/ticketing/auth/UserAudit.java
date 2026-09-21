@@ -34,6 +34,28 @@ public class UserAudit {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+    
+    // ============ NEW: Extended Audit Fields ============
+    
+    /**
+     * Additional context or details about the action.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String details;
+    
+    /**
+     * Previous value before the change (for tracking modifications).
+     */
+    @Column(name = "old_value", length = 255)
+    private String oldValue;
+    
+    /**
+     * New value after the change (for tracking modifications).
+     */
+    @Column(name = "new_value", length = 255)
+    private String newValue;
+    
+    // ============ END NEW Fields ============
 
     @PrePersist
     void onCreate() {
@@ -79,4 +101,32 @@ public class UserAudit {
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
+    
+    // ============ NEW: Getters and Setters ============
+    
+    public String getDetails() {
+        return details;
+    }
+
+    public void setDetails(String details) {
+        this.details = details;
+    }
+
+    public String getOldValue() {
+        return oldValue;
+    }
+
+    public void setOldValue(String oldValue) {
+        this.oldValue = oldValue;
+    }
+
+    public String getNewValue() {
+        return newValue;
+    }
+
+    public void setNewValue(String newValue) {
+        this.newValue = newValue;
+    }
+    
+    // ============ END NEW ============
 }
