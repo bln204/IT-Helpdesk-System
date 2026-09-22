@@ -14,13 +14,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.ticketing.exception.UserDisabledException;
+import com.example.ticketing.exception.UserNotApprovedException;
+import com.example.ticketing.exception.UserRejectedException;
 import com.example.ticketing.security.RateLimiterService;
 import com.example.ticketing.security.TooManyRequestsException;
 import com.example.ticketing.security.JwtBlacklistService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.Map;
 import java.util.Map;
 
 @RestController
@@ -82,6 +84,28 @@ public class AuthController {
             
             UserAccount account = (UserAccount) authentication.getPrincipal();
 
+            // ============ NEW: Check Approval Status ============
+            
+            // First, check if the account has been rejected
+            if (account.getRejectionReason() != null) {
+                log.warn("Login attempt with rejected account: {}", request.getUsername());
+                throw new UserRejectedException(request.getUsername(), account.getRejectionReason());
+            }
+            
+            // Check if account has been approved
+            if (!account.isApproved()) {
+                log.warn("Login attempt with unapproved account: {}", request.getUsername());
+                throw new UserNotApprovedException(request.getUsername());
+            }
+            
+            // Check if account is enabled
+            if (!account.isEnabled()) {
+                log.warn("Login attempt with disabled account: {}", request.getUsername());
+                throw new UserDisabledException(request.getUsername());
+            }
+            
+            // ============ END Approval Check ============
+
             // Log audit
             userAuditService.log(
                 UserAuditAction.LOGIN,
@@ -106,6 +130,9 @@ public class AuthController {
             );
 
             return ResponseEntity.ok(new AuthDtos.LoginResponse(token, jwtService.getExpirationSeconds(), userInfo));
+        } catch (UserNotApprovedException | UserDisabledException | UserRejectedException e) {
+            // Re-throw approval-related exceptions to be handled by GlobalExceptionHandler
+            throw e;
         } catch (BadCredentialsException e) {
             log.warn("Login failed for user {} from IP {}: Bad credentials", request.getUsername(), clientIp);
             
