@@ -467,6 +467,31 @@ const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileAvatarFallback = document.getElementById('profile-avatar-fallback');
 const profileCard = document.getElementById('profile-card');
 
+// Department Management Elements
+const departmentsSection = document.getElementById('departments-section');
+const departmentsTbody = document.getElementById('departments-tbody');
+const openDeptModal = document.getElementById('open-dept-modal');
+const deptModal = document.getElementById('dept-modal');
+const closeDeptModal = document.getElementById('close-dept-modal');
+const deptForm = document.getElementById('dept-form');
+const deptModalTitle = document.getElementById('dept-modal-title');
+const deptModalDesc = document.getElementById('dept-modal-desc');
+const deptId = document.getElementById('dept-id');
+const deptCode = document.getElementById('dept-code');
+const deptName = document.getElementById('dept-name');
+const deptDescription = document.getElementById('dept-description');
+const deptEnabled = document.getElementById('dept-enabled');
+const deptEnabledLabel = document.getElementById('dept-enabled-label');
+const deptManager = document.getElementById('dept-manager');
+const deptSubmitBtn = document.getElementById('dept-submit-btn');
+const deptCancelBtn = document.getElementById('dept-cancel-btn');
+const deptDeleteModal = document.getElementById('dept-delete-modal');
+const closeDeptDeleteModal = document.getElementById('close-dept-delete-modal');
+const deptDeleteWarning = document.getElementById('dept-delete-warning');
+const deptDeleteAffected = document.getElementById('dept-delete-affected');
+const deptConfirmDelete = document.getElementById('dept-confirm-delete');
+const deptCancelDelete = document.getElementById('dept-cancel-delete');
+
 let selectedTicket = null;
 let userPage = 0;
 const userPageSize = 10;
@@ -474,6 +499,8 @@ let selectedUser = null;
 let userAuditPage = 0;
 const userAuditPageSize = 5;
 let userAuditEntries = [];
+let selectedDepartment = null;
+let selectedDepartmentForDelete = null;
 const userAvatarMap = new Map();
 let userAvatarReady = false;
 const reportButtons = [engineerReportBtn, requesterReportBtn, backlogReportBtn, slaReportBtn].filter(Boolean);
@@ -2056,6 +2083,11 @@ const loadAdminUsers = async () => {
     await loadDeleteRequests();
   }
 
+  // Load departments section (visible for ADMIN and GIAM_DOC)
+  if (isAdmin() || isGiamDoc()) {
+    await loadDepartmentsTable();
+  }
+
   // Count truly pending users from the loaded data (approved=false AND no rejectionReason)
   // This ensures badge count matches what's actually displayed in the pending table
   let pendingCount = 0;
@@ -3333,6 +3365,306 @@ if (rejectModal) {
       rejectModal.classList.add('hidden');
       rejectModal.setAttribute('aria-hidden', 'true');
       if (rejectReasonInput) rejectReasonInput.value = '';
+    }
+  });
+}
+
+// ============ Department Management ============
+
+// Load departments list (for admin panel table)
+const loadDepartmentsTable = async () => {
+  if (!isAdmin() && !isGiamDoc()) return;
+  const deptSection = document.getElementById('departments-section');
+  const deptTbody = document.getElementById('departments-tbody');
+  if (!deptSection || !deptTbody) return;
+
+  try {
+    const departments = await request('/api/departments/all');
+    
+    if (departments.length === 0) {
+      deptSection.classList.add('hidden');
+      return;
+    }
+
+    deptSection.classList.remove('hidden');
+    deptTbody.innerHTML = '';
+
+    departments.forEach((dept) => {
+      const row = document.createElement('tr');
+      const statusClass = dept.enabled ? 'status-active' : 'status-disabled';
+      const statusBadge = dept.enabled ? 'Hoạt động' : 'Vô hiệu hoá';
+      const managerName = dept.managerName || '—';
+      const userCount = dept.userCount || 0;
+      const description = dept.description || '—';
+
+      row.innerHTML = `
+        <td><strong>${dept.code}</strong></td>
+        <td>${dept.name}</td>
+        <td title="${description}">${description.length > 30 ? description.substring(0, 30) + '...' : description}</td>
+        <td>${managerName}</td>
+        <td>${userCount}</td>
+        <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
+        <td>
+          <button class="btn-edit-dept btn-small secondary" data-dept-id="${dept.id}">Sửa</button>
+          <button class="btn-delete-dept btn-small ghost" data-dept-id="${dept.id}" data-dept-name="${dept.name}">Xóa</button>
+        </td>
+      `;
+      deptTbody.appendChild(row);
+    });
+
+    // Attach event listeners for edit buttons
+    deptTbody.querySelectorAll('.btn-edit-dept').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const deptId = btn.dataset.deptId;
+        const dept = departments.find(d => d.id == deptId);
+        if (dept) openEditDeptModal(dept);
+      });
+    });
+
+    // Attach event listeners for delete buttons
+    deptTbody.querySelectorAll('.btn-delete-dept').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const deptId = btn.dataset.deptId;
+        const deptName = btn.dataset.deptName;
+        const dept = departments.find(d => d.id == deptId);
+        if (dept) openDeleteDeptModal(dept);
+      });
+    });
+  } catch (error) {
+    console.error('Error loading departments:', error);
+    deptSection.classList.add('hidden');
+  }
+};
+
+// Open create department modal
+const openCreateDeptModal = () => {
+  selectedDepartment = null;
+  deptModalTitle.textContent = 'Tạo phòng ban';
+  deptModalDesc.textContent = 'Thêm một phòng ban mới vào hệ thống.';
+  deptId.value = '';
+  deptCode.value = '';
+  deptCode.disabled = false;
+  deptName.value = '';
+  deptDescription.value = '';
+  deptEnabled.checked = true;
+  deptEnabledLabel.classList.add('hidden');
+  deptSubmitBtn.textContent = 'Tạo phòng ban';
+  deptModal.classList.remove('hidden');
+  deptModal.setAttribute('aria-hidden', 'false');
+  deptCode.focus();
+  
+  // Load users into manager dropdown
+  loadManagersForDepartment();
+};
+
+// Open edit department modal
+const openEditDeptModal = (dept) => {
+  selectedDepartment = dept;
+  deptModalTitle.textContent = 'Sửa phòng ban';
+  deptModalDesc.textContent = `Cập nhật thông tin phòng ban "${dept.name}".`;
+  deptId.value = dept.id;
+  deptCode.value = dept.code;
+  deptCode.disabled = true; // Cannot change code
+  deptName.value = dept.name;
+  deptDescription.value = dept.description || '';
+  deptEnabled.checked = dept.enabled;
+  deptEnabledLabel.classList.remove('hidden');
+  deptSubmitBtn.textContent = 'Lưu thay đổi';
+  deptModal.classList.remove('hidden');
+  deptModal.setAttribute('aria-hidden', 'false');
+  deptName.focus();
+  
+  // Load users into manager dropdown and select current manager
+  loadManagersForDepartment(dept.managerId);
+};
+
+// Load users into manager dropdown
+let managersCache = [];
+const loadManagersForDepartment = async (selectedId = null) => {
+  deptManager.innerHTML = '<option value="">-- Chọn trưởng phòng --</option>';
+  
+  try {
+    const users = await request('/api/users');
+    managersCache = users || [];
+    
+    for (const user of managersCache) {
+      const option = document.createElement('option');
+      option.value = user.id;
+      option.textContent = `${user.displayName} (${user.username})`;
+      if (selectedId && user.id === selectedId) {
+        option.selected = true;
+      }
+      deptManager.appendChild(option);
+    }
+  } catch (e) {
+    console.error('Error loading managers:', e);
+  }
+};
+
+// Open delete department confirmation modal
+const openDeleteDeptModal = (dept) => {
+  selectedDepartmentForDelete = dept;
+  const userCount = dept.userCount || 0;
+  
+  deptDeleteWarning.textContent = `Bạn có chắc muốn xóa phòng ban "${dept.name}" (${dept.code})?`;
+  
+  if (userCount > 0) {
+    deptDeleteAffected.innerHTML = `
+      <strong>Cảnh báo:</strong> Phòng ban này có <strong>${userCount} nhân viên</strong>. 
+      Khi xóa, tất cả nhân viên sẽ được gỡ khỏi phòng ban này (phòng ban = null).
+    `;
+    deptDeleteAffected.classList.remove('hidden');
+  } else {
+    deptDeleteAffected.classList.add('hidden');
+  }
+  
+  deptDeleteModal.classList.remove('hidden');
+  deptDeleteModal.setAttribute('aria-hidden', 'false');
+};
+
+// Close department modal
+const closeDeptModalHandler = () => {
+  // Blur focused element before hiding modal (accessibility)
+  if (document.activeElement && deptModal.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+  deptModal.classList.add('hidden');
+  deptModal.setAttribute('aria-hidden', 'true');
+  selectedDepartment = null;
+};
+
+// Close delete confirmation modal
+const closeDeptDeleteModalHandler = () => {
+  deptDeleteModal.classList.add('hidden');
+  deptDeleteModal.setAttribute('aria-hidden', 'true');
+  selectedDepartmentForDelete = null;
+};
+
+// Handle department form submission
+deptForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  
+  const code = deptCode.value.trim();
+  const name = deptName.value.trim();
+  const description = deptDescription.value.trim();
+  const enabled = deptEnabled.checked;
+
+  if (!code) {
+    alert('Mã phòng ban là bắt buộc.');
+    deptCode.focus();
+    return;
+  }
+  if (!name) {
+    alert('Tên phòng ban là bắt buộc.');
+    deptName.focus();
+    return;
+  }
+
+  try {
+    const managerId = deptManager.value ? parseInt(deptManager.value) : null;
+    
+    if (selectedDepartment) {
+      // Update existing department
+      await request(`/api/departments/${selectedDepartment.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: name,
+          description: description,
+          enabled: enabled,
+          managerId: managerId
+        }),
+      });
+      alert('Đã cập nhật phòng ban thành công!');
+    } else {
+      // Create new department
+      await request('/api/departments', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: code,
+          name: name,
+          description: description,
+          managerId: managerId
+        }),
+      });
+      alert('Đã tạo phòng ban mới thành công!');
+    }
+    closeDeptModalHandler();
+    await loadDepartmentsTable();
+    // Refresh department dropdowns in user forms
+    await loadDepartmentsForSelects();
+  } catch (error) {
+    alert('Lỗi: ' + error.message);
+  }
+});
+
+// Handle delete confirmation
+deptConfirmDelete.addEventListener('click', async () => {
+  if (!selectedDepartmentForDelete) return;
+  
+  if (!confirm(`Xác nhận xóa phòng ban "${selectedDepartmentForDelete.name}"?`)) return;
+  
+  try {
+    await request(`/api/departments/${selectedDepartmentForDelete.id}`, {
+      method: 'DELETE',
+    });
+    alert('Đã xóa phòng ban thành công!');
+    closeDeptDeleteModalHandler();
+    await loadDepartments();
+    // Refresh department dropdowns in user forms
+    await loadDepartmentsForSelects();
+  } catch (error) {
+    alert('Lỗi: ' + error.message);
+  }
+});
+
+// Load departments for select dropdowns
+const loadDepartmentsForSelects = async () => {
+  try {
+    const depts = await request('/api/departments');
+    // Populate admin dept select (for user creation)
+    if (adminDeptSelect) {
+      populateDepartmentSelect(adminDeptSelect, depts);
+    }
+    // Also update user detail modal dept select
+    if (userDeptSelect) {
+      populateDepartmentSelect(userDeptSelect, depts);
+    }
+  } catch (error) {
+    console.error('Error loading departments for selects:', error);
+  }
+};
+
+// Department modal event listeners
+if (openDeptModal) {
+  openDeptModal.addEventListener('click', openCreateDeptModal);
+}
+if (closeDeptModal) {
+  closeDeptModal.addEventListener('click', closeDeptModalHandler);
+}
+if (deptCancelBtn) {
+  deptCancelBtn.addEventListener('click', closeDeptModalHandler);
+}
+if (deptModal) {
+  deptModal.addEventListener('click', (e) => {
+    if (e.target === deptModal) {
+      closeDeptModalHandler();
+    }
+  });
+}
+
+// Delete confirmation modal event listeners
+if (closeDeptDeleteModal) {
+  closeDeptDeleteModal.addEventListener('click', closeDeptDeleteModalHandler);
+}
+if (deptCancelDelete) {
+  deptCancelDelete.addEventListener('click', closeDeptDeleteModalHandler);
+}
+if (deptDeleteModal) {
+  deptDeleteModal.addEventListener('click', (e) => {
+    if (e.target === deptDeleteModal) {
+      closeDeptDeleteModalHandler();
     }
   });
 }

@@ -285,6 +285,32 @@
           </div>
         </div>
 
+        <!-- Department Management Section (visible for ADMIN and GIAM_DOC) -->
+        <div id="departments-section" class="pending-section hidden">
+          <div class="panel-header compact">
+            <h4>🏢 Quản lý Phòng ban</h4>
+            <button id="open-dept-modal" class="icon-btn" type="button" aria-label="Tạo phòng ban">
+              +
+            </button>
+          </div>
+          <div id="departments-list" class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã</th>
+                  <th>Tên phòng ban</th>
+                  <th>Mô tả</th>
+                  <th>Trưởng phòng</th>
+                  <th>Số nhân viên</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="departments-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="split-row">
           <div>
             <div class="panel-header compact">
@@ -591,6 +617,68 @@
         <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px;">
           <button id="reject-modal-confirm" class="btn-reject" type="button">Xác nhận từ chối</button>
           <button id="reject-modal-cancel" class="secondary" type="button">Hủy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Create/Edit Modal -->
+  <div class="modal hidden" id="dept-modal" aria-hidden="true">
+    <div class="modal-content" style="max-width: 500px;">
+      <header class="panel-header">
+        <div>
+          <h3 id="dept-modal-title">Tạo phòng ban</h3>
+          <p id="dept-modal-desc">Thêm một phòng ban mới vào hệ thống.</p>
+        </div>
+        <button class="close-btn" id="close-dept-modal" aria-label="Đóng">&times;</button>
+      </header>
+      <form id="dept-form" class="stack">
+        <input type="hidden" id="dept-id" />
+        <label>
+          Mã phòng ban
+          <input type="text" id="dept-code" maxlength="20" required placeholder="VD: IT, HR, SALE" />
+        </label>
+        <label>
+          Tên phòng ban
+          <input type="text" id="dept-name" maxlength="120" required placeholder="VD: Phòng Công nghệ thông tin" />
+        </label>
+        <label>
+          Mô tả
+          <textarea id="dept-description" rows="3" maxlength="500" placeholder="Mô tả về phòng ban..."></textarea>
+        </label>
+        <label>
+          Trưởng phòng
+          <select id="dept-manager" style="width: 100%;">
+            <option value="">-- Chọn trưởng phòng --</option>
+          </select>
+        </label>
+        <label id="dept-enabled-label">
+          <input type="checkbox" id="dept-enabled" checked />
+          Phòng ban đang hoạt động
+        </label>
+        <div class="button-row" style="margin-top: 16px;">
+          <button type="submit" id="dept-submit-btn">Tạo phòng ban</button>
+          <button type="button" id="dept-cancel-btn" class="secondary">Hủy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Department Delete Confirmation Modal -->
+  <div class="modal hidden" id="dept-delete-modal" aria-hidden="true">
+    <div class="modal-content" style="max-width: 450px;">
+      <header class="panel-header">
+        <div>
+          <h3>Xóa phòng ban</h3>
+        </div>
+        <button class="close-btn" id="close-dept-delete-modal" aria-label="Đóng">&times;</button>
+      </header>
+      <div class="panel-body">
+        <p id="dept-delete-warning" style="margin-bottom: 12px;"></p>
+        <div id="dept-delete-affected" class="info-banner" style="margin-bottom: 16px;"></div>
+        <div class="button-row" style="display: flex; gap: 8px;">
+          <button id="dept-confirm-delete" class="btn-reject" type="button">Xác nhận xóa</button>
+          <button id="dept-cancel-delete" class="secondary" type="button">Hủy</button>
         </div>
       </div>
     </div>
