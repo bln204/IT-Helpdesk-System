@@ -83,6 +83,9 @@ public class Notification {
         ACCOUNT_APPROVED,          // Sent to TRUONG_PHONG when ADMIN approves
         ACCOUNT_REJECTED,           // Sent to TRUONG_PHONG when ADMIN rejects
         
+        // Profile changes
+        PROFILE_CHANGED,           // Sent to user when their profile is changed by others
+        
         // Generic
         INFO
     }

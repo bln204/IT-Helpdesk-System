@@ -5,6 +5,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,9 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserAccountRepository userAccountRepository;
+    
+    @Autowired
+    private EmailService emailService;
 
     public NotificationService(NotificationRepository notificationRepository, UserAccountRepository userAccountRepository) {
         this.notificationRepository = notificationRepository;
@@ -196,6 +200,47 @@ public class NotificationService {
 
         sendNotification(requesterUsername, Notification.NotificationType.ACCOUNT_APPROVED,
                 title, message, userId, adminUsername);
+    }
+
+    /**
+     * Notify user when their profile has been changed by an admin or manager.
+     * Sends both in-app notification and real email.
+     */
+    @Transactional
+    public void notifyProfileChanged(String recipientUsername, String recipientEmail,
+                                     String displayName, String actorUsername, 
+                                     String actorRole, String changes) {
+        String actorLabel = formatActorRole(actorRole);
+        String title = "Thông tin tài khoản đã được thay đổi";
+        String message = String.format("Thông tin tài khoản của bạn (%s) đã được %s \"%s\" thay đổi. Các thông tin được thay đổi: %s",
+                displayName != null ? displayName : recipientUsername,
+                actorLabel,
+                actorUsername,
+                changes != null && !changes.isBlank() ? changes : "Không xác định");
+
+        // Send in-app notification
+        sendNotification(recipientUsername, Notification.NotificationType.PROFILE_CHANGED,
+                title, message, null, actorUsername);
+        
+        // Send real email notification
+        if (recipientEmail != null && !recipientEmail.isBlank()) {
+            try {
+                emailService.sendProfileChangeNotification(recipientEmail, displayName, actorUsername, actorRole, changes);
+                log.info("Profile change email sent to: {}", recipientEmail);
+            } catch (Exception e) {
+                log.error("Failed to send profile change email to {}: {}", recipientEmail, e.getMessage());
+            }
+        }
+    }
+    
+    private String formatActorRole(String role) {
+        return switch (role) {
+            case "ADMIN" -> "Admin";
+            case "GIAM_DOC" -> "Giám đốc";
+            case "TRUONG_PHONG" -> "Trưởng phòng";
+            case "NHAN_VIEN" -> "Nhân viên";
+            default -> role;
+        };
     }
 
     /**

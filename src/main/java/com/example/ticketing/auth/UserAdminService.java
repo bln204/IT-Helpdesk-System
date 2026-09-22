@@ -440,7 +440,9 @@ public class UserAdminService {
     /**
      * Cập nhật profile.
      * - User có thể tự sửa profile của mình (sau khi được duyệt)
-     * - ADMIN/GIAM_DOC có thể sửa profile của user khác
+     * - ADMIN: có thể sửa profile của bất kỳ user nào
+     * - TRUONG_PHONG: có thể sửa profile của user trong phòng ban mình
+     * - GIAM_DOC: có thể sửa profile của user khác
      */
     public UserAccount updateProfile(
         Long id,
@@ -449,17 +451,41 @@ public class UserAdminService {
         String avatarUrl,
         String email,
         String actorUsername,
-        String actorRole
+        String actorRole,
+        Long actorDepartmentId
     ) {
         UserAccount user = getUser(id);
         rejectAvatarChange(user.getAvatarUrl(), avatarUrl);
 
         // Check if actor can modify this user
         boolean isSelf = user.getUsername().equals(actorUsername);
-        boolean isElevated = "ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole);
-
-        if (!isSelf && !isElevated) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own profile.");
+        
+        // Permission check:
+        // - Self: always allowed (if approved)
+        // - ADMIN: always allowed
+        // - GIAM_DOC: allowed
+        // - TRUONG_PHONG: allowed only if user is in same department
+        boolean canEdit = false;
+        if (isSelf) {
+            canEdit = true;
+        } else if ("ADMIN".equals(actorRole)) {
+            canEdit = true;
+        } else if ("GIAM_DOC".equals(actorRole)) {
+            canEdit = true;
+        } else if ("TRUONG_PHONG".equals(actorRole)) {
+            // TRUONG_PHONG can edit any user in their department (except other ADMIN/GIAM_DOC/TRUONG_PHONG)
+            if (user.getRole() != UserRole.Role.ADMIN && 
+                user.getRole() != UserRole.Role.GIAM_DOC && 
+                user.getRole() != UserRole.Role.TRUONG_PHONG &&
+                user.getDepartment() != null && 
+                user.getDepartment().getId().equals(actorDepartmentId)) {
+                canEdit = true;
+            }
+        }
+        
+        if (!canEdit) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "Bạn không có quyền chỉnh sửa thông tin của tài khoản này.");
         }
         
         // Self-edit: check if account is approved
@@ -475,11 +501,22 @@ public class UserAdminService {
             throw new UserNotApprovedActionException("chỉnh sửa profile");
         }
 
-        // Non-elevated users cannot change email
-        if (!isElevated && email != null && !email.equals(user.getEmail())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot change your email address.");
+        // Track changes for notification
+        StringBuilder changes = new StringBuilder();
+        if (!normalize(displayName).equals(normalize(user.getDisplayName()))) {
+            changes.append("Họ tên");
         }
+        if (!normalize(title).equals(normalize(user.getTitle()))) {
+            if (changes.length() > 0) changes.append(", ");
+            changes.append("Chức danh");
+        }
+        if (!normalize(email).equals(normalize(user.getEmail()))) {
+            if (changes.length() > 0) changes.append(", ");
+            changes.append("Email");
+        }
+        final String changesStr = changes.toString();
 
+        // Update fields
         user.setDisplayName(displayName);
         user.setTitle(title);
         user.setEmail(email);
@@ -493,7 +530,21 @@ public class UserAdminService {
             "profile updated"
         );
         
-        return userAccountRepository.save(user);
+        UserAccount savedUser = userAccountRepository.save(user);
+        
+        // Send notification to the user whose profile was changed (only if not self-edit)
+        if (!isSelf && savedUser.getEmail() != null && !savedUser.getEmail().isBlank()) {
+            notificationService.notifyProfileChanged(
+                savedUser.getUsername(),
+                savedUser.getEmail(),
+                savedUser.getDisplayName(),
+                actorUsername,
+                actorRole,
+                changesStr
+            );
+        }
+        
+        return savedUser;
     }
     
     /**

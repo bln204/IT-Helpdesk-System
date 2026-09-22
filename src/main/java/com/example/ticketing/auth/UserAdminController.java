@@ -205,7 +205,9 @@ public class UserAdminController {
     /**
      * Cập nhật profile.
      * - User tự sửa profile của mình (sau khi được duyệt)
-     * - ADMIN/GIAM_DOC sửa profile user khác
+     * - ADMIN sửa profile bất kỳ user
+     * - TRUONG_PHONG sửa profile user trong phòng mình
+     * - GIAM_DOC sửa profile user khác
      */
     @PatchMapping("/{id}/profile")
     public UserDtos.UserResponse updateProfile(
@@ -222,7 +224,8 @@ public class UserAdminController {
                 request.getAvatarUrl(),
                 request.getEmail(),
                 actor.getUsername(),
-                actor.getRole().name()
+                actor.getRole().name(),
+                actor.getDepartmentId()
             )
         );
     }

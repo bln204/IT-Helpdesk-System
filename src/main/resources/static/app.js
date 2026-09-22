@@ -860,17 +860,17 @@ const applyUserDetailControls = () => {
   let canDelete = false;
   
   if (isAdmin()) {
-    // Admin: can delete all users (except other admins)
+    // Admin: can edit and delete all users (except other admins for delete)
     // Check if target is not an admin
     if (selectedUser.role !== 'ADMIN') {
       canDelete = true;
     }
-    // Admin cannot edit user details from detail modal (only from pending table)
+    // Admin can edit all users
+    canEdit = true;
   } else if (isTruongPhong()) {
-    // TruongPhong: can edit only approved NHAN_VIEN in their department
+    // TruongPhong: can edit only approved users in their department (except ADMIN/GIAM_DOC/other TRUONG_PHONG)
     if (isApprovedUser && canManage) {
       canEdit = true;
-      canResetPassword = true;
     }
     // TruongPhong can request delete for NHAN_VIEN in their department (any status)
     if (selectedUser.role === 'NHAN_VIEN' && canManage) {
