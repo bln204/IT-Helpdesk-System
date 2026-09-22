@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -87,6 +88,43 @@ public class UserApprovalController {
         return userAdminService.listPendingApprovalByDepartment(departmentId).stream()
             .map(UserDtos.UserResponse::from)
             .toList();
+    }
+
+    // ============ Delete Request Endpoints ============
+
+    /**
+     * Get all users with pending delete requests.
+     * ADMIN - can see all pending delete requests
+     * TRUONG_PHONG - can only see pending delete requests in their department
+     * GET /api/admin/users/delete-requests
+     */
+    @GetMapping("/delete-requests")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
+    public List<UserDtos.UserResponse> getPendingDeleteRequests(Authentication authentication) {
+        UserAccount actor = getCurrentUser(authentication);
+
+        if ("ADMIN".equals(actor.getRole().name())) {
+            return userAdminService.listPendingDeleteRequests().stream()
+                .map(UserDtos.UserResponse::from)
+                .toList();
+        } else {
+            // TRUONG_PHONG can only see their department's pending delete requests
+            return userAdminService.listPendingDeleteRequestsByDepartment(actor.getDepartmentId()).stream()
+                .map(UserDtos.UserResponse::from)
+                .toList();
+        }
+    }
+
+    /**
+     * Get count of pending delete requests.
+     * ADMIN only
+     * GET /api/admin/users/delete-requests/count
+     */
+    @GetMapping("/delete-requests/count")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PendingCountResponse> getPendingDeleteRequestsCount() {
+        long count = userAdminService.countPendingDeleteRequests();
+        return ResponseEntity.ok(new PendingCountResponse(count));
     }
 
     /**
@@ -214,6 +252,123 @@ public class UserApprovalController {
         );
 
         return UserDtos.UserResponse.from(user);
+    }
+
+    /**
+     * Request delete a user account.
+     * TRUONG_PHONG only - requests admin to delete NHAN_VIEN in their department
+     * POST /api/admin/users/{id}/request-delete
+     */
+    @PostMapping("/{id}/request-delete")
+    @PreAuthorize("hasRole('TRUONG_PHONG')")
+    public ResponseEntity<DeleteRequestResponse> requestDeleteUser(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount actor = getCurrentUser(authentication);
+        UserAccount targetUser = userAdminService.getUser(id);
+
+        // TRUONG_PHONG can only request delete for NHAN_VIEN in their department
+        if (!"NHAN_VIEN".equals(targetUser.getRole().name())) {
+            throw new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                "Chỉ có thể yêu cầu xóa tài khoản nhân viên."
+            );
+        }
+        if (!actor.getDepartmentId().equals(targetUser.getDepartmentId())) {
+            throw new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                "Chỉ có thể yêu cầu xóa tài khoản trong phòng ban của bạn."
+            );
+        }
+
+        // Mark user as pending deletion - admin will review and delete
+        userAdminService.requestDeleteUser(
+            id,
+            actor.getUsername(),
+            actor.getRole().name(),
+            actor.getDepartmentId()
+        );
+
+        // Notification is already sent inside requestDeleteUser() to avoid duplication
+
+        return ResponseEntity.ok(new DeleteRequestResponse(true, "Yêu cầu xóa đã được gửi cho Admin."));
+    }
+
+    /**
+     * Approve delete request and actually delete user.
+     * ADMIN only
+     * DELETE /api/admin/users/{id}/delete-request
+     */
+    @DeleteMapping("/{id}/delete-request")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> approveDeleteRequest(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount actor = getCurrentUser(authentication);
+        UserAccount targetUser = userAdminService.getUser(id);
+
+        // Actually delete the user
+        userAdminService.deleteUser(id);
+
+        // Notify the TRUONG_PHONG who requested the deletion
+        if (targetUser.getCreatedBy() != null) {
+            notificationService.notifyUserDeleted(
+                targetUser.getId(),
+                targetUser.getCreatedBy(),
+                targetUser.getUsername(),
+                targetUser.getDisplayName(),
+                actor.getUsername()
+            );
+        }
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Cancel a pending delete request.
+     * ADMIN - can cancel any delete request
+     * TRUONG_PHONG - can only cancel delete requests in their department
+     * POST /api/admin/users/{id}/cancel-delete-request
+     */
+    @PostMapping("/{id}/cancel-delete-request")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
+    public UserDtos.UserResponse cancelDeleteRequest(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount actor = getCurrentUser(authentication);
+
+        UserAccount user = userAdminService.cancelDeleteRequest(
+            id,
+            actor.getUsername(),
+            actor.getRole().name(),
+            actor.getDepartmentId()
+        );
+
+        return UserDtos.UserResponse.from(user);
+    }
+
+    /**
+     * Response DTO for delete request.
+     */
+    public static class DeleteRequestResponse {
+        private boolean success;
+        private String message;
+
+        public DeleteRequestResponse(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getMessage() {
+            return message;
+        }
     }
 
     /**

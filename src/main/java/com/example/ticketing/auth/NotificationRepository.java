@@ -44,6 +44,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     int markAllAsRead(@Param("username") String username);
 
     /**
+     * Delete all notifications for a user.
+     */
+    void deleteByRecipientUsername(String recipientUsername);
+
+    /**
      * Delete old notifications (older than specified days).
      */
     @Modifying

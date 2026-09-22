@@ -13,6 +13,8 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findByUsername(String username);
 
     List<UserAccount> findByRoleAndEnabledTrueOrderByUsernameAsc(UserRole.Role role);
+    
+    List<UserAccount> findByRoleAndEnabledTrue(UserRole.Role role);
 
     Page<UserAccount> findByUsernameContainingIgnoreCase(String username, Pageable pageable);
 
@@ -90,6 +92,24 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
      */
     @Query("SELECT u FROM UserAccount u WHERE u.role = :role AND u.approved = true AND u.enabled = true ORDER BY u.username ASC")
     List<UserAccount> findActiveUsersByRole(@Param("role") UserRole.Role role);
+    
+    /**
+     * Find users with pending delete requests (rejectionReason = 'DELETE_PENDING')
+     */
+    @Query("SELECT u FROM UserAccount u WHERE u.rejectionReason = 'DELETE_PENDING' ORDER BY u.id ASC")
+    List<UserAccount> findPendingDeleteRequests();
+    
+    /**
+     * Find users with pending delete requests by department
+     */
+    @Query("SELECT u FROM UserAccount u WHERE u.rejectionReason = 'DELETE_PENDING' AND u.department.id = :deptId ORDER BY u.id ASC")
+    List<UserAccount> findPendingDeleteRequestsByDepartment(@Param("deptId") Long departmentId);
+    
+    /**
+     * Count users with pending delete requests
+     */
+    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.rejectionReason = 'DELETE_PENDING'")
+    long countPendingDeleteRequests();
     
     /**
      * Check if username already exists

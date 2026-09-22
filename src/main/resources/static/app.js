@@ -5,12 +5,163 @@ const UNASSIGNED_VALUE = 'UNASSIGNED';
 // Current user info (from login response)
 let currentUser = null;
 let notifications = [];
-let notificationCount = 0;
 let pendingUsersCache = []; // Cache for pending users count
+let notificationPollingTimer = null;
+const NOTIFICATION_POLLING_MS = 10000; // Poll every 10 seconds
 
 // ==================== Notification System ====================
 
-const addNotification = (type, title, message, userId = null) => {
+// Fetch notifications from backend API
+const fetchNotifications = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return { notifications: [], unreadCount: 0 };
+
+    const response = await fetch(`${API_BASE}/api/notifications`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to fetch notifications:', response.status);
+      return { notifications: [], unreadCount: 0 };
+    }
+    
+    const data = await response.json();
+    return { 
+      notifications: data || [], 
+      unreadCount: data.filter(n => !n.read).length 
+    };
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    return { notifications: [], unreadCount: 0 };
+  }
+};
+
+// Fetch unread count from backend
+const fetchUnreadCount = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return 0;
+
+    const response = await fetch(`${API_BASE}/api/notifications/unread-count`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) return 0;
+    
+    const data = await response.json();
+    return data.count || 0;
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    return 0;
+  }
+};
+
+// Mark notification as read via API
+const markNotificationReadAPI = async (id) => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications/${id}/read`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+};
+
+// Mark all notifications as read via API
+const markAllNotificationsReadAPI = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications/mark-all-read`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+  }
+};
+
+// Delete all notifications via API
+const deleteAllNotificationsAPI = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting all notifications:', error);
+  }
+};
+
+// Start notification polling
+const startNotificationPolling = () => {
+  stopNotificationPolling();
+  notificationPollingTimer = setInterval(async () => {
+    await loadNotifications();
+  }, NOTIFICATION_POLLING_MS);
+};
+
+// Stop notification polling
+const stopNotificationPolling = () => {
+  if (notificationPollingTimer) {
+    clearInterval(notificationPollingTimer);
+    notificationPollingTimer = null;
+  }
+};
+
+// Convert backend notification to frontend format
+const convertBackendNotification = (notif) => {
+  // Map notification type to icon and class
+  const typeMap = {
+    'ACCOUNT_APPROVED': { type: 'approve', icon: '✓' },
+    'ACCOUNT_REJECTED': { type: 'reject', icon: '✗' },
+    'ACCOUNT_CREATED_PENDING': { type: 'pending', icon: '⏳' },
+    'INFO': { type: 'info', icon: 'ℹ' },
+    'TICKET_CREATED': { type: 'info', icon: '📋' },
+    'TICKET_UPDATED': { type: 'info', icon: '📝' },
+    'TICKET_ASSIGNED': { type: 'info', icon: '👤' },
+    'TICKET_CLOSED': { type: 'info', icon: '✅' },
+  };
+  
+  const mapping = typeMap[notif.type] || { type: 'info', icon: 'ℹ' };
+  
+  return {
+    id: notif.id,
+    type: mapping.type,
+    icon: mapping.icon,
+    title: notif.title || notif.message,
+    message: notif.message || notif.title,
+    userId: notif.relatedUserId,
+    timestamp: notif.createdAt,
+    read: notif.read || false,
+  };
+};
+
+const addNotification = async (type, title, message, userId = null) => {
   const notification = {
     id: Date.now(),
     type, // 'approve' or 'reject'
@@ -22,37 +173,66 @@ const addNotification = (type, title, message, userId = null) => {
   };
 
   notifications.unshift(notification);
-  notificationCount++;
-  updateNotificationBadge();
+  const unreadCount = notifications.filter(n => !n.read).length;
+  updateNotificationBadge(unreadCount);
   renderNotifications();
 
   // Save to localStorage
   localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
+
+  // Also save to backend via API
+  try {
+    await request('/api/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ type, title, message, userId })
+    });
+  } catch (error) {
+    console.error('Failed to save notification to backend:', error);
+  }
 };
 
-const loadNotifications = () => {
-  const stored = localStorage.getItem('ticketing.notifications');
-  if (stored) {
-    try {
-      notifications = JSON.parse(stored);
-      notificationCount = notifications.filter(n => !n.read).length;
-      updateNotificationBadge();
-      renderNotifications();
-    } catch (e) {
-      notifications = [];
+const loadNotifications = async () => {
+  // If not logged in, clear notifications
+  const token = localStorage.getItem(tokenKey);
+  if (!token) {
+    notifications = [];
+    updateNotificationBadge(0);
+    return;
+  }
+
+  try {
+    const { notifications: fetchedNotifications, unreadCount } = await fetchNotifications();
+    
+    // Convert backend notifications to frontend format
+    notifications = fetchedNotifications.map(convertBackendNotification);
+    
+    updateNotificationBadge(unreadCount);
+    renderNotifications();
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+    // Fallback to localStorage if API fails
+    const stored = localStorage.getItem('ticketing.notifications');
+    if (stored) {
+      try {
+        notifications = JSON.parse(stored);
+        const unread = notifications.filter(n => !n.read).length;
+        updateNotificationBadge(unread);
+        renderNotifications();
+      } catch (e) {
+        notifications = [];
+      }
     }
   }
 };
 
-const updateNotificationBadge = () => {
-  const unreadCount = notifications.filter(n => !n.read).length;
-  if (notificationBadge) {
-    if (unreadCount > 0) {
-      notificationBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-      notificationBadge.classList.remove('hidden');
-    } else {
-      notificationBadge.classList.add('hidden');
-    }
+const updateNotificationBadge = (count) => {
+  const badge = document.getElementById('notification-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
   }
 };
 
@@ -70,13 +250,20 @@ const renderNotifications = () => {
     item.className = `notification-item${notif.read ? '' : ' unread'}`;
 
     const timeAgo = getTimeAgo(notif.timestamp);
-    const titleClass = notif.type === 'approve' ? 'approve' : 'reject';
-    const icon = notif.type === 'approve' ? '✓' : '✗';
+    const icon = notif.icon || (notif.type === 'approve' ? '✓' : notif.type === 'reject' ? '✗' : 'ℹ');
 
     item.innerHTML = `
-      <div class="notification-item-title ${titleClass}">${icon} ${notif.title}</div>
-      <div class="notification-item-message">${notif.message}</div>
-      <div class="notification-item-time">${timeAgo}</div>
+      <div class="notification-item-content">
+        <span class="notification-icon">${icon}</span>
+        <div class="notification-text">
+          <div class="notification-item-title">${notif.title}</div>
+          <div class="notification-item-message">${notif.message}</div>
+        </div>
+      </div>
+      <div class="notification-item-footer">
+        <span class="notification-item-time">${timeAgo}</span>
+        ${!notif.read ? '<span class="notification-unread-dot"></span>' : ''}
+      </div>
     `;
 
     item.addEventListener('click', () => {
@@ -89,31 +276,39 @@ const renderNotifications = () => {
   });
 };
 
-const markNotificationRead = (id) => {
+const markNotificationRead = async (id) => {
   const notif = notifications.find(n => n.id === id);
   if (notif && !notif.read) {
     notif.read = true;
-    notificationCount = notifications.filter(n => !n.read).length;
-    updateNotificationBadge();
+    const unreadCount = notifications.filter(n => !n.read).length;
+    updateNotificationBadge(unreadCount);
     renderNotifications();
+    // Call API to mark as read on backend
+    await markNotificationReadAPI(id);
+    // Also save to localStorage as fallback
     localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
   }
 };
 
-const markAllNotificationsRead = () => {
+const markAllNotificationsRead = async () => {
   notifications.forEach(n => n.read = true);
-  notificationCount = 0;
-  updateNotificationBadge();
+  updateNotificationBadge(0);
   renderNotifications();
+  // Call API to mark all as read on backend
+  await markAllNotificationsReadAPI();
+  // Also save to localStorage as fallback
   localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
 };
 
-const clearAllNotifications = () => {
+const clearAllNotifications = async () => {
+  // Call API to delete all notifications on backend
+  await deleteAllNotificationsAPI();
+  // Clear local state
   notifications = [];
-  notificationCount = 0;
-  updateNotificationBadge();
+  updateNotificationBadge(0);
   renderNotifications();
-  localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
+  // Also clear localStorage
+  localStorage.setItem('ticketing.notifications', JSON.stringify(notifications));
 };
 
 const getTimeAgo = (isoString) => {
@@ -135,6 +330,7 @@ const toggleNotificationDropdown = () => {
   if (notificationDropdown) {
     notificationDropdown.classList.toggle('hidden');
     if (!notificationDropdown.classList.contains('hidden')) {
+      // Mark all as read when opening dropdown
       markAllNotificationsRead();
     }
   }
@@ -254,6 +450,11 @@ const openUserModal = document.getElementById('open-user-modal');
 const closeUserModal = document.getElementById('close-user-modal');
 const userCreateModal = document.getElementById('user-create-modal');
 const closeUserDetail = document.getElementById('close-user-detail');
+const rejectModal = document.getElementById('reject-modal');
+const rejectModalClose = document.getElementById('reject-modal-close');
+const rejectModalConfirm = document.getElementById('reject-modal-confirm');
+const rejectModalCancel = document.getElementById('reject-modal-cancel');
+const rejectReasonInput = document.getElementById('reject-reason-input');
 
 const profileDetails = document.getElementById('profile-details');
 const profilePasswordForm = document.getElementById('profile-password-form');
@@ -651,26 +852,34 @@ const applyUserDetailControls = () => {
   const canManage = canManageTargetUser(selectedUser);
   const isPending = !selectedUser.approved && !selectedUser.rejectionReason;
   const isRejectedUser = !selectedUser.approved && selectedUser.rejectionReason;
+  const isApprovedUser = selectedUser.approved;
   
   // Determine edit permissions based on role and status
-  let canEdit = canManage;
+  let canEdit = false;
+  let canResetPassword = false;
+  let canDelete = false;
+  
   if (isAdmin()) {
-    // Admin: can edit only approved users
-    canEdit = canManage && !isPending;
+    // Admin: can delete all users (except other admins)
+    // Check if target is not an admin
+    if (selectedUser.role !== 'ADMIN') {
+      canDelete = true;
+    }
+    // Admin cannot edit user details from detail modal (only from pending table)
   } else if (isTruongPhong()) {
-    // TruongPhong: can edit only approved users
-    canEdit = canManage && !isPending;
+    // TruongPhong: can edit only approved NHAN_VIEN in their department
+    if (isApprovedUser && canManage) {
+      canEdit = true;
+      canResetPassword = true;
+    }
+    // TruongPhong can request delete for NHAN_VIEN in their department (any status)
+    if (selectedUser.role === 'NHAN_VIEN' && canManage) {
+      canDelete = true;
+    }
   }
   
-  // Determine delete permissions for TruongPhong on pending users
-  let canDelete = canManage;
-  if (isTruongPhong() && isPending) {
-    // TruongPhong can delete pending users
-    canDelete = canManage;
-  } else if (isTruongPhong() && !isPending) {
-    // TruongPhong cannot delete approved users
-    canDelete = false;
-  }
+  // Helper to check if user is in TRUONG_PHONG's department
+  const isUserInMyDept = selectedUser.departmentId === currentUser?.departmentId;
   
   if (userRoleSelect) {
     userRoleSelect.innerHTML = '';
@@ -690,11 +899,11 @@ const applyUserDetailControls = () => {
       userRoleSelect.appendChild(option);
     });
     userRoleSelect.value = selectedUser.role;
-    userRoleSelect.disabled = !canManage || (!isAdmin() && !isGiamDoc());
+    userRoleSelect.disabled = true; // Always disabled - cannot change role from detail modal
   }
 
   if (userDeptSelect) {
-    userDeptSelect.disabled = !isAdmin();
+    userDeptSelect.disabled = true; // Always disabled - cannot change department from detail modal
   }
 
   if (userDisplayName) {
@@ -713,14 +922,17 @@ const applyUserDetailControls = () => {
     userEnabledSelect.value = selectedUser.enabled ? 'true' : 'false';
     userEnabledSelect.disabled = !canEdit;
   }
+  if (userPasswordInput) {
+    userPasswordInput.disabled = !canResetPassword;
+  }
   if (userSaveRole) {
-    userSaveRole.disabled = !canEdit;
+    userSaveRole.disabled = true; // Always disabled
   }
   if (userSaveEnabled) {
     userSaveEnabled.disabled = !canEdit;
   }
   if (userSavePassword) {
-    userSavePassword.disabled = !canEdit;
+    userSavePassword.disabled = !canResetPassword;
   }
   if (userSaveProfile) {
     userSaveProfile.disabled = !canEdit;
@@ -1060,6 +1272,10 @@ const login = async (payload) => {
     currentUser = data.user;
     localStorage.setItem('ticketing.currentUser', JSON.stringify(data.user));
   }
+  
+  // Start notification polling after login
+  startNotificationPolling();
+  await loadNotifications();
   
   setRoute('#/tickets');
 };
@@ -1834,16 +2050,20 @@ const loadAdminUsers = async () => {
     await loadPendingUsers();
   }
 
-  // Also load pending count for badge (ADMIN only)
-  let pendingCount = 0;
-  if (isAdmin()) {
-    try {
-      const pendingData = await request('/api/admin/users/pending/count');
-      pendingCount = pendingData.count || 0;
-    } catch (e) {
-      // Ignore - endpoint might not exist or user doesn't have access
-    }
+  // Load delete requests section (visible for ADMIN and TRUONG_PHONG)
+  // ADMIN sees with action buttons, TRUONG_PHONG sees as pending (read-only)
+  if (isAdmin() || isTruongPhong()) {
+    await loadDeleteRequests();
   }
+
+  // Count truly pending users from the loaded data (approved=false AND no rejectionReason)
+  // This ensures badge count matches what's actually displayed in the pending table
+  let pendingCount = 0;
+  data.content.forEach((user) => {
+    if (user.approved === false && !user.rejectionReason) {
+      pendingCount++;
+    }
+  });
 
   data.content.forEach((user) => {
     const row = document.createElement('tr');
@@ -1901,7 +2121,12 @@ const loadPendingUsers = async () => {
   try {
     const pendingUsers = await request('/api/admin/users/pending');
 
-    if (pendingUsers.length === 0) {
+    // Filter: only show users with approved=false AND no rejectionReason (truly pending)
+    const trulyPendingUsers = pendingUsers.filter(user => 
+      user.approved === false && !user.rejectionReason
+    );
+
+    if (trulyPendingUsers.length === 0) {
       pendingSection.classList.add('hidden');
       // Update badge
       updatePendingBadge(0);
@@ -1912,13 +2137,13 @@ const loadPendingUsers = async () => {
     pendingTbody.innerHTML = '';
 
     if (pendingCountBadge) {
-      pendingCountBadge.textContent = `(${pendingUsers.length})`;
+      pendingCountBadge.textContent = `(${trulyPendingUsers.length})`;
     }
 
     // Update pending badge in nav
-    updatePendingBadge(pendingUsers.length);
+    updatePendingBadge(trulyPendingUsers.length);
 
-    pendingUsers.forEach((user) => {
+    trulyPendingUsers.forEach((user) => {
       const row = document.createElement('tr');
       const deptInfo = user.departmentCode || '—';
       const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '—';
@@ -1961,8 +2186,8 @@ const loadPendingUsers = async () => {
         if (!confirm('Bạn có chắc muốn duyệt tài khoản này?')) return;
         try {
           await request(`/api/admin/users/${userId}/approve`, { method: 'POST', body: JSON.stringify({}) });
-          // Add notification
-          addNotification('approve', 'Tài khoản được duyệt', `Tài khoản "${userDisplayName}" đã được duyệt.`);
+          // Reload both pending and all users
+          await loadPendingUsers();
           await loadAdminUsers();
           alert('Đã duyệt tài khoản thành công!');
         } catch (error) {
@@ -1976,28 +2201,140 @@ const loadPendingUsers = async () => {
         e.stopPropagation();
         const userId = btn.dataset.userId;
         const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
-        const reason = prompt('Nhập lý do từ chối:');
-        if (!reason || !reason.trim()) {
-          alert('Vui lòng nhập lý do từ chối.');
-          return;
-        }
-        try {
-          await request(`/api/admin/users/${userId}/reject`, {
-            method: 'POST',
-            body: JSON.stringify({ reason: reason.trim() }),
-          });
-          // Add notification
-          addNotification('reject', 'Tài khoản bị từ chối', `Tài khoản "${userDisplayName}" đã bị từ chối. Lý do: ${reason.trim()}`);
-          await loadAdminUsers();
-          alert('Đã từ chối tài khoản.');
-        } catch (error) {
-          alert('Lỗi: ' + error.message);
+        
+        // Show reject modal instead of prompt
+        const rejectModal = document.getElementById('reject-modal');
+        const rejectModalUsername = document.getElementById('reject-modal-username');
+        const rejectReasonInput = document.getElementById('reject-reason-input');
+        
+        if (rejectModal && rejectModalUsername && rejectReasonInput) {
+          rejectModalUsername.textContent = `Tài khoản: ${userDisplayName}`;
+          rejectReasonInput.value = '';
+          rejectModal.classList.remove('hidden');
+          rejectModal.setAttribute('aria-hidden', 'false');
+          rejectReasonInput.focus();
+          
+          // Store userId for later use
+          rejectModal.dataset.userId = userId;
+          rejectModal.dataset.userDisplayName = userDisplayName;
         }
       });
     });
   } catch (error) {
     console.error('Error loading pending users:', error);
     pendingSection.classList.add('hidden');
+  }
+};
+
+// ============ Delete Requests Section ============
+
+const loadDeleteRequests = async () => {
+  const deleteRequestsSection = document.getElementById('delete-requests-section');
+  const deleteRequestsTbody = document.getElementById('delete-requests-tbody');
+  const deleteRequestsCountBadge = document.getElementById('delete-requests-count-badge');
+
+  if (!deleteRequestsSection || !deleteRequestsTbody) return;
+
+  try {
+    // ADMIN and TRUONG_PHONG can see delete requests
+    if (!isAdmin() && !isTruongPhong()) {
+      deleteRequestsSection.classList.add('hidden');
+      return;
+    }
+
+    const deleteRequests = await request('/api/admin/users/delete-requests');
+
+    if (deleteRequests.length === 0) {
+      deleteRequestsSection.classList.add('hidden');
+      if (deleteRequestsCountBadge) {
+        deleteRequestsCountBadge.textContent = '';
+      }
+      return;
+    }
+
+    deleteRequestsSection.classList.remove('hidden');
+    deleteRequestsTbody.innerHTML = '';
+
+    if (deleteRequestsCountBadge) {
+      deleteRequestsCountBadge.textContent = `(${deleteRequests.length})`;
+    }
+
+    deleteRequests.forEach((user) => {
+      const row = document.createElement('tr');
+      const deptInfo = user.departmentCode || '—';
+      const requestedBy = user.createdBy || '—';
+
+      // ADMIN sees both buttons, TRUONG_PHONG sees only "Cancel request" button
+      // (because TRUONG_PHONG is the one who sent the request, they can only cancel it)
+      let actionHtml = '';
+      if (isAdmin()) {
+        actionHtml = `
+          <button class="btn-approve btn-small" data-delete-user-id="${user.id}">✓ Xóa</button>
+          <button class="btn-reject btn-small" data-cancel-request-id="${user.id}">✗ Hủy yêu cầu</button>
+        `;
+      } else {
+        actionHtml = `
+          <button class="btn-reject btn-small" data-cancel-request-id="${user.id}">✗ Hủy yêu cầu</button>
+        `;
+      }
+
+      row.innerHTML = `
+        <td>${user.username}</td>
+        <td>${user.displayName || '—'}</td>
+        <td>${formatRole(user.role)}</td>
+        <td>${deptInfo}</td>
+        <td>${requestedBy}</td>
+        <td>${actionHtml}</td>
+      `;
+
+      deleteRequestsTbody.appendChild(row);
+    });
+
+    // Attach event listeners for approve delete button (ADMIN only)
+    deleteRequestsTbody.querySelectorAll('.btn-approve').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.deleteUserId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        if (!confirm(`Bạn có chắc muốn xóa tài khoản "${userDisplayName}"?\n\nHành động này không thể hoàn tác.`)) return;
+        try {
+          await request(`/api/admin/users/${userId}/delete-request`, { method: 'DELETE' });
+          addNotification('delete', 'Xóa tài khoản', `Tài khoản "${userDisplayName}" đã được xóa.`);
+          alert('Đã xóa tài khoản thành công!');
+          // Reload delete requests
+          await loadDeleteRequests();
+          // Reload all users
+          await loadAdminUsers();
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
+      });
+    });
+
+    // Attach event listeners for cancel request button (ADMIN only)
+    deleteRequestsTbody.querySelectorAll('.btn-reject').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.cancelRequestId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        if (!confirm(`Bạn có chắc muốn hủy yêu cầu xóa tài khoản "${userDisplayName}"?`)) return;
+        try {
+          // Cancel the delete request
+          await request(`/api/admin/users/${userId}/cancel-delete-request`, { method: 'POST' });
+          addNotification('reject', 'Hủy yêu cầu xóa', `Yêu cầu xóa tài khoản "${userDisplayName}" đã bị hủy.`);
+          alert('Đã hủy yêu cầu xóa!');
+          // Reload delete requests
+          await loadDeleteRequests();
+          // Reload all users
+          await loadAdminUsers();
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error loading delete requests:', error);
+    deleteRequestsSection.classList.add('hidden');
   }
 };
 
@@ -2379,6 +2716,10 @@ logoutBtn.addEventListener('click', () => {
   setToken(null);
   currentUser = null;
   localStorage.removeItem('ticketing.currentUser');
+  // Stop notification polling
+  stopNotificationPolling();
+  notifications = [];
+  updateNotificationBadge(0);
   showView('login');
   if (loginError) {
     loginError.classList.add('hidden');
@@ -2805,8 +3146,37 @@ if (userSaveProfile) {
 if (userDelete) {
   userDelete.addEventListener('click', async () => {
     if (!selectedUser) return;
-    if (!confirm(`Bạn có chắc muốn xóa người dùng ${selectedUser.username}?`)) return;
-    await request(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
+    
+    if (isAdmin()) {
+      // ADMIN: xác nhận và xóa trực tiếp
+      const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        await request(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
+        addNotification('delete', 'Xóa tài khoản', `Tài khoản "${selectedUser.displayName || selectedUser.username}" đã được xóa.`);
+        alert('Đã xóa tài khoản thành công!');
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+        return;
+      }
+    } else if (isTruongPhong()) {
+      // TRUONG_PHONG: thông báo và gửi yêu cầu xóa đợi ADMIN duyệt
+      const confirmMsg = `Bạn có chắc muốn yêu cầu xóa tài khoản "${selectedUser.username}"?\n\nSau khi gửi yêu cầu, Admin sẽ xem xét và duyệt xóa.`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        await request(`/api/admin/users/${selectedUser.id}/request-delete`, { method: 'POST' });
+        addNotification('request-delete', 'Yêu cầu xóa tài khoản', `Yêu cầu xóa tài khoản "${selectedUser.displayName || selectedUser.username}" đã được gửi cho Admin.`);
+        alert('Yêu cầu xóa đã được gửi cho Admin!');
+        // Reload delete requests to show the new pending request
+        await loadDeleteRequests();
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+        return;
+      }
+    }
+    
     selectedUser = null;
     if (userDetailModal) {
       userDetailModal.classList.add('hidden');
@@ -2850,8 +3220,13 @@ const userRejectionForm = document.getElementById('user-rejection-form');
 if (userRejectBtn && userRejectionForm) {
   userRejectBtn.addEventListener('click', () => {
     // Only show form if user is pending
-    if (!selectedUser || selectedUser.approved) return;
+    if (!selectedUser || selectedUser.approved || selectedUser.rejectionReason) {
+      alert('Chỉ có thể từ chối tài khoản đang chờ duyệt.');
+      return;
+    }
+    if (!isAdmin()) return;
     userRejectionForm.classList.remove('hidden');
+    userRejectionForm.style.display = 'block';
     document.getElementById('user-rejection-reason-input').focus();
   });
 }
@@ -2878,6 +3253,7 @@ if (userConfirmRejectBtn) {
       // Add notification
       addNotification('reject', 'Tài khoản bị từ chối', `Tài khoản "${userDisplayName}" đã bị từ chối. Lý do: ${reason}`);
       // Refresh user list and close modal
+      await loadPendingUsers();
       await loadAdminUsers();
       if (userDetailModal) {
         userDetailModal.classList.add('hidden');
@@ -2895,7 +3271,69 @@ const userCancelRejectBtn = document.getElementById('user-cancel-reject');
 if (userCancelRejectBtn && userRejectionForm) {
   userCancelRejectBtn.addEventListener('click', () => {
     userRejectionForm.classList.add('hidden');
+    userRejectionForm.style.display = 'none';
     document.getElementById('user-rejection-reason-input').value = '';
+  });
+}
+
+// Reject modal event listeners (for pending table)
+if (rejectModalClose) {
+  rejectModalClose.addEventListener('click', () => {
+    rejectModal.classList.add('hidden');
+    rejectModal.setAttribute('aria-hidden', 'true');
+  });
+}
+
+if (rejectModalCancel) {
+  rejectModalCancel.addEventListener('click', () => {
+    rejectModal.classList.add('hidden');
+    rejectModal.setAttribute('aria-hidden', 'true');
+    if (rejectReasonInput) rejectReasonInput.value = '';
+  });
+}
+
+if (rejectModalConfirm) {
+  rejectModalConfirm.addEventListener('click', async () => {
+    const userId = rejectModal.dataset.userId;
+    const userDisplayName = rejectModal.dataset.userDisplayName;
+    const reason = rejectReasonInput?.value.trim();
+    
+    if (!reason) {
+      alert('Vui lòng nhập lý do từ chối.');
+      rejectReasonInput?.focus();
+      return;
+    }
+    
+    if (!confirm(`Bạn có chắc muốn từ chối tài khoản "${userDisplayName}"?`)) return;
+    
+    try {
+      await request(`/api/admin/users/${userId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason }),
+      });
+      // Add notification
+      addNotification('reject', 'Tài khoản bị từ chối', `Tài khoản "${userDisplayName}" đã bị từ chối. Lý do: ${reason}`);
+      // Close modal and reload
+      rejectModal.classList.add('hidden');
+      rejectModal.setAttribute('aria-hidden', 'true');
+      if (rejectReasonInput) rejectReasonInput.value = '';
+      await loadPendingUsers();
+      await loadAdminUsers();
+      alert('Đã từ chối tài khoản.');
+    } catch (error) {
+      alert('Lỗi: ' + error.message);
+    }
+  });
+}
+
+// Close reject modal on outside click
+if (rejectModal) {
+  rejectModal.addEventListener('click', (e) => {
+    if (e.target === rejectModal) {
+      rejectModal.classList.add('hidden');
+      rejectModal.setAttribute('aria-hidden', 'true');
+      if (rejectReasonInput) rejectReasonInput.value = '';
+    }
   });
 }
 

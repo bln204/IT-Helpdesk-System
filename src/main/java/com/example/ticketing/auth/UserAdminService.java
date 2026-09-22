@@ -172,6 +172,30 @@ public class UserAdminService {
     }
 
     /**
+     * List users with pending delete requests (for Admin)
+     */
+    @Transactional(readOnly = true)
+    public List<UserAccount> listPendingDeleteRequests() {
+        return userAccountRepository.findPendingDeleteRequests();
+    }
+
+    /**
+     * List users with pending delete requests by department
+     */
+    @Transactional(readOnly = true)
+    public List<UserAccount> listPendingDeleteRequestsByDepartment(Long departmentId) {
+        return userAccountRepository.findPendingDeleteRequestsByDepartment(departmentId);
+    }
+
+    /**
+     * Count pending delete requests
+     */
+    @Transactional(readOnly = true)
+    public long countPendingDeleteRequests() {
+        return userAccountRepository.countPendingDeleteRequests();
+    }
+
+    /**
      * Lấy users theo department (bao gồm cả pending và disabled)
      */
     @Transactional(readOnly = true)
@@ -261,18 +285,36 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
+        // #region agent debug log
+        org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserAdminService.class);
+        log.info("[DEBUG] rejectUser called - id={}, reason='{}', actorUsername={}, actorRole={}", 
+            id, reason, actorUsername, actorRole);
+        // #endregion
+
         // Only ADMIN can reject
         if (!"ADMIN".equals(actorRole)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Chỉ Admin mới có quyền từ chối tài khoản.");
         }
 
+        // #region agent debug log
+        log.info("[DEBUG] rejectUser - actorRole check passed: {}", actorRole);
+        // #endregion
+
         if (reason == null || reason.isBlank()) {
+            // #region agent debug log
+            log.info("[DEBUG] rejectUser - reason validation failed: reason='{}'", reason);
+            // #endregion
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Lý do từ chối không được để trống.");
         }
 
         UserAccount user = getUser(id);
+
+        // #region agent debug log
+        log.info("[DEBUG] rejectUser - user found: id={}, username={}, approved={}", 
+            user.getId(), user.getUsername(), user.isApproved());
+        // #endregion
 
         // Check if already approved
         if (user.isApproved()) {
@@ -529,20 +571,11 @@ public class UserAdminService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete ADMIN accounts.");
         }
 
-        // Permission check
+        // Permission check - ADMIN can delete directly
+        // TRUONG_PHONG can only request deletion (handled in frontend)
         boolean canDelete = switch (actorRole) {
             case "ADMIN" -> true;
             case "GIAM_DOC" -> user.getRole() != UserRole.Role.ADMIN;
-            case "TRUONG_PHONG" -> {
-                // Chỉ được xóa NHAN_VIEN trong phòng mình
-                if (user.getRole() != UserRole.Role.NHAN_VIEN) {
-                    yield false;
-                }
-                if (user.getDepartment() == null || !user.getDepartment().getId().equals(actorDepartmentId)) {
-                    yield false;
-                }
-                yield true;
-            }
             default -> false;
         };
 
@@ -558,6 +591,140 @@ public class UserAdminService {
             user.getUsername()
         );
         userAccountRepository.delete(user);
+    }
+
+    /**
+     * Direct delete without permission check (for Admin approving delete requests from TRUONG_PHONG).
+     */
+    public void deleteUser(Long id) {
+        UserAccount user = getUser(id);
+
+        // Cannot delete ADMIN
+        if (user.getRole() == UserRole.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete ADMIN accounts.");
+        }
+
+        userAuditService.log(
+            UserAuditAction.USER_DELETED,
+            "ADMIN",
+            "ADMIN",
+            user.getUsername()
+        );
+        userAccountRepository.delete(user);
+    }
+
+    /**
+     * Request delete a user (TRUONG_PHONG requests Admin to delete).
+     * Marks the user with pending deletion status and notifies admins.
+     */
+    public UserAccount requestDeleteUser(
+        Long id,
+        String actorUsername,
+        String actorRole,
+        Long actorDepartmentId
+    ) {
+        // Only TRUONG_PHONG can request deletion
+        if (!"TRUONG_PHONG".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Chỉ Trưởng phòng mới có thể gửi yêu cầu xóa tài khoản.");
+        }
+
+        UserAccount user = getUser(id);
+
+        // Cannot delete self
+        if (user.getUsername().equals(actorUsername)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot request delete your own account.");
+        }
+
+        // Cannot delete ADMIN
+        if (user.getRole() == UserRole.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot request delete ADMIN accounts.");
+        }
+
+        // Can only request deletion of NHAN_VIEN in own department
+        if (user.getRole() != UserRole.Role.NHAN_VIEN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Trưởng phòng chỉ có thể yêu cầu xóa tài khoản nhân viên.");
+        }
+
+        if (user.getDepartment() == null || !user.getDepartment().getId().equals(actorDepartmentId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Trưởng phòng chỉ có thể yêu cầu xóa tài khoản trong phòng mình.");
+        }
+
+        // Check if already pending deletion
+        if ("DELETE_PENDING".equals(user.getRejectionReason())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Yêu cầu xóa tài khoản này đang chờ Admin duyệt.");
+        }
+
+        // Set rejectionReason to indicate pending deletion
+        user.setRejectionReason("DELETE_PENDING");
+        user.setCreatedBy(actorUsername); // Track who requested the deletion
+
+        userAuditService.log(
+            UserAuditAction.USER_REJECTED,
+            actorUsername,
+            actorRole,
+            user.getUsername(),
+            null,
+            "Yêu cầu xóa đang chờ Admin duyệt"
+        );
+
+        UserAccount savedUser = userAccountRepository.save(user);
+
+        // Notify all admins
+        notificationService.notifyAdminsOfDeleteRequest(
+            user.getId(),
+            user.getUsername(),
+            user.getDisplayName(),
+            actorUsername
+        );
+
+        return savedUser;
+    }
+
+    /**
+     * Cancel a pending delete request.
+     * ADMIN - can cancel any delete request
+     * TRUONG_PHONG - can only cancel delete requests in their department
+     * Removes the DELETE_PENDING status from the user.
+     */
+    public UserAccount cancelDeleteRequest(
+        Long id,
+        String actorUsername,
+        String actorRole,
+        Long actorDepartmentId
+    ) {
+        UserAccount user = getUser(id);
+
+        // TRUONG_PHONG can only cancel delete requests for users in their department
+        if (!"ADMIN".equals(actorRole)) {
+            if (!actorDepartmentId.equals(user.getDepartmentId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Bạn chỉ có thể hủy yêu cầu xóa trong phòng ban của mình.");
+            }
+        }
+
+        // Check if user has DELETE_PENDING status
+        if (!"DELETE_PENDING".equals(user.getRejectionReason())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Tài khoản này không có yêu cầu xóa nào đang chờ.");
+        }
+
+        // Clear the DELETE_PENDING status
+        user.setRejectionReason(null);
+
+        userAuditService.log(
+            UserAuditAction.USER_REJECTED,
+            actorUsername,
+            actorRole,
+            user.getUsername(),
+            "DELETE_PENDING",
+            "Đã hủy yêu cầu xóa"
+        );
+
+        return userAccountRepository.save(user);
     }
 
     public UserAccount getUser(Long id) {
