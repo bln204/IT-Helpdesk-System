@@ -440,7 +440,10 @@ public class UserAdminService {
     /**
      * Cập nhật profile.
      * - User có thể tự sửa profile của mình (sau khi được duyệt)
-     * - ADMIN/GIAM_DOC có thể sửa profile của user khác
+     * - ADMIN/GIAM_DOC có thể sửa profile của user khác (KHÔNG ÁP DỤNG cho tài khoản bị từ chối)
+     * 
+     * Lưu ý: Tài khoản bị từ chối (approved=false, rejectionReason!=null) chỉ có thể bị XOÁ,
+     * không thể chỉnh sửa bất kỳ thông tin nào.
      */
     public UserAccount updateProfile(
         Long id,
@@ -458,11 +461,27 @@ public class UserAdminService {
         boolean isSelf = user.getUsername().equals(actorUsername);
         boolean isElevated = "ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole);
 
+        // Rejected accounts cannot be edited at all - only ADMIN can delete them
+        // Rejected = approved=false AND has rejectionReason
+        boolean isRejectedUser = !user.isApproved() && user.getRejectionReason() != null && !user.getRejectionReason().isBlank();
+        if (isRejectedUser) {
+            userAuditService.log(
+                UserAuditAction.PROFILE_EDIT_REJECTED,
+                actorUsername,
+                actorRole,
+                user.getUsername(),
+                null,
+                "Tài khoản đã bị từ chối - không thể chỉnh sửa"
+            );
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Không thể chỉnh sửa tài khoản đã bị từ chối. Chỉ có thể xóa tài khoản này.");
+        }
+        
         if (!isSelf && !isElevated) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only update your own profile.");
         }
         
-        // Self-edit: check if account is approved
+        // Self-edit: check if account is approved (not pending, not rejected)
         if (isSelf && !user.isApproved()) {
             userAuditService.log(
                 UserAuditAction.PROFILE_EDIT_REJECTED,
