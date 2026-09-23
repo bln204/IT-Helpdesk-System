@@ -37,13 +37,11 @@ public final class AuthDtos {
         private String token;
         private String tokenType;
         private long expiresInSeconds;
-        private UserInfo user;
 
-        public LoginResponse(String token, long expiresInSeconds, UserInfo user) {
+        public LoginResponse(String token, long expiresInSeconds) {
             this.token = token;
             this.tokenType = "Bearer";
             this.expiresInSeconds = expiresInSeconds;
-            this.user = user;
         }
 
         public String getToken() {
@@ -56,73 +54,6 @@ public final class AuthDtos {
 
         public long getExpiresInSeconds() {
             return expiresInSeconds;
-        }
-
-        public UserInfo getUser() {
-            return user;
-        }
-    }
-
-    public static class UserInfo {
-        private Long id;
-        private String username;
-        private String role;
-        private Long departmentId;
-        private String departmentCode;
-        private String departmentName;
-        private String displayName;
-        private String email;
-
-        public UserInfo(
-            Long id,
-            String username,
-            String role,
-            Long departmentId,
-            String departmentCode,
-            String departmentName,
-            String displayName,
-            String email
-        ) {
-            this.id = id;
-            this.username = username;
-            this.role = role;
-            this.departmentId = departmentId;
-            this.departmentCode = departmentCode;
-            this.departmentName = departmentName;
-            this.displayName = displayName;
-            this.email = email;
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public String getRole() {
-            return role;
-        }
-
-        public Long getDepartmentId() {
-            return departmentId;
-        }
-
-        public String getDepartmentCode() {
-            return departmentCode;
-        }
-
-        public String getDepartmentName() {
-            return departmentName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public String getEmail() {
-            return email;
         }
     }
 }

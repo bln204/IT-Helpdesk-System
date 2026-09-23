@@ -26,6 +26,12 @@ public final class TicketTypes {
         CLOSED
     }
 
+    public enum TicketRole {
+        REQUESTER,
+        ENGINEER,
+        ADMIN
+    }
+
     public enum AuditAction {
         CREATED,
         STATUS_CHANGED,
