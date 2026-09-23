@@ -2,13 +2,359 @@ const API_BASE = '';
 const tokenKey = 'ticketing.jwt';
 const UNASSIGNED_VALUE = 'UNASSIGNED';
 
+// Current user info (from login response)
+let currentUser = null;
+let notifications = [];
+let pendingUsersCache = []; // Cache for pending users count
+let notificationPollingTimer = null;
+const NOTIFICATION_POLLING_MS = 10000; // Poll every 10 seconds
+
+// ==================== Notification System ====================
+
+// Fetch notifications from backend API
+const fetchNotifications = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return { notifications: [], unreadCount: 0 };
+
+    const response = await fetch(`${API_BASE}/api/notifications`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to fetch notifications:', response.status);
+      return { notifications: [], unreadCount: 0 };
+    }
+    
+    const data = await response.json();
+    return { 
+      notifications: data || [], 
+      unreadCount: data.filter(n => !n.read).length 
+    };
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    return { notifications: [], unreadCount: 0 };
+  }
+};
+
+// Fetch unread count from backend
+const fetchUnreadCount = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return 0;
+
+    const response = await fetch(`${API_BASE}/api/notifications/unread-count`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) return 0;
+    
+    const data = await response.json();
+    return data.count || 0;
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    return 0;
+  }
+};
+
+// Mark notification as read via API
+const markNotificationReadAPI = async (id) => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications/${id}/read`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+};
+
+// Mark all notifications as read via API
+const markAllNotificationsReadAPI = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications/mark-all-read`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+  }
+};
+
+// Delete all notifications via API
+const deleteAllNotificationsAPI = async () => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    await fetch(`${API_BASE}/api/notifications`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting all notifications:', error);
+  }
+};
+
+// Start notification polling
+const startNotificationPolling = () => {
+  stopNotificationPolling();
+  notificationPollingTimer = setInterval(async () => {
+    await loadNotifications();
+  }, NOTIFICATION_POLLING_MS);
+};
+
+// Stop notification polling
+const stopNotificationPolling = () => {
+  if (notificationPollingTimer) {
+    clearInterval(notificationPollingTimer);
+    notificationPollingTimer = null;
+  }
+};
+
+// Convert backend notification to frontend format
+const convertBackendNotification = (notif) => {
+  // Map notification type to icon and class
+  const typeMap = {
+    'ACCOUNT_APPROVED': { type: 'approve', icon: '✓' },
+    'ACCOUNT_REJECTED': { type: 'reject', icon: '✗' },
+    'ACCOUNT_CREATED_PENDING': { type: 'pending', icon: '⏳' },
+    'INFO': { type: 'info', icon: 'ℹ' },
+    'TICKET_CREATED': { type: 'info', icon: '📋' },
+    'TICKET_UPDATED': { type: 'info', icon: '📝' },
+    'TICKET_ASSIGNED': { type: 'info', icon: '👤' },
+    'TICKET_CLOSED': { type: 'info', icon: '✅' },
+  };
+  
+  const mapping = typeMap[notif.type] || { type: 'info', icon: 'ℹ' };
+  
+  return {
+    id: notif.id,
+    type: mapping.type,
+    icon: mapping.icon,
+    title: notif.title || notif.message,
+    message: notif.message || notif.title,
+    userId: notif.relatedUserId,
+    timestamp: notif.createdAt,
+    read: notif.read || false,
+  };
+};
+
+const addNotification = async (type, title, message, userId = null) => {
+  const notification = {
+    id: Date.now(),
+    type, // 'approve' or 'reject'
+    title,
+    message,
+    userId,
+    timestamp: new Date().toISOString(),
+    read: false,
+  };
+
+  notifications.unshift(notification);
+  const unreadCount = notifications.filter(n => !n.read).length;
+  updateNotificationBadge(unreadCount);
+  renderNotifications();
+
+  // Save to localStorage
+  localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
+
+  // Also save to backend via API
+  try {
+    await request('/api/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ type, title, message, userId })
+    });
+  } catch (error) {
+    console.error('Failed to save notification to backend:', error);
+  }
+};
+
+const loadNotifications = async () => {
+  // If not logged in, clear notifications
+  const token = localStorage.getItem(tokenKey);
+  if (!token) {
+    notifications = [];
+    updateNotificationBadge(0);
+    return;
+  }
+
+  try {
+    const { notifications: fetchedNotifications, unreadCount } = await fetchNotifications();
+    
+    // Convert backend notifications to frontend format
+    notifications = fetchedNotifications.map(convertBackendNotification);
+    
+    updateNotificationBadge(unreadCount);
+    renderNotifications();
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+    // Fallback to localStorage if API fails
+    const stored = localStorage.getItem('ticketing.notifications');
+    if (stored) {
+      try {
+        notifications = JSON.parse(stored);
+        const unread = notifications.filter(n => !n.read).length;
+        updateNotificationBadge(unread);
+        renderNotifications();
+      } catch (e) {
+        notifications = [];
+      }
+    }
+  }
+};
+
+const updateNotificationBadge = (count) => {
+  const badge = document.getElementById('notification-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+};
+
+const renderNotifications = () => {
+  if (!notificationList) return;
+
+  if (notifications.length === 0) {
+    notificationList.innerHTML = '<div class="notification-empty">Không có thông báo</div>';
+    return;
+  }
+
+  notificationList.innerHTML = '';
+  notifications.forEach((notif) => {
+    const item = document.createElement('div');
+    item.className = `notification-item${notif.read ? '' : ' unread'}`;
+
+    const timeAgo = getTimeAgo(notif.timestamp);
+    const icon = notif.icon || (notif.type === 'approve' ? '✓' : notif.type === 'reject' ? '✗' : 'ℹ');
+
+    item.innerHTML = `
+      <div class="notification-item-content">
+        <span class="notification-icon">${icon}</span>
+        <div class="notification-text">
+          <div class="notification-item-title">${notif.title}</div>
+          <div class="notification-item-message">${notif.message}</div>
+        </div>
+      </div>
+      <div class="notification-item-footer">
+        <span class="notification-item-time">${timeAgo}</span>
+        ${!notif.read ? '<span class="notification-unread-dot"></span>' : ''}
+      </div>
+    `;
+
+    item.addEventListener('click', () => {
+      markNotificationRead(notif.id);
+      setRoute('#/admin');
+      closeNotificationDropdown();
+    });
+
+    notificationList.appendChild(item);
+  });
+};
+
+const markNotificationRead = async (id) => {
+  const notif = notifications.find(n => n.id === id);
+  if (notif && !notif.read) {
+    notif.read = true;
+    const unreadCount = notifications.filter(n => !n.read).length;
+    updateNotificationBadge(unreadCount);
+    renderNotifications();
+    // Call API to mark as read on backend
+    await markNotificationReadAPI(id);
+    // Also save to localStorage as fallback
+    localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
+  }
+};
+
+const markAllNotificationsRead = async () => {
+  notifications.forEach(n => n.read = true);
+  updateNotificationBadge(0);
+  renderNotifications();
+  // Call API to mark all as read on backend
+  await markAllNotificationsReadAPI();
+  // Also save to localStorage as fallback
+  localStorage.setItem('ticketing.notifications', JSON.stringify(notifications.slice(0, 50)));
+};
+
+const clearAllNotifications = async () => {
+  // Call API to delete all notifications on backend
+  await deleteAllNotificationsAPI();
+  // Clear local state
+  notifications = [];
+  updateNotificationBadge(0);
+  renderNotifications();
+  // Also clear localStorage
+  localStorage.setItem('ticketing.notifications', JSON.stringify(notifications));
+};
+
+const getTimeAgo = (isoString) => {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Vừa xong';
+  if (diffMins < 60) return `${diffMins} phút trước`;
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  if (diffDays < 7) return `${diffDays} ngày trước`;
+  return date.toLocaleDateString('vi-VN');
+};
+
+const toggleNotificationDropdown = () => {
+  if (notificationDropdown) {
+    notificationDropdown.classList.toggle('hidden');
+    if (!notificationDropdown.classList.contains('hidden')) {
+      // Mark all as read when opening dropdown
+      markAllNotificationsRead();
+    }
+  }
+};
+
+const closeNotificationDropdown = () => {
+  if (notificationDropdown) {
+    notificationDropdown.classList.add('hidden');
+  }
+};
+
 const loginForm = document.getElementById('login-form');
 const loginError = document.getElementById('login-error');
+const notificationBtn = document.getElementById('notification-btn');
+const notificationBadge = document.getElementById('notification-badge');
+const notificationDropdown = document.getElementById('notification-dropdown');
+const notificationList = document.getElementById('notification-list');
+const clearNotificationsBtn = document.getElementById('clear-notifications');
 const loginPrefillNote = document.getElementById('login-prefill-note');
 const logoutBtn = document.getElementById('logout-btn');
 const tokenStatus = document.getElementById('token-status');
 const sidebarUsername = document.getElementById('sidebar-username');
 const sidebarRole = document.getElementById('sidebar-role');
+const sidebarDept = document.getElementById('sidebar-dept');
 const logoMark = document.getElementById('logo-mark');
 const logoMarkImg = document.getElementById('logo-mark-img');
 const logoMarkFallback = document.getElementById('logo-mark-fallback');
@@ -75,6 +421,7 @@ const reportDownloadBtn = document.getElementById('report-download-btn');
 
 const adminCreateForm = document.getElementById('admin-create-form');
 const adminRoleSelect = document.getElementById('admin-role-select');
+const adminDeptSelect = document.getElementById('admin-dept-select');
 const adminUsers = document.getElementById('admin-users');
 const userSearch = document.getElementById('user-search');
 const userSearchBtn = document.getElementById('user-search-btn');
@@ -87,6 +434,7 @@ const userDisplayName = document.getElementById('user-display-name');
 const userTitle = document.getElementById('user-title');
 const userEmail = document.getElementById('user-email');
 const userRoleSelect = document.getElementById('user-role-select');
+const userDeptSelect = document.getElementById('user-dept-select');
 const userEnabledSelect = document.getElementById('user-enabled-select');
 const userPasswordInput = document.getElementById('user-password-input');
 const userSaveRole = document.getElementById('user-save-role');
@@ -102,6 +450,11 @@ const openUserModal = document.getElementById('open-user-modal');
 const closeUserModal = document.getElementById('close-user-modal');
 const userCreateModal = document.getElementById('user-create-modal');
 const closeUserDetail = document.getElementById('close-user-detail');
+const rejectModal = document.getElementById('reject-modal');
+const rejectModalClose = document.getElementById('reject-modal-close');
+const rejectModalConfirm = document.getElementById('reject-modal-confirm');
+const rejectModalCancel = document.getElementById('reject-modal-cancel');
+const rejectReasonInput = document.getElementById('reject-reason-input');
 
 const profileDetails = document.getElementById('profile-details');
 const profilePasswordForm = document.getElementById('profile-password-form');
@@ -134,9 +487,12 @@ let ticketHasMore = true;
 let ticketLoading = false;
 let ticketsCache = [];
 
-const LIVE_ENGINEER_CREDENTIALS = {
-  username: 'engineer',
-  password: 'engineer123',
+// Demo credentials - different for new role system
+const DEMO_CREDENTIALS = {
+  admin: { username: 'admin', password: '12345678' },
+  giamDoc: { username: 'mayagiamdoc', password: '12345678' },
+  truongPhongIT: { username: 'tp.it', password: '12345678' },
+  nhanVien: { username: 'tech.smith', password: '12345678' }
 };
 
 const setApiStatus = (text) => {
@@ -148,21 +504,21 @@ const setApiStatus = (text) => {
   apiStatus.textContent = `Trạng thái API: ${viText}`;
 };
 
-const shouldPrefillEngineerLogin = () => window.location.protocol !== 'file:';
+const shouldPrefillLogin = () => window.location.protocol !== 'file:';
 
-const applyLiveEngineerLoginPrefill = () => {
+const applyLoginPrefill = () => {
   if (!loginForm) return;
   const usernameInput = loginForm.elements.namedItem('username');
   const passwordInput = loginForm.elements.namedItem('password');
-  const shouldPrefill = shouldPrefillEngineerLogin();
+  const shouldPrefill = shouldPrefillLogin();
   if (loginPrefillNote) {
     loginPrefillNote.classList.toggle('hidden', !shouldPrefill);
   }
-  if (!shouldPrefill || !usernameInput || !passwordInput) {
-    return;
-  }
-  usernameInput.value = LIVE_ENGINEER_CREDENTIALS.username;
-  passwordInput.value = LIVE_ENGINEER_CREDENTIALS.password;
+  if (!shouldPrefill || !usernameInput || !passwordInput) return;
+  
+  // Default to nhanvien account
+  usernameInput.value = DEMO_CREDENTIALS.nhanVien.username;
+  passwordInput.value = DEMO_CREDENTIALS.nhanVien.password;
 };
 
 const getToken = () => localStorage.getItem(tokenKey);
@@ -207,11 +563,21 @@ const getRoles = () => {
 
 const hasRole = (role) => getRoles().includes(role);
 
+const isAdmin = () => hasRole('ROLE_ADMIN');
+const isGiamDoc = () => hasRole('ROLE_GIAM_DOC');
+const isTruongPhong = () => hasRole('ROLE_TRUONG_PHONG');
+const isNhanVien = () => hasRole('ROLE_NHAN_VIEN');
+const isTruongPhongIT = () => hasRole('ROLE_TRUONG_PHONG') && currentUser?.departmentCode === 'IT';
+const isInITDepartment = () => currentUser?.departmentCode === 'IT';
+// IT Staff: NHAN_VIEN in IT department - can process tickets but not full admin
+const isITStaff = () => isNhanVien() && currentUser?.departmentCode === 'IT';
+
 const getCurrentUsername = () => {
-  const token = isTokenValid() ? getToken() : null;
-  if (!token) return null;
-  const payload = parseJwt(token);
-  return payload && payload.sub ? payload.sub : null;
+  return currentUser?.username || null;
+};
+
+const getCurrentUserDepartment = () => {
+  return currentUser?.departmentCode || null;
 };
 
 const updateTokenStatus = () => {
@@ -228,9 +594,11 @@ const updateTokenStatus = () => {
   if (appShell) {
     appShell.classList.toggle('logged-out', !token);
   }
-  const payload = token ? parseJwt(token) : null;
-  const username = payload && payload.sub ? payload.sub : 'Phiếu hỗ trợ';
-  const roles = payload && payload.roles ? payload.roles : [];
+  
+  const username = currentUser?.username || 'Phiếu hỗ trợ';
+  const roles = getRoles();
+  const dept = currentUser?.departmentName || null;
+  
   if (logoMarkFallback) {
     const initial = username ? username.trim().charAt(0).toUpperCase() : 'T';
     logoMarkFallback.textContent = initial;
@@ -247,6 +615,10 @@ const updateTokenStatus = () => {
     sidebarRole.textContent = roles.length
       ? roles.map((role) => formatRole(role)).join(', ')
       : 'Bảng điều khiển';
+  }
+  if (sidebarDept) {
+    sidebarDept.textContent = dept || '';
+    sidebarDept.classList.toggle('hidden', !dept);
   }
   if (userDisplay) {
     userDisplay.textContent = token ? formatName(username) : '—';
@@ -277,10 +649,12 @@ const STATUS_LABELS = {
   OTHER: 'Khác',
 };
 
+// Role labels - updated for new role system
 const ROLE_LABELS = {
-  REQUESTER: 'Người yêu cầu',
-  ENGINEER: 'Kỹ sư',
   ADMIN: 'Quản trị viên',
+  GIAM_DOC: 'Giám đốc',
+  TRUONG_PHONG: 'Trưởng phòng',
+  NHAN_VIEN: 'Nhân viên',
 };
 
 const formatRole = (role) => {
@@ -352,17 +726,70 @@ const formatStatus = (value) => {
   return formatName(value.replace(/_/g, ' '));
 };
 
-const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_ENGINEER');
+// Can manage users: ADMIN, GIAM_DOC, TRUONG_PHONG (not IT Staff)
+const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG');
+
+// Can process tickets: ADMIN, GIAM_DOC, TRUONG_PHONG, IT Staff
+const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
+
+// Can assign tickets: ADMIN, GIAM_DOC, TRUONG_PHONG (chỉ IT)
+const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || isTruongPhongIT();
+
+// Can view internal comments: ADMIN, GIAM_DOC, TRUONG_PHONG, IT Staff
+const canViewInternalComments = () => !isNhanVien() || isITStaff();
+
+// Can add internal comments: IT staff, ADMIN, GIAM_DOC
+const canAddInternalComments = () => isInITDepartment() || isAdmin() || isGiamDoc();
+
+// Staff check (not just NHAN_VIEN, but IT Staff is considered staff)
+const isStaff = () => !isNhanVien() || isITStaff();
 
 const applyAdminRoleOptions = () => {
   if (!adminRoleSelect) return;
   adminRoleSelect.innerHTML = '';
-  const roles = hasRole('ROLE_ADMIN') ? ['REQUESTER', 'ENGINEER', 'ADMIN'] : ['REQUESTER'];
+  
+  let roles = [];
+  if (isAdmin()) {
+    roles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
+  } else if (isGiamDoc()) {
+    roles = ['GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
+  } else {
+    roles = ['NHAN_VIEN'];
+  }
+  
   roles.forEach((role) => {
     const option = document.createElement('option');
     option.value = role;
     option.textContent = formatRole(role);
     adminRoleSelect.appendChild(option);
+  });
+};
+
+const loadDepartments = async () => {
+  try {
+    const depts = await request('/api/departments');
+    populateDepartmentSelect(adminDeptSelect, depts);
+    return depts;
+  } catch (error) {
+    return [];
+  }
+};
+
+const populateDepartmentSelect = (select, departments) => {
+  if (!select) return;
+  select.innerHTML = '';
+  
+  const option = document.createElement('option');
+  option.value = '';
+  option.textContent = '— Chọn phòng ban —';
+  select.appendChild(option);
+  
+  departments.forEach((dept) => {
+    const option = document.createElement('option');
+    option.value = dept.id;
+    option.textContent = `${dept.code} - ${dept.name}`;
+    option.dataset.code = dept.code;
+    select.appendChild(option);
   });
 };
 
@@ -376,6 +803,7 @@ const loadUserAvatarMap = async () => {
       const entry = {
         avatarUrl: user.avatarUrl,
         displayName: user.displayName,
+        departmentCode: user.departmentCode,
       };
       if (user.username) {
         userAvatarMap.set(user.username.toLowerCase(), entry);
@@ -406,18 +834,73 @@ const getDisplayName = (value) => {
   return formatName(value);
 };
 
+// Check if current user can manage target user
 const canManageTargetUser = (user) => {
   if (!user) return false;
-  if (hasRole('ROLE_ADMIN')) return true;
-  return user.role === 'REQUESTER';
+  if (isAdmin()) return true;
+  if (isGiamDoc()) return user.role !== 'ADMIN';
+  if (isTruongPhong()) {
+    // TRUONG_PHONG can only manage NHAN_VIEN in their department
+    if (user.role !== 'NHAN_VIEN') return false;
+    return user.departmentId === currentUser?.departmentId;
+  }
+  return false;
 };
 
 const applyUserDetailControls = () => {
   if (!selectedUser) return;
   const canManage = canManageTargetUser(selectedUser);
+  const isPending = !selectedUser.approved && !selectedUser.rejectionReason;
+  const isRejectedUser = !selectedUser.approved && selectedUser.rejectionReason;
+  const isApprovedUser = selectedUser.approved;
+  
+  // Determine edit permissions based on role and status
+  // IMPORTANT: Rejected users (approved=false, rejectionReason!=null) CANNOT be edited
+  // - They can ONLY be deleted by ADMIN
+  // - No one can edit their profile, change enabled status, or reset password
+  let canEdit = false;
+  let canResetPassword = false;
+  let canDelete = false;
+  
+  if (isRejectedUser) {
+    // Rejected accounts: only ADMIN can delete, NO ONE can edit
+    if (isAdmin()) {
+      // Admin can only DELETE rejected users, cannot edit
+      canDelete = selectedUser.role !== 'ADMIN';
+    }
+    // No canEdit or canResetPassword for rejected users
+  } else if (isAdmin()) {
+    // Admin: can delete all users (except other admins)
+    // Admin cannot edit user details from detail modal (only from pending table)
+    if (selectedUser.role !== 'ADMIN') {
+      canDelete = true;
+    }
+  } else if (isTruongPhong()) {
+    // TruongPhong: can edit only approved NHAN_VIEN in their department
+    if (isApprovedUser && canManage) {
+      canEdit = true;
+      canResetPassword = true;
+    }
+    // TruongPhong can request delete for NHAN_VIEN in their department (any status)
+    if (selectedUser.role === 'NHAN_VIEN' && canManage) {
+      canDelete = true;
+    }
+  }
+  
+  // Helper to check if user is in TRUONG_PHONG's department
+  const isUserInMyDept = selectedUser.departmentId === currentUser?.departmentId;
+  
   if (userRoleSelect) {
     userRoleSelect.innerHTML = '';
-    const roles = hasRole('ROLE_ADMIN') ? ['REQUESTER', 'ENGINEER', 'ADMIN'] : ['REQUESTER'];
+    let roles = [];
+    if (isAdmin()) {
+      roles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
+    } else if (isGiamDoc()) {
+      roles = ['GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
+    } else {
+      roles = ['NHAN_VIEN'];
+    }
+
     roles.forEach((role) => {
       const option = document.createElement('option');
       option.value = role;
@@ -425,38 +908,57 @@ const applyUserDetailControls = () => {
       userRoleSelect.appendChild(option);
     });
     userRoleSelect.value = selectedUser.role;
-    userRoleSelect.disabled = !canManage || !hasRole('ROLE_ADMIN');
+    userRoleSelect.disabled = true; // Always disabled - cannot change role from detail modal
   }
+
+  if (userDeptSelect) {
+    userDeptSelect.disabled = true; // Always disabled - cannot change department from detail modal
+  }
+
   if (userDisplayName) {
     userDisplayName.value = selectedUser.displayName || '';
-    userDisplayName.disabled = !canManage;
+    userDisplayName.disabled = !canEdit;
   }
   if (userTitle) {
     userTitle.value = selectedUser.title || '';
-    userTitle.disabled = !canManage;
+    userTitle.disabled = !canEdit;
   }
   if (userEmail) {
     userEmail.value = selectedUser.email || '';
-    userEmail.disabled = !canManage;
+    userEmail.disabled = !canEdit;
   }
   if (userEnabledSelect) {
     userEnabledSelect.value = selectedUser.enabled ? 'true' : 'false';
-    userEnabledSelect.disabled = !canManage;
+    userEnabledSelect.disabled = !canEdit;
+  }
+  if (userPasswordInput) {
+    userPasswordInput.disabled = !canResetPassword;
   }
   if (userSaveRole) {
-    userSaveRole.disabled = !canManage || !hasRole('ROLE_ADMIN');
+    userSaveRole.disabled = true; // Always disabled
   }
   if (userSaveEnabled) {
-    userSaveEnabled.disabled = !canManage;
+    userSaveEnabled.disabled = !canEdit;
   }
   if (userSavePassword) {
-    userSavePassword.disabled = !canManage;
+    userSavePassword.disabled = !canResetPassword;
   }
   if (userSaveProfile) {
-    userSaveProfile.disabled = !canManage;
+    userSaveProfile.disabled = !canEdit;
   }
+  
+  // Show/hide rejected user warning
+  const userRejectedWarning = document.getElementById('user-rejected-warning');
+  if (userRejectedWarning) {
+    if (isRejectedUser) {
+      userRejectedWarning.classList.remove('hidden');
+    } else {
+      userRejectedWarning.classList.add('hidden');
+    }
+  }
+  
   if (userDelete) {
-    userDelete.disabled = !canManage;
+    userDelete.disabled = !canDelete;
   }
 };
 
@@ -598,8 +1100,31 @@ const populateAssigneeSelect = (
 
 const loadEngineerOptions = async () => {
   if (!isTokenValid()) return;
+  // Load engineers for users who can process tickets (ADMIN, GIAM_DOC, TRUONG_PHONG, NHAN_VIEN in IT)
+  // Check role from localStorage or token if currentUser not yet loaded
+  const role = currentUser?.role || localStorage.getItem('ticketing.currentRole');
+  const deptCode = currentUser?.departmentCode || localStorage.getItem('ticketing.currentDept');
+  const isEligibleRole = role === 'ADMIN' || role === 'GIAM_DOC' || role === 'TRUONG_PHONG' || role === 'NHAN_VIEN';
+  if (!isEligibleRole) {
+    console.log('loadEngineerOptions: Not eligible role', role);
+    return;
+  }
+  
+  // For NHAN_VIEN, must be in IT department
+  if (role === 'NHAN_VIEN' && deptCode !== 'IT') {
+    console.log('loadEngineerOptions: NHAN_VIEN not in IT department', deptCode);
+    return;
+  }
+  
   try {
-    engineerOptions = await request('/api/users/engineers');
+    // Load IT staff - handle both array of usernames and array of user objects
+    const response = await request('/api/users/engineers');
+    console.log('loadEngineerOptions: Raw response', response);
+    
+    // API returns array of UserResponse objects, extract usernames
+    engineerOptions = response.map(u => typeof u === 'string' ? u : u.username);
+    console.log('loadEngineerOptions: Parsed engineers', engineerOptions);
+    
     populateAssigneeSelect(filterAssignee, {
       includeAll: true,
       includeUnassigned: true,
@@ -608,36 +1133,53 @@ const loadEngineerOptions = async () => {
     populateAssigneeSelect(assigneeInput, { includeUnassigned: true });
     populateAssigneeSelect(assigneeCreate, { includeUnassigned: true });
   } catch (error) {
+    console.error('loadEngineerOptions: Error loading engineers', error);
     engineerOptions = [];
   }
 };
 
 const applyRoleControls = () => {
-  const requesterOnly = hasRole('ROLE_REQUESTER') && !hasRole('ROLE_ENGINEER') && !hasRole('ROLE_ADMIN');
+  // IT Staff (NHAN_VIEN in IT) can process tickets like ADMIN
+  const isITStaffUser = isITStaff();
+  const isNhanVienUser = isNhanVien() && !isITStaffUser;
+  
   if (statusSelect) {
-    statusSelect.disabled = requesterOnly;
-    Array.from(statusSelect.options).forEach((option) => {
-      option.disabled = requesterOnly;
-    });
+    // IT Staff and above can update status; NHAN_VIEN can only close their own tickets
+    statusSelect.disabled = !canProcessTickets() && isNhanVienUser;
   }
   if (prioritySelect) {
-    prioritySelect.disabled = requesterOnly;
+    // IT Staff can update priority
+    prioritySelect.disabled = !canProcessTickets();
   }
   if (assigneeInput) {
-    assigneeInput.disabled = requesterOnly;
+    assigneeInput.disabled = !canAssignTickets();
   }
+  
+  // Show/hide buttons based on permissions
   if (updateStatusBtn) {
-    updateStatusBtn.classList.toggle('hidden', requesterOnly);
+    updateStatusBtn.classList.toggle('hidden', !canProcessTickets() && isNhanVienUser);
   }
   if (updatePriorityBtn) {
-    updatePriorityBtn.classList.toggle('hidden', requesterOnly);
+    updatePriorityBtn.classList.toggle('hidden', !canProcessTickets());
   }
   if (updateAssigneeBtn) {
-    updateAssigneeBtn.classList.toggle('hidden', requesterOnly);
+    updateAssigneeBtn.classList.toggle('hidden', !canAssignTickets());
   }
   if (assignMeBtn) {
-    assignMeBtn.classList.toggle('hidden', requesterOnly);
+    assignMeBtn.classList.toggle('hidden', !canAssignTickets());
   }
+  
+  // Comment visibility
+  if (commentVisibility) {
+    // IT Staff can see internal comments
+    if (!canViewInternalComments()) {
+      commentVisibility.value = 'PUBLIC';
+      commentVisibility.disabled = true;
+    } else {
+      commentVisibility.disabled = false;
+    }
+  }
+  
   updateActionButtons();
 };
 
@@ -651,11 +1193,11 @@ const updateActionButtons = () => {
   }
   if (updateAssigneeBtn) {
     const currentAssignee = selectedTicket.assigneeName || UNASSIGNED_VALUE;
-    updateAssigneeBtn.disabled = assigneeInput?.value === currentAssignee;
+    updateAssigneeBtn.disabled = assigneeInput?.value === currentAssignee || !canAssignTickets();
   }
   if (assignMeBtn) {
     const currentUser = getCurrentUsername();
-    assignMeBtn.disabled = !currentUser || selectedTicket.assigneeName === currentUser;
+    assignMeBtn.disabled = !currentUser || selectedTicket.assigneeName === currentUser || !canAssignTickets();
   }
 };
 
@@ -666,6 +1208,8 @@ const authHeaders = () => {
 
 const request = async (path, options = {}) => {
   setApiStatus('working');
+  console.log('[DEBUG] Request:', options.method || 'GET', path);
+  console.log('[DEBUG] Token available:', !!getToken());
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -674,14 +1218,60 @@ const request = async (path, options = {}) => {
       ...authHeaders(),
     },
   });
+  console.log('[DEBUG] Response status:', response.status);
   setApiStatus(response.ok ? 'ok' : `error ${response.status}`);
   if (!response.ok) {
-    if ((response.status === 401 || response.status === 403) && getToken()) {
+    // Parse error response in our format
+    let errorData = null;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        errorData = await response.json();
+      } else {
+        const text = await response.text();
+        errorData = { message: text };
+      }
+    } catch (e) {
+      errorData = { message: await response.text() };
+    }
+    
+    // Build error message from our format
+    let errorMessage = errorData.message || `Yêu cầu thất bại: ${response.status}`;
+    
+    // Add suggestion if available
+    if (errorData.details && errorData.details.suggestion) {
+      errorMessage += '\n' + errorData.details.suggestion;
+    }
+    
+    // Add rejection reason if available
+    if (errorData.details && errorData.details.rejectionReason) {
+      errorMessage += '\nLý do: ' + errorData.details.rejectionReason;
+    }
+    
+    // Only logout on 401 (token invalid/expired), not on 403 (permission denied)
+    // But still logout on our specific auth errors
+    if (response.status === 401 && getToken()) {
+      // Don't logout on approval-related errors, just throw the error
+      const errorCode = errorData.errorCode;
+      if (errorCode && (errorCode.startsWith('AUTH_USER') || errorCode === 'AUTH_INVALID_CREDENTIALS')) {
+        // These are authentication errors - throw without logout
+        const error = new Error(errorMessage);
+        error.errorCode = errorCode;
+        error.status = response.status;
+        error.details = errorData.details;
+        throw error;
+      }
+      // Token expired or invalid - logout
       setToken(null);
+      currentUser = null;
       showView('login');
     }
-    const message = await response.text();
-    throw new Error(message || `Yêu cầu thất bại: ${response.status}`);
+    
+    const error = new Error(errorMessage);
+    error.errorCode = errorData.errorCode;
+    error.status = response.status;
+    error.details = errorData.details;
+    throw error;
   }
   if (response.status === 204) {
     return null;
@@ -696,6 +1286,17 @@ const login = async (payload) => {
     body: JSON.stringify(payload),
   });
   setToken(data.token);
+  
+  // Store current user info from login response
+  if (data.user) {
+    currentUser = data.user;
+    localStorage.setItem('ticketing.currentUser', JSON.stringify(data.user));
+  }
+  
+  // Start notification polling after login
+  startNotificationPolling();
+  await loadNotifications();
+  
   setRoute('#/tickets');
 };
 
@@ -715,10 +1316,22 @@ const showView = (viewName) => {
     selectedTicket = null;
   }
   if (viewName === 'admin' && canManageUsers()) {
+    // Update panel description based on role
+    const adminDesc = document.getElementById('admin-panel-description');
+    if (adminDesc) {
+      if (isAdmin()) {
+        adminDesc.textContent = 'Quản lý người dùng, duyệt hoặc từ chối tài khoản mới.';
+      } else if (isTruongPhong()) {
+        adminDesc.textContent = 'Quản lý nhân viên trong phòng và xem tài khoản chờ duyệt.';
+      } else {
+        adminDesc.textContent = 'Quản lý người dùng trong hệ thống.';
+      }
+    }
     loadAdminUsers().catch(() => {});
+    loadDepartments().catch(() => {});
   }
   if (viewName === 'login') {
-    applyLiveEngineerLoginPrefill();
+    applyLoginPrefill();
   }
 };
 
@@ -726,18 +1339,33 @@ const routeGuard = () => {
   const token = isTokenValid() ? getToken() : null;
   if (!token && getToken()) {
     setToken(null);
+    currentUser = null;
   }
+  
+  // Try to restore current user from storage
+  if (token && !currentUser) {
+    const stored = localStorage.getItem('ticketing.currentUser');
+    if (stored) {
+      try {
+        currentUser = JSON.parse(stored);
+      } catch (e) {}
+    }
+  }
+  
   const hash = window.location.hash || '#/login';
   const viewName = hash.replace('#/', '');
+  
   if (!token && viewName !== 'login') {
     showView('login');
     return;
   }
-  if (viewName === 'admin' && !(hasRole('ROLE_ADMIN') || hasRole('ROLE_ENGINEER'))) {
+  
+  // Role-based route guards
+  if (viewName === 'admin' && !canManageUsers()) {
     showView('tickets');
     return;
   }
-  if (viewName === 'reports' && !(hasRole('ROLE_ADMIN') || hasRole('ROLE_ENGINEER'))) {
+  if (viewName === 'reports' && !isStaff()) {
     showView('tickets');
     return;
   }
@@ -756,10 +1384,12 @@ const updateNavVisibility = () => {
     const allowed = roles.some((role) => hasRole(role));
     link.classList.toggle('hidden', !allowed);
   });
+  
+  // Show/hide assignee field based on role
   if (assigneeCreate) {
-    const requesterOnly = hasRole('ROLE_REQUESTER') && !hasRole('ROLE_ENGINEER') && !hasRole('ROLE_ADMIN');
-    assigneeCreate.closest('label').classList.toggle('hidden', requesterOnly);
+    assigneeCreate.closest('label').classList.toggle('hidden', !canAssignTickets());
   }
+  
   applyRoleControls();
   applyAdminRoleOptions();
 };
@@ -794,13 +1424,16 @@ const renderTickets = (rows, { append = false } = {}) => {
     const avatarImage = assigneeProfile && assigneeProfile.avatarUrl
       ? `<img src="${assigneeProfile.avatarUrl}" alt="${assigneeLabel}" />`
       : '';
+    const deptLabel = ticket.departmentName || ticket.departmentCode || '';
+    const deptBadge = deptLabel ? `<span class="dept-badge">${deptLabel}</span>` : '';
+    
     row.innerHTML = `
       <div class="assignee-avatar" aria-hidden="true">
         ${avatarImage || avatarLetter}
       </div>
       <div class="ticket-row-main">
         <h4>${ticket.title}</h4>
-        <div class="ticket-row-meta">${ticket.ticketNumber} • ${formatStatus(ticket.category)}</div>
+        <div class="ticket-row-meta">${ticket.ticketNumber} • ${formatStatus(ticket.category)} ${deptBadge}</div>
       </div>
       <div class="ticket-row-tags">
         <span class="status ${statusClass}">${formatStatus(ticket.status)}</span>
@@ -817,7 +1450,11 @@ const renderTickets = (rows, { append = false } = {}) => {
 };
 
 const loadTickets = async ({ reset = false } = {}) => {
-  if (ticketLoading) return;
+  if (ticketLoading) {
+    console.log('loadTickets: BLOCKED by ticketLoading flag');
+    return;
+  }
+  console.log('loadTickets: Starting', { reset, ticketLoading });
   if (canManageUsers() && !userAvatarReady) {
     await loadUserAvatarMap();
   }
@@ -873,6 +1510,7 @@ const loadTickets = async ({ reset = false } = {}) => {
     });
     renderTickets(sorted, { append: false });
   } else {
+    console.log('loadTickets: Calling renderTickets with', rows.length, 'rows');
     renderTickets(rows, { append: !reset });
   }
   ticketHasMore = !data.last;
@@ -893,6 +1531,8 @@ const selectTicket = async (ticket) => {
   const createdAt = full.createdAt ? new Date(full.createdAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
   const updatedAt = full.updatedAt ? new Date(full.updatedAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
   const assignee = full.assigneeName ? formatName(full.assigneeName) : 'Chưa phân công';
+  const deptInfo = full.departmentName ? `${full.departmentName} (${full.departmentCode})` : '';
+  
   ticketDetails.innerHTML = `
     <div class="ticket-detail-card">
       <div class="ticket-detail-header">
@@ -901,6 +1541,7 @@ const selectTicket = async (ticket) => {
           <span class="status ${full.status ? full.status.toLowerCase().replace(/_/g, '-') : 'new'}">${formatStatus(full.status)}</span>
           <span class="priority ${full.priority ? full.priority.toLowerCase() : 'low'}">${formatStatus(full.priority)}</span>
           <span class="pill">${formatStatus(full.category)}</span>
+          ${deptInfo ? `<span class="dept-badge">${deptInfo}</span>` : ''}
         </div>
       </div>
       <p>${full.description}</p>
@@ -942,6 +1583,14 @@ const selectTicket = async (ticket) => {
   });
   setSelectValue(statusSelect, full.status);
   setSelectValue(prioritySelect, full.priority);
+  // Ensure engineer options are loaded, then populate assignee dropdown
+  console.log('selectTicket: current engineerOptions length', engineerOptions.length);
+  if (engineerOptions.length === 0) {
+    console.log('selectTicket: Loading engineer options...');
+    await loadEngineerOptions();
+    console.log('selectTicket: After load, engineerOptions length', engineerOptions.length);
+  }
+  populateAssigneeSelect(assigneeInput, { includeUnassigned: true });
   ensureAssigneeOption(assigneeInput, full.assigneeName);
   assigneeInput.value = full.assigneeName || UNASSIGNED_VALUE;
   applyRoleControls();
@@ -951,10 +1600,17 @@ const selectTicket = async (ticket) => {
 const loadComments = async (ticketId) => {
   const data = await request(`/api/tickets/${ticketId}/comments`);
   commentsList.innerHTML = '';
-  data.forEach((comment) => {
+  
+  // For NHAN_VIEN, filter out internal comments
+  const filteredData = canViewInternalComments() 
+    ? data 
+    : data.filter(c => c.visibility === 'PUBLIC');
+  
+  filteredData.forEach((comment) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    item.textContent = `${comment.actorName || 'Hệ thống'}: ${comment.body}`;
+    const visibilityBadge = comment.visibility === 'INTERNAL' ? ' [Nội bộ]' : '';
+    item.textContent = `${comment.actorName || 'Hệ thống'}${visibilityBadge}: ${comment.body}`;
     commentsList.appendChild(item);
   });
 };
@@ -1031,6 +1687,10 @@ const updatePriority = async () => {
 
 const updateAssignee = async () => {
   if (!selectedTicket) return;
+  if (!canAssignTickets()) {
+    alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
+    return;
+  }
   const assigneeName = normalizeAssigneeInput(assigneeInput.value);
   if ((selectedTicket.assigneeName || null) === assigneeName) return;
   await request(`/api/tickets/${selectedTicket.id}/assignee`, {
@@ -1043,6 +1703,10 @@ const updateAssignee = async () => {
 
 const assignToMe = async () => {
   if (!selectedTicket) return;
+  if (!canAssignTickets()) {
+    alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
+    return;
+  }
   await request(`/api/tickets/${selectedTicket.id}/assign/me`, {
     method: 'POST',
   });
@@ -1062,6 +1726,13 @@ const addComment = async () => {
     setFieldError(commentBody, commentBody.validationMessage || 'Bình luận không hợp lệ.');
     return;
   }
+  
+  // Check internal comment permission
+  if (commentVisibility.value === 'INTERNAL' && !canAddInternalComments()) {
+    alert('Bạn không có quyền thêm bình luận nội bộ. Chỉ nhân viên IT mới có quyền này.');
+    return;
+  }
+  
   await request(`/api/tickets/${selectedTicket.id}/comments`, {
     method: 'POST',
     body: JSON.stringify({
@@ -1153,6 +1824,23 @@ const initReportDates = () => {
   }
   if (!reportTo.value) {
     reportTo.value = formatDate(today);
+  }
+};
+
+// Format datetime for display
+const formatDateTime = (dateString) => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return dateString;
   }
 };
 
@@ -1262,7 +1950,8 @@ const loadDashboard = async () => {
 
 const loadQueue = async () => {
   if (!queueList) return;
-  if (!(hasRole('ROLE_ENGINEER') || hasRole('ROLE_ADMIN'))) {
+  // Only staff can see queue
+  if (!isStaff()) {
     queueList.innerHTML = '';
     if (queuePanel) {
       queuePanel.classList.add('hidden');
@@ -1310,10 +1999,7 @@ const loadEngineerReport = async () => {
   ];
   setActiveReportButton(engineerReportBtn);
   setCurrentReport('bao-cao-ky-su', columns, rows);
-  renderReportTable(
-    columns,
-    rows
-  );
+  renderReportTable(columns, rows);
 };
 
 const loadRequesterReport = async () => {
@@ -1354,6 +2040,18 @@ const loadSlaReport = async () => {
   renderReportTable(columns, rows);
 };
 
+const updatePendingBadge = (count) => {
+  const pendingBadge = document.getElementById('pending-users-badge');
+  if (pendingBadge) {
+    if (count > 0) {
+      pendingBadge.textContent = count;
+      pendingBadge.classList.remove('hidden');
+    } else {
+      pendingBadge.classList.add('hidden');
+    }
+  }
+};
+
 const loadAdminUsers = async () => {
   if (!canManageUsers()) return;
   const params = new URLSearchParams({
@@ -1365,15 +2063,57 @@ const loadAdminUsers = async () => {
   }
   const data = await request(`/api/users?${params.toString()}`);
   adminUsers.innerHTML = '';
+
+  // Load pending users section (visible for ADMIN and TRUONG_PHONG)
+  // ADMIN sees all pending, TRUONG_PHONG sees pending in their department
+  if (isAdmin() || isTruongPhong()) {
+    await loadPendingUsers();
+  }
+
+  // Load delete requests section (visible for ADMIN and TRUONG_PHONG)
+  // ADMIN sees with action buttons, TRUONG_PHONG sees as pending (read-only)
+  if (isAdmin() || isTruongPhong()) {
+    await loadDeleteRequests();
+  }
+
+  // Count truly pending users from the loaded data (approved=false AND no rejectionReason)
+  // This ensures badge count matches what's actually displayed in the pending table
+  let pendingCount = 0;
+  data.content.forEach((user) => {
+    if (user.approved === false && !user.rejectionReason) {
+      pendingCount++;
+    }
+  });
+
   data.content.forEach((user) => {
     const row = document.createElement('tr');
+    const deptInfo = user.departmentCode ? ` (${user.departmentCode})` : ' (—)';
+
+    // Determine status display
+    let statusBadge = '';
+    let statusClass = '';
+    if (!user.approved && user.rejectionReason) {
+      statusBadge = 'Từ chối';
+      statusClass = 'status-rejected';
+    } else if (!user.approved) {
+      statusBadge = 'Chờ duyệt';
+      statusClass = 'status-pending';
+    } else if (!user.enabled) {
+      statusBadge = 'Vô hiệu hoá';
+      statusClass = 'status-disabled';
+    } else {
+      statusBadge = 'Hoạt động';
+      statusClass = 'status-active';
+    }
+
     row.innerHTML = `
       <td>${user.username}</td>
+      <td>${user.displayName || '—'}</td>
       <td>${formatRole(user.role)}</td>
-      <td>${user.enabled ? 'Có' : 'Không'}</td>
+      <td>${deptInfo}</td>
+      <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
     `;
     row.addEventListener('click', () => selectUser(user));
-
     adminUsers.appendChild(row);
   });
 
@@ -1386,16 +2126,389 @@ const loadAdminUsers = async () => {
   if (usersNext) {
     usersNext.disabled = data.last;
   }
+
+  // Update pending badge if exists
+  updatePendingBadge(pendingCount);
+};
+
+const loadPendingUsers = async () => {
+  const pendingSection = document.getElementById('pending-users-section');
+  const pendingTbody = document.getElementById('pending-users-tbody');
+  const pendingCountBadge = document.getElementById('pending-count-badge');
+
+  if (!pendingSection || !pendingTbody) return;
+
+  try {
+    const pendingUsers = await request('/api/admin/users/pending');
+
+    // Filter: only show users with approved=false AND no rejectionReason (truly pending)
+    const trulyPendingUsers = pendingUsers.filter(user => 
+      user.approved === false && !user.rejectionReason
+    );
+
+    if (trulyPendingUsers.length === 0) {
+      pendingSection.classList.add('hidden');
+      // Update badge
+      updatePendingBadge(0);
+      return;
+    }
+
+    pendingSection.classList.remove('hidden');
+    pendingTbody.innerHTML = '';
+
+    if (pendingCountBadge) {
+      pendingCountBadge.textContent = `(${trulyPendingUsers.length})`;
+    }
+
+    // Update pending badge in nav
+    updatePendingBadge(trulyPendingUsers.length);
+
+    trulyPendingUsers.forEach((user) => {
+      const row = document.createElement('tr');
+      const deptInfo = user.departmentCode || '—';
+      const createdAt = user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '—';
+
+      // For ADMIN: show approve/reject buttons
+      // For TRUONG_PHONG: show status only
+      let actionHtml = '';
+      if (isAdmin()) {
+        actionHtml = `
+          <button class="btn-approve btn-small" data-user-id="${user.id}">✓ Duyệt</button>
+          <button class="btn-reject btn-small" data-user-id="${user.id}">✗ Từ chối</button>
+        `;
+      } else {
+        actionHtml = '<span class="status-badge status-pending">Đang chờ duyệt</span>';
+      }
+
+      row.innerHTML = `
+        <td>${user.username}</td>
+        <td>${user.displayName || '—'}</td>
+        <td>${formatRole(user.role)}</td>
+        <td>${deptInfo}</td>
+        <td>${createdAt}</td>
+        <td>${actionHtml}</td>
+      `;
+
+      // Click row to view detail (only for admin)
+      if (isAdmin()) {
+        row.addEventListener('click', () => selectUser(user));
+      }
+
+      pendingTbody.appendChild(row);
+    });
+
+    // Attach event listeners for approve/reject buttons (ADMIN only)
+    pendingTbody.querySelectorAll('.btn-approve').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.userId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        if (!confirm('Bạn có chắc muốn duyệt tài khoản này?')) return;
+        try {
+          await request(`/api/admin/users/${userId}/approve`, { method: 'POST', body: JSON.stringify({}) });
+          // Reload both pending and all users
+          await loadPendingUsers();
+          await loadAdminUsers();
+          alert('Đã duyệt tài khoản thành công!');
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
+      });
+    });
+
+    pendingTbody.querySelectorAll('.btn-reject').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.userId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        
+        // Show reject modal instead of prompt
+        const rejectModal = document.getElementById('reject-modal');
+        const rejectModalUsername = document.getElementById('reject-modal-username');
+        const rejectReasonInput = document.getElementById('reject-reason-input');
+        
+        if (rejectModal && rejectModalUsername && rejectReasonInput) {
+          rejectModalUsername.textContent = `Tài khoản: ${userDisplayName}`;
+          rejectReasonInput.value = '';
+          rejectModal.classList.remove('hidden');
+          rejectModal.setAttribute('aria-hidden', 'false');
+          rejectReasonInput.focus();
+          
+          // Store userId for later use
+          rejectModal.dataset.userId = userId;
+          rejectModal.dataset.userDisplayName = userDisplayName;
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error loading pending users:', error);
+    pendingSection.classList.add('hidden');
+  }
+};
+
+// ============ Delete Requests Section ============
+
+const loadDeleteRequests = async () => {
+  const deleteRequestsSection = document.getElementById('delete-requests-section');
+  const deleteRequestsTbody = document.getElementById('delete-requests-tbody');
+  const deleteRequestsCountBadge = document.getElementById('delete-requests-count-badge');
+
+  if (!deleteRequestsSection || !deleteRequestsTbody) return;
+
+  try {
+    // ADMIN and TRUONG_PHONG can see delete requests
+    if (!isAdmin() && !isTruongPhong()) {
+      deleteRequestsSection.classList.add('hidden');
+      return;
+    }
+
+    const deleteRequests = await request('/api/admin/users/delete-requests');
+
+    if (deleteRequests.length === 0) {
+      deleteRequestsSection.classList.add('hidden');
+      if (deleteRequestsCountBadge) {
+        deleteRequestsCountBadge.textContent = '';
+      }
+      return;
+    }
+
+    deleteRequestsSection.classList.remove('hidden');
+    deleteRequestsTbody.innerHTML = '';
+
+    if (deleteRequestsCountBadge) {
+      deleteRequestsCountBadge.textContent = `(${deleteRequests.length})`;
+    }
+
+    deleteRequests.forEach((user) => {
+      const row = document.createElement('tr');
+      const deptInfo = user.departmentCode || '—';
+      const requestedBy = user.createdBy || '—';
+
+      // ADMIN sees both buttons, TRUONG_PHONG sees only "Cancel request" button
+      // (because TRUONG_PHONG is the one who sent the request, they can only cancel it)
+      let actionHtml = '';
+      if (isAdmin()) {
+        actionHtml = `
+          <button class="btn-approve btn-small" data-delete-user-id="${user.id}">✓ Xóa</button>
+          <button class="btn-reject btn-small" data-cancel-request-id="${user.id}">✗ Hủy yêu cầu</button>
+        `;
+      } else {
+        actionHtml = `
+          <button class="btn-reject btn-small" data-cancel-request-id="${user.id}">✗ Hủy yêu cầu</button>
+        `;
+      }
+
+      row.innerHTML = `
+        <td>${user.username}</td>
+        <td>${user.displayName || '—'}</td>
+        <td>${formatRole(user.role)}</td>
+        <td>${deptInfo}</td>
+        <td>${requestedBy}</td>
+        <td>${actionHtml}</td>
+      `;
+
+      deleteRequestsTbody.appendChild(row);
+    });
+
+    // Attach event listeners for approve delete button (ADMIN only)
+    deleteRequestsTbody.querySelectorAll('.btn-approve').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.deleteUserId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        if (!confirm(`Bạn có chắc muốn xóa tài khoản "${userDisplayName}"?\n\nHành động này không thể hoàn tác.`)) return;
+        try {
+          await request(`/api/admin/users/${userId}/delete-request`, { method: 'DELETE' });
+          addNotification('delete', 'Xóa tài khoản', `Tài khoản "${userDisplayName}" đã được xóa.`);
+          alert('Đã xóa tài khoản thành công!');
+          // Reload delete requests
+          await loadDeleteRequests();
+          // Reload all users
+          await loadAdminUsers();
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
+      });
+    });
+
+    // Attach event listeners for cancel request button (ADMIN only)
+    deleteRequestsTbody.querySelectorAll('.btn-reject').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.dataset.cancelRequestId;
+        const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
+        if (!confirm(`Bạn có chắc muốn hủy yêu cầu xóa tài khoản "${userDisplayName}"?`)) return;
+        try {
+          // Cancel the delete request
+          await request(`/api/admin/users/${userId}/cancel-delete-request`, { method: 'POST' });
+          addNotification('reject', 'Hủy yêu cầu xóa', `Yêu cầu xóa tài khoản "${userDisplayName}" đã bị hủy.`);
+          alert('Đã hủy yêu cầu xóa!');
+          // Reload delete requests
+          await loadDeleteRequests();
+          // Reload all users
+          await loadAdminUsers();
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error loading delete requests:', error);
+    deleteRequestsSection.classList.add('hidden');
+  }
 };
 
 const selectUser = async (user) => {
   selectedUser = user;
+  
+  // Load departments for the detail modal
+  if (userDeptSelect) {
+    const depts = await request('/api/departments');
+    populateDepartmentSelect(userDeptSelect, depts);
+    if (user.departmentId) {
+      userDeptSelect.value = user.departmentId;
+    }
+  }
+  
   if (userDetailModal) {
     userDetailModal.classList.remove('hidden');
   }
   if (userDetailHeader) {
-    userDetailHeader.textContent = `${formatName(user.username)} (${formatRole(user.role)})`;
+    const deptInfo = user.departmentName ? ` - ${user.departmentName}` : '';
+    userDetailHeader.textContent = `${formatName(user.username)} (${formatRole(user.role)}${deptInfo})`;
   }
+  
+  // Populate user info fields
+  if (userDisplayName) userDisplayName.value = user.displayName || '';
+  if (userTitle) userTitle.value = user.title || '';
+  if (userEmail) userEmail.value = user.email || '';
+  
+  // Handle approval info display
+  const userApprovalInfo = document.getElementById('user-approval-info');
+  const userApprovalStatus = document.getElementById('user-approval-status');
+  const userApprovalDate = document.getElementById('user-approval-date');
+  const userApprovalBy = document.getElementById('user-approval-by');
+  const userRejectionReason = document.getElementById('user-rejection-reason');
+  const userApprovalActions = document.getElementById('user-approval-actions');
+  const userRejectionForm = document.getElementById('user-rejection-form');
+
+  // Debug: check user status
+  console.log('=== selectUser ===');
+  console.log('user.approved:', user.approved);
+  console.log('user.rejectionReason:', user.rejectionReason);
+  console.log('isApproved:', user.approved);
+  console.log('isPending:', !user.approved && !user.rejectionReason);
+
+  // ALWAYS hide all approval-related elements first - use style directly to ensure it works
+  if (userApprovalInfo) {
+    userApprovalInfo.classList.add('hidden');
+    userApprovalInfo.style.display = 'none';
+  }
+  if (userApprovalActions) {
+    userApprovalActions.classList.add('hidden');
+    userApprovalActions.style.display = 'none';
+  }
+  if (userRejectionForm) {
+    userRejectionForm.classList.add('hidden');
+    userRejectionForm.style.display = 'none';
+  }
+  // Hide rejected warning by default
+  const userRejectedWarning = document.getElementById('user-rejected-warning');
+  if (userRejectedWarning) {
+    userRejectedWarning.classList.add('hidden');
+  }
+
+  // Check user status
+  const isPending = !user.approved && !user.rejectionReason;
+  const isRejected = !user.approved && user.rejectionReason;
+  const isApproved = user.approved;
+  const isDisabled = !user.enabled;
+
+  // PENDING user
+  if (isPending) {
+    if (userApprovalInfo) {
+      userApprovalInfo.classList.remove('hidden');
+      userApprovalInfo.classList.remove('rejected');
+      if (userApprovalStatus) userApprovalStatus.textContent = '⏳ Đang chờ phê duyệt';
+      if (userRejectionReason) userRejectionReason.classList.add('hidden');
+      if (userApprovalDate && user.approvedAt) {
+        userApprovalDate.textContent = 'Thời gian: ' + formatDateTime(user.approvedAt);
+      } else if (userApprovalDate) {
+        userApprovalDate.textContent = '';
+      }
+      if (userApprovalBy && user.approvedBy) {
+        userApprovalBy.textContent = 'Bởi: ' + user.approvedBy;
+      } else if (userApprovalBy) {
+        userApprovalBy.textContent = '';
+      }
+    }
+    // Admin: show approve/reject buttons for pending users
+    if (isAdmin() && userApprovalActions) {
+      userApprovalActions.classList.remove('hidden');
+      userApprovalActions.style.display = 'flex';
+    }
+  }
+  // REJECTED user
+  else if (isRejected) {
+    if (userApprovalInfo) {
+      userApprovalInfo.classList.remove('hidden');
+      userApprovalInfo.classList.add('rejected');
+      if (userApprovalStatus) userApprovalStatus.textContent = '❌ Đã bị từ chối';
+      if (userRejectionReason) {
+        userRejectionReason.classList.remove('hidden');
+        userRejectionReason.textContent = 'Lý do: ' + user.rejectionReason;
+      }
+      if (userApprovalDate && user.approvedAt) {
+        userApprovalDate.textContent = 'Thời gian: ' + formatDateTime(user.approvedAt);
+      }
+      if (userApprovalBy && user.approvedBy) {
+        userApprovalBy.textContent = 'Bởi: ' + user.approvedBy;
+      }
+    }
+    // Show warning that this rejected account cannot be edited
+    const userRejectedWarning = document.getElementById('user-rejected-warning');
+    if (userRejectedWarning) {
+      userRejectedWarning.classList.remove('hidden');
+    }
+    // Ensure buttons are hidden for rejected users
+    if (userApprovalActions) userApprovalActions.classList.add('hidden');
+    if (userRejectionForm) userRejectionForm.classList.add('hidden');
+  }
+  // APPROVED user
+  else if (isApproved) {
+    // Show approval info if approved by someone
+    if (userApprovalBy && user.approvedBy) {
+      if (userApprovalInfo) {
+        userApprovalInfo.classList.remove('hidden');
+        userApprovalInfo.classList.remove('rejected');
+        if (userApprovalStatus) userApprovalStatus.textContent = '✓ Đã được phê duyệt';
+        if (userRejectionReason) userRejectionReason.classList.add('hidden');
+        if (userApprovalDate && user.approvedAt) {
+          userApprovalDate.textContent = 'Thời gian: ' + formatDateTime(user.approvedAt);
+        }
+        userApprovalBy.textContent = 'Bởi: ' + user.approvedBy;
+      }
+    }
+    // Ensure buttons are hidden for approved users
+    if (userApprovalActions) userApprovalActions.classList.add('hidden');
+    if (userRejectionForm) userRejectionForm.classList.add('hidden');
+  }
+  // DISABLED user
+  else if (isDisabled) {
+    if (userApprovalInfo) {
+      userApprovalInfo.classList.remove('hidden');
+      userApprovalInfo.classList.add('rejected');
+      if (userApprovalStatus) userApprovalStatus.textContent = '🔒 Đang bị vô hiệu hoá';
+      if (userApprovalDate && user.approvedAt) {
+        userApprovalDate.textContent = 'Cập nhật lần cuối: ' + formatDateTime(user.approvedAt);
+      }
+      if (userApprovalBy && user.approvedBy) {
+        userApprovalBy.textContent = 'Bởi: ' + user.approvedBy;
+      }
+      if (userRejectionReason) userRejectionReason.classList.add('hidden');
+    }
+  }
+  
   applyUserDetailControls();
   if (userPasswordInput) {
     userPasswordInput.value = '';
@@ -1448,27 +2561,14 @@ const renderUserAuditPage = () => {
   }
 };
 
-const loadAdminAudit = async () => {
-  const params = new URLSearchParams();
-  if (auditFilter.value) params.append('targetUsername', auditFilter.value);
-  const data = await request(`/api/users/audit?${params.toString()}`);
-  adminAudit.innerHTML = '';
-  data.forEach((entry) => {
-    const item = document.createElement('div');
-    item.className = 'list-item';
-    const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
-    item.textContent = `${when} • ${formatAuditAction(entry.action)} bởi ${entry.actorUsername} (${formatRole(entry.actorRole)}) → ${entry.targetUsername}`;
-    adminAudit.appendChild(item);
-  });
-};
-
 const loadProfile = async () => {
   const profile = await request('/api/users/me');
   profileDetails.innerHTML = '';
   const item = document.createElement('div');
   item.className = 'list-item';
   const displayName = profile.displayName || profile.username;
-  const nameLine = displayName ? `${displayName} (${profile.role})` : `${profile.username} (${profile.role})`;
+  const deptInfo = profile.departmentName ? ` - ${profile.departmentName}` : '';
+  const nameLine = displayName ? `${displayName} (${formatRole(profile.role)}${deptInfo})` : `${profile.username} (${formatRole(profile.role)})`;
   item.textContent = nameLine;
   profileDetails.appendChild(item);
   if (profile.email) {
@@ -1519,8 +2619,23 @@ const loadProfile = async () => {
   if (profileCard) {
     profileCard.classList.remove('no-avatar');
   }
+  
+  // Update currentUser from profile
+  currentUser = {
+    id: profile.id,
+    username: profile.username,
+    role: profile.role,
+    departmentId: profile.departmentId,
+    departmentCode: profile.departmentCode,
+    departmentName: profile.departmentName,
+    displayName: profile.displayName,
+    email: profile.email,
+  };
+  localStorage.setItem('ticketing.currentUser', JSON.stringify(currentUser));
+  updateTokenStatus();
 };
 
+// Event Listeners
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!validateForm(loginForm)) {
@@ -1544,27 +2659,97 @@ loginForm.addEventListener('submit', async (event) => {
     await loadQueue();
     if (canManageUsers()) {
       await loadAdminUsers();
+      await loadDepartments();
     }
     await loadProfile();
   } catch (error) {
-    if (error.message.includes('403')) {
+    console.log('[DEBUG] Login error:', error);
+    
+    // Check for specific authentication errors
+    const errorCode = error.errorCode;
+    
+    if (errorCode === 'AUTH_USER_NOT_APPROVED') {
+      if (loginError) {
+        loginError.innerHTML = `
+          <div class="login-error-icon">⚠️</div>
+          <div class="login-error-title">Tài khoản chưa được phê duyệt</div>
+          <div class="login-error-message">
+            Tài khoản của bạn hiện đang trong trạng thái chờ phê duyệt.
+            Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Admin</strong> để được hỗ trợ.
+          </div>
+          ${error.details && error.details.supportContact ? 
+            `<div class="login-error-contact">📧 Liên hệ: ${error.details.supportContact}</div>` : ''}
+        `;
+        loginError.classList.remove('hidden');
+      }
+      return;
+    }
+    
+    if (errorCode === 'AUTH_USER_DISABLED') {
+      if (loginError) {
+        loginError.innerHTML = `
+          <div class="login-error-icon">🔒</div>
+          <div class="login-error-title">Tài khoản đang bị vô hiệu hoá</div>
+          <div class="login-error-message">
+            Tài khoản của bạn hiện đang bị vô hiệu hoá.
+            Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Admin</strong> để được hỗ trợ.
+          </div>
+          ${error.details && error.details.supportContact ? 
+            `<div class="login-error-contact">📧 Liên hệ: ${error.details.supportContact}</div>` : ''}
+        `;
+        loginError.classList.remove('hidden');
+      }
+      return;
+    }
+    
+    if (errorCode === 'AUTH_USER_REJECTED') {
+      if (loginError) {
+        let reasonText = '';
+        if (error.details && error.details.rejectionReason) {
+          reasonText = `<div class="login-error-reason">Lý do: ${error.details.rejectionReason}</div>`;
+        }
+        loginError.innerHTML = `
+          <div class="login-error-icon">❌</div>
+          <div class="login-error-title">Tài khoản đã bị từ chối</div>
+          <div class="login-error-message">
+            Tài khoản của bạn đã bị từ chối trong quá trình phê duyệt.
+            Vui lòng liên hệ <strong>Admin</strong> để biết thêm chi tiết.
+          </div>
+          ${reasonText}
+          ${error.details && error.details.supportContact ? 
+            `<div class="login-error-contact">📧 Liên hệ: ${error.details.supportContact}</div>` : ''}
+        `;
+        loginError.classList.remove('hidden');
+      }
+      return;
+    }
+    
+    if (errorCode === 'AUTH_INVALID_CREDENTIALS' || error.message.includes('401') || error.message.includes('Unauthorized')) {
       if (loginError) {
         loginError.textContent = 'Tên đăng nhập hoặc mật khẩu không hợp lệ.';
         loginError.classList.remove('hidden');
       }
+      return;
+    }
+    
+    // Generic error
+    if (loginError) {
+      loginError.textContent = error.message;
+      loginError.classList.remove('hidden');
     } else {
-      if (loginError) {
-        loginError.textContent = error.message;
-        loginError.classList.remove('hidden');
-      } else {
-        alert(error.message);
-      }
+      alert(error.message);
     }
   }
 });
 
 logoutBtn.addEventListener('click', () => {
   setToken(null);
+  currentUser = null;
+  localStorage.removeItem('ticketing.currentUser');
+  // Stop notification polling
+  stopNotificationPolling();
+  notifications = [];
+  updateNotificationBadge(0);
   showView('login');
   if (loginError) {
     loginError.classList.add('hidden');
@@ -1662,6 +2847,7 @@ const initTicketInfiniteScroll = () => {
 
 if (filterAssignee) {
   filterAssignee.addEventListener('change', () => {
+    console.log('filterAssignee change:', filterAssignee.value);
     ticketPage = 0;
     saveTicketFilters();
     loadTickets({ reset: true }).catch((error) => alert(error.message));
@@ -1670,6 +2856,7 @@ if (filterAssignee) {
 
 if (filterStatus) {
   filterStatus.addEventListener('change', () => {
+    console.log('filterStatus change:', filterStatus.value);
     ticketPage = 0;
     saveTicketFilters();
     loadTickets({ reset: true }).catch((error) => alert(error.message));
@@ -1800,9 +2987,24 @@ if (usersNext) {
 }
 
 if (openUserModal) {
-  openUserModal.addEventListener('click', () => {
+  openUserModal.addEventListener('click', async () => {
+    await loadDepartments();
     if (userCreateModal) {
       userCreateModal.classList.remove('hidden');
+    }
+
+    // For TRUONG_PHONG, set default department to their own department
+    if (isTruongPhong() && currentUser?.departmentId) {
+      const deptSelect = document.getElementById('admin-dept-select');
+      if (deptSelect) {
+        deptSelect.value = currentUser.departmentId;
+        deptSelect.disabled = true;
+      }
+    } else {
+      const deptSelect = document.getElementById('admin-dept-select');
+      if (deptSelect) {
+        deptSelect.disabled = false;
+      }
     }
   });
 }
@@ -1898,23 +3100,19 @@ if (userSaveProfile) {
     ])) {
       return;
     }
-    if (userPasswordInput && userPasswordInput.value.trim()) {
-      if (!userPasswordInput.checkValidity()) {
-        setFieldError(userPasswordInput, userPasswordInput.validationMessage || 'Mật khẩu không hợp lệ.');
-        return;
-      }
-    }
     const updates = [];
+    
     if (userRoleSelect && !userRoleSelect.disabled && userRoleSelect.value !== selectedUser.role) {
       updates.push(
         request(`/api/users/${selectedUser.id}/role`, {
           method: 'PATCH',
           body: JSON.stringify({ role: userRoleSelect.value }),
         }).then((response) => {
-          selectedUser = response;
+          selectedUser = { ...selectedUser, role: response.role };
         })
       );
     }
+    
     if (userEnabledSelect && !userEnabledSelect.disabled) {
       const enabledValue = userEnabledSelect.value === 'true';
       if (enabledValue !== selectedUser.enabled) {
@@ -1923,21 +3121,21 @@ if (userSaveProfile) {
             method: 'PATCH',
             body: JSON.stringify({ enabled: enabledValue }),
           }).then((response) => {
-            selectedUser = response;
+            selectedUser = { ...selectedUser, enabled: response.enabled };
           })
         );
       }
     }
+    
     if (userPasswordInput && userPasswordInput.value.trim()) {
       updates.push(
         request(`/api/users/${selectedUser.id}/password`, {
           method: 'PATCH',
           body: JSON.stringify({ password: userPasswordInput.value }),
-        }).then((response) => {
-          selectedUser = response;
         })
       );
     }
+    
     const profilePayload = {
       displayName: userDisplayName.value,
       title: userTitle.value,
@@ -1953,10 +3151,11 @@ if (userSaveProfile) {
           method: 'PATCH',
           body: JSON.stringify(profilePayload),
         }).then((response) => {
-          selectedUser = response;
+          selectedUser = { ...selectedUser, ...response };
         })
       );
     }
+    
     if (!updates.length) {
       return;
     }
@@ -1966,7 +3165,8 @@ if (userSaveProfile) {
     }
     applyUserDetailControls();
     if (userDetailHeader && selectedUser) {
-      userDetailHeader.textContent = `${formatName(selectedUser.username)} (${formatRole(selectedUser.role)})`;
+      const deptInfo = selectedUser.departmentName ? ` - ${selectedUser.departmentName}` : '';
+      userDetailHeader.textContent = `${formatName(selectedUser.username)} (${formatRole(selectedUser.role)}${deptInfo})`;
     }
     await loadAdminUsers();
     await loadUserAvatarMap();
@@ -1976,13 +3176,194 @@ if (userSaveProfile) {
 if (userDelete) {
   userDelete.addEventListener('click', async () => {
     if (!selectedUser) return;
-    if (!confirm(`Bạn có chắc muốn xóa người dùng ${selectedUser.username}?`)) return;
-    await request(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
+    
+    if (isAdmin()) {
+      // ADMIN: xác nhận và xóa trực tiếp
+      const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        await request(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
+        addNotification('delete', 'Xóa tài khoản', `Tài khoản "${selectedUser.displayName || selectedUser.username}" đã được xóa.`);
+        alert('Đã xóa tài khoản thành công!');
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+        return;
+      }
+    } else if (isTruongPhong()) {
+      // TRUONG_PHONG: thông báo và gửi yêu cầu xóa đợi ADMIN duyệt
+      const confirmMsg = `Bạn có chắc muốn yêu cầu xóa tài khoản "${selectedUser.username}"?\n\nSau khi gửi yêu cầu, Admin sẽ xem xét và duyệt xóa.`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        await request(`/api/admin/users/${selectedUser.id}/request-delete`, { method: 'POST' });
+        addNotification('request-delete', 'Yêu cầu xóa tài khoản', `Yêu cầu xóa tài khoản "${selectedUser.displayName || selectedUser.username}" đã được gửi cho Admin.`);
+        alert('Yêu cầu xóa đã được gửi cho Admin!');
+        // Reload delete requests to show the new pending request
+        await loadDeleteRequests();
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+        return;
+      }
+    }
+    
     selectedUser = null;
     if (userDetailModal) {
       userDetailModal.classList.add('hidden');
     }
     await loadAdminUsers();
+  });
+}
+
+// ============ User Approval Event Listeners ============
+
+// Approve user button
+const userApproveBtn = document.getElementById('user-approve-btn');
+if (userApproveBtn) {
+  userApproveBtn.addEventListener('click', async () => {
+    if (!selectedUser || !isAdmin()) return;
+    const userDisplayName = selectedUser.displayName || selectedUser.username;
+    if (!confirm(`Bạn có chắc muốn duyệt tài khoản "${selectedUser.username}"?`)) return;
+    try {
+      await request(`/api/admin/users/${selectedUser.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      // Add notification
+      addNotification('approve', 'Tài khoản được duyệt', `Tài khoản "${userDisplayName}" đã được duyệt.`);
+      // Refresh user list and close modal
+      await loadAdminUsers();
+      if (userDetailModal) {
+        userDetailModal.classList.add('hidden');
+      }
+      selectedUser = null;
+      alert('Đã duyệt tài khoản thành công!');
+    } catch (error) {
+      alert('Lỗi: ' + error.message);
+    }
+  });
+}
+
+// Reject user button - show rejection form (only for pending users)
+const userRejectBtn = document.getElementById('user-reject-btn');
+const userRejectionForm = document.getElementById('user-rejection-form');
+if (userRejectBtn && userRejectionForm) {
+  userRejectBtn.addEventListener('click', () => {
+    // Only show form if user is pending
+    if (!selectedUser || selectedUser.approved || selectedUser.rejectionReason) {
+      alert('Chỉ có thể từ chối tài khoản đang chờ duyệt.');
+      return;
+    }
+    if (!isAdmin()) return;
+    userRejectionForm.classList.remove('hidden');
+    userRejectionForm.style.display = 'block';
+    document.getElementById('user-rejection-reason-input').focus();
+  });
+}
+
+// Confirm reject button
+const userConfirmRejectBtn = document.getElementById('user-confirm-reject');
+if (userConfirmRejectBtn) {
+  userConfirmRejectBtn.addEventListener('click', async () => {
+    if (!selectedUser || !isAdmin()) return;
+    const userDisplayName = selectedUser.displayName || selectedUser.username;
+    const reasonInput = document.getElementById('user-rejection-reason-input');
+    const reason = reasonInput.value.trim();
+    if (!reason) {
+      alert('Vui lòng nhập lý do từ chối.');
+      reasonInput.focus();
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn từ chối tài khoản "${selectedUser.username}"?`)) return;
+    try {
+      await request(`/api/admin/users/${selectedUser.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason })
+      });
+      // Add notification
+      addNotification('reject', 'Tài khoản bị từ chối', `Tài khoản "${userDisplayName}" đã bị từ chối. Lý do: ${reason}`);
+      // Refresh user list and close modal
+      await loadPendingUsers();
+      await loadAdminUsers();
+      if (userDetailModal) {
+        userDetailModal.classList.add('hidden');
+      }
+      selectedUser = null;
+      alert('Đã từ chối tài khoản.');
+    } catch (error) {
+      alert('Lỗi: ' + error.message);
+    }
+  });
+}
+
+// Cancel reject button
+const userCancelRejectBtn = document.getElementById('user-cancel-reject');
+if (userCancelRejectBtn && userRejectionForm) {
+  userCancelRejectBtn.addEventListener('click', () => {
+    userRejectionForm.classList.add('hidden');
+    userRejectionForm.style.display = 'none';
+    document.getElementById('user-rejection-reason-input').value = '';
+  });
+}
+
+// Reject modal event listeners (for pending table)
+if (rejectModalClose) {
+  rejectModalClose.addEventListener('click', () => {
+    rejectModal.classList.add('hidden');
+    rejectModal.setAttribute('aria-hidden', 'true');
+  });
+}
+
+if (rejectModalCancel) {
+  rejectModalCancel.addEventListener('click', () => {
+    rejectModal.classList.add('hidden');
+    rejectModal.setAttribute('aria-hidden', 'true');
+    if (rejectReasonInput) rejectReasonInput.value = '';
+  });
+}
+
+if (rejectModalConfirm) {
+  rejectModalConfirm.addEventListener('click', async () => {
+    const userId = rejectModal.dataset.userId;
+    const userDisplayName = rejectModal.dataset.userDisplayName;
+    const reason = rejectReasonInput?.value.trim();
+    
+    if (!reason) {
+      alert('Vui lòng nhập lý do từ chối.');
+      rejectReasonInput?.focus();
+      return;
+    }
+    
+    if (!confirm(`Bạn có chắc muốn từ chối tài khoản "${userDisplayName}"?`)) return;
+    
+    try {
+      await request(`/api/admin/users/${userId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason }),
+      });
+      // Add notification
+      addNotification('reject', 'Tài khoản bị từ chối', `Tài khoản "${userDisplayName}" đã bị từ chối. Lý do: ${reason}`);
+      // Close modal and reload
+      rejectModal.classList.add('hidden');
+      rejectModal.setAttribute('aria-hidden', 'true');
+      if (rejectReasonInput) rejectReasonInput.value = '';
+      await loadPendingUsers();
+      await loadAdminUsers();
+      alert('Đã từ chối tài khoản.');
+    } catch (error) {
+      alert('Lỗi: ' + error.message);
+    }
+  });
+}
+
+// Close reject modal on outside click
+if (rejectModal) {
+  rejectModal.addEventListener('click', (e) => {
+    if (e.target === rejectModal) {
+      rejectModal.classList.add('hidden');
+      rejectModal.setAttribute('aria-hidden', 'true');
+      if (rejectReasonInput) rejectReasonInput.value = '';
+    }
   });
 }
 
@@ -1992,10 +3373,28 @@ adminCreateForm.addEventListener('submit', async (event) => {
     return;
   }
   const formData = new FormData(adminCreateForm);
-  const payload = Object.fromEntries(formData.entries());
-  if (!hasRole('ROLE_ADMIN')) {
-    payload.role = 'REQUESTER';
+  const payload = {
+    username: formData.get('username'),
+    password: formData.get('password'),
+    role: formData.get('role'),
+    displayName: formData.get('displayName'),
+    title: formData.get('title'),
+    email: formData.get('email'),
+  };
+
+  // Get departmentId - from form or from current user for TRUONG_PHONG
+  const deptSelect = document.getElementById('admin-dept-select');
+  if (isTruongPhong() && currentUser?.departmentId) {
+    payload.departmentId = currentUser.departmentId;
+  } else {
+    payload.departmentId = formData.get('departmentId') || null;
   }
+
+  // ADMIN cannot belong to a department
+  if (payload.role === 'ADMIN') {
+    payload.departmentId = null;
+  }
+
   try {
     await request('/api/users', {
       method: 'POST',
@@ -2004,6 +3403,10 @@ adminCreateForm.addEventListener('submit', async (event) => {
     adminCreateForm.reset();
     if (userCreateModal) {
       userCreateModal.classList.add('hidden');
+    }
+    // Reset department select disabled state
+    if (deptSelect) {
+      deptSelect.disabled = false;
     }
     await loadAdminUsers();
     await loadUserAvatarMap();
@@ -2033,6 +3436,8 @@ profilePasswordForm.addEventListener('submit', async (event) => {
 
 if (profileSaveBtn) {
   profileSaveBtn.addEventListener('click', async () => {
+    console.log('[DEBUG SAVE] Token:', getToken());
+    console.log('[DEBUG SAVE] AvatarPreview:', profileAvatarPreview ? profileAvatarPreview.src : 'null');
     if (!validateProfileFields([
       { label: 'Tên hiển thị', input: profileDisplayName },
       { label: 'Chức danh', input: profileTitle },
@@ -2040,13 +3445,16 @@ if (profileSaveBtn) {
     ])) {
       return;
     }
+    const payload = {
+      displayName: profileDisplayName.value,
+      title: profileTitle.value,
+      email: profileEmail.value,
+      avatarUrl: profileAvatarPreview ? profileAvatarPreview.src : null,
+    };
+    console.log('[DEBUG SAVE] Payload:', JSON.stringify(payload));
     await request('/api/users/me/profile', {
       method: 'PATCH',
-      body: JSON.stringify({
-        displayName: profileDisplayName.value,
-        title: profileTitle.value,
-        email: profileEmail.value,
-      }),
+      body: JSON.stringify(payload),
     });
     await loadProfile();
   });
@@ -2085,22 +3493,52 @@ updateNavVisibility();
 routeGuard();
 initReportDates();
 initAutoRefresh();
-loadTicketFilters();
 initTicketInfiniteScroll();
+loadNotifications();
+loadNotifications(); // Load saved notifications
+
 if (isTokenValid()) {
-  loadEngineerOptions().catch(() => {});
-  loadUserAvatarMap()
-    .then(() => loadTickets({ reset: true }))
+  // Restore current user
+  const stored = localStorage.getItem('ticketing.currentUser');
+  if (stored) {
+    try {
+      currentUser = JSON.parse(stored);
+    } catch (e) {}
+  }
+  
+  // Load profile first to get currentUser with role/department
+  loadProfile()
+    .then(() => {
+      // Then load engineer options using the loaded profile
+      return loadEngineerOptions();
+    })
+    .then(() => {
+      // Re-populate filter selects after engineer options are loaded
+      if (filterAssignee) {
+        populateAssigneeSelect(filterAssignee, {
+          includeAll: true,
+          includeUnassigned: true,
+          useDisplayNameValues: true,
+        });
+      }
+      // Load saved filter values AFTER dropdowns are populated
+      loadTicketFilters();
+      // Then load tickets with the saved filters
+      loadTickets({ reset: true }).catch(() => {});
+    })
     .catch(() => {});
   loadDashboard().catch(() => {});
   loadQueue().catch(() => {});
   if (canManageUsers()) {
     loadAdminUsers().catch(() => {});
+    loadDepartments().catch(() => {});
   }
-  loadProfile().catch(() => {});
 }
 
 const themeKey = 'ticketing.theme';
+
+// ==================== Theme ====================
+
 const applyTheme = (theme) => {
   document.body.classList.toggle('dark', theme === 'dark');
   if (themeToggle) {
@@ -2125,3 +3563,29 @@ if (themeToggle) {
     applyTheme(next);
   });
 }
+
+// ============ Notification Event Listeners ============
+
+if (notificationBtn) {
+  notificationBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleNotificationDropdown();
+  });
+}
+
+if (clearNotificationsBtn) {
+  clearNotificationsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    clearAllNotifications();
+  });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const wrapper = document.querySelector('.notification-wrapper');
+  if (notificationDropdown && !notificationDropdown.classList.contains('hidden')) {
+    if (wrapper && !wrapper.contains(e.target)) {
+      closeNotificationDropdown();
+    }
+  }
+});

@@ -35,9 +35,8 @@ public class TicketAudit {
     @Column(name = "new_value", length = 512)
     private String newValue;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "actor_role", nullable = false, length = 16)
-    private TicketTypes.TicketRole actorRole;
+    private String actorRole;
 
     @Column(name = "actor_name", length = 120)
     private String actorName;
@@ -94,11 +93,11 @@ public class TicketAudit {
         this.newValue = newValue;
     }
 
-    public TicketTypes.TicketRole getActorRole() {
+    public String getActorRole() {
         return actorRole;
     }
 
-    public void setActorRole(TicketTypes.TicketRole actorRole) {
+    public void setActorRole(String actorRole) {
         this.actorRole = actorRole;
     }
 

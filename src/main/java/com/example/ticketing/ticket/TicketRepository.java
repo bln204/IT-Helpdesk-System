@@ -139,4 +139,73 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
         @Param("excludedStatus") TicketTypes.TicketStatus excludedStatus,
         Pageable pageable
     );
+
+    // Department-based queries for NHAN_VIEN and TRUONG_PHONG
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId")
+    Page<Ticket> findByDepartmentId(@Param("departmentId") Long departmentId, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND t.status = :status")
+    Page<Ticket> findByDepartmentIdAndStatus(@Param("departmentId") Long departmentId, @Param("status") TicketTypes.TicketStatus status, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND t.assigneeName = :assignee")
+    Page<Ticket> findByDepartmentIdAndAssigneeName(@Param("departmentId") Long departmentId, @Param("assignee") String assigneeName, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND t.assigneeName = :assignee AND t.status = :status")
+    Page<Ticket> findByDepartmentIdAndAssigneeNameAndStatus(@Param("departmentId") Long departmentId, @Param("assignee") String assigneeName, @Param("status") TicketTypes.TicketStatus status, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND t.status <> :status")
+    Page<Ticket> findByDepartmentIdAndStatusNot(@Param("departmentId") Long departmentId, @Param("status") TicketTypes.TicketStatus status, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND (t.assigneeName IS NULL OR t.assigneeName = '')")
+    Page<Ticket> findUnassignedByDepartmentId(@Param("departmentId") Long departmentId, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND (t.assigneeName IS NULL OR t.assigneeName = '') AND t.status = :status")
+    Page<Ticket> findUnassignedByDepartmentIdAndStatus(@Param("departmentId") Long departmentId, @Param("status") TicketTypes.TicketStatus status, Pageable pageable);
+
+    @Query("SELECT t FROM Ticket t WHERE t.department.id = :departmentId AND (t.assigneeName IS NULL OR t.assigneeName = '') AND t.status <> :excludedStatus")
+    Page<Ticket> findUnassignedByDepartmentIdAndStatusNot(@Param("departmentId") Long departmentId, @Param("excludedStatus") TicketTypes.TicketStatus excludedStatus, Pageable pageable);
+
+    @Query("""
+        SELECT t FROM Ticket t
+        WHERE t.department.id = :departmentId
+          AND (:status IS NULL OR t.status = :status)
+          AND (:assignee IS NULL OR t.assigneeName = :assignee)
+          AND (
+            LOWER(t.title) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.ticketNumber) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.requesterName) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.requesterEmail) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.assigneeName) LIKE LOWER(CONCAT('%', :query, '%'))
+          )
+        """)
+    Page<Ticket> searchTicketsByDepartment(
+        @Param("departmentId") Long departmentId,
+        @Param("query") String query,
+        @Param("status") TicketTypes.TicketStatus status,
+        @Param("assignee") String assignee,
+        Pageable pageable
+    );
+
+    @Query("""
+        SELECT t FROM Ticket t
+        WHERE t.department.id = :departmentId
+          AND t.status <> :excludedStatus
+          AND (:assignee IS NULL OR t.assigneeName = :assignee)
+          AND (
+            LOWER(t.title) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.ticketNumber) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.requesterName) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.requesterEmail) LIKE LOWER(CONCAT('%', :query, '%'))
+            OR LOWER(t.assigneeName) LIKE LOWER(CONCAT('%', :query, '%'))
+          )
+        """)
+    Page<Ticket> searchTicketsByDepartmentExcludeStatus(
+        @Param("departmentId") Long departmentId,
+        @Param("query") String query,
+        @Param("assignee") String assignee,
+        @Param("excludedStatus") TicketTypes.TicketStatus excludedStatus,
+        Pageable pageable
+    );
 }

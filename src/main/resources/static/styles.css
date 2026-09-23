@@ -359,11 +359,11 @@ button.ghost:hover {
 }
 
 body.dark .toggle-track {
-  background: rgba(123, 214, 207, 0.5);
+  background: rgba(123, 214, 207, 0.5) !important;
 }
 
 body.dark .toggle-thumb {
-  transform: translateX(18px);
+  transform: translateX(18px) !important;
 }
 
 .report-buttons button.active {
@@ -1204,4 +1204,478 @@ body.dark .table-wrap {
   .nav-card {
     position: static;
   }
+}
+
+/* ==================== User Approval Status Badges ==================== */
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-active {
+  background: rgba(28, 141, 136, 0.12);
+  color: var(--teal);
+}
+
+.status-pending {
+  background: rgba(255, 200, 0, 0.15);
+  color: #b8860b;
+}
+
+.status-disabled {
+  background: rgba(161, 38, 38, 0.1);
+  color: #a12626;
+}
+
+.status-rejected {
+  background: rgba(161, 38, 38, 0.15);
+  color: #8b0000;
+}
+
+/* ==================== Login Error Messages ==================== */
+
+#login-error {
+  background: linear-gradient(135deg, rgba(161, 38, 38, 0.05) 0%, rgba(255, 122, 89, 0.08) 100%);
+  border: 1px solid rgba(161, 38, 38, 0.15);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.login-error-icon {
+  font-size: 2.5rem;
+  margin-bottom: 8px;
+}
+
+.login-error-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #a12626;
+  margin-bottom: 8px;
+}
+
+.login-error-message {
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.login-error-contact {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.login-error-reason {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(161, 38, 38, 0.08);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #8b0000;
+  font-style: italic;
+}
+
+/* ==================== User Detail Modal Updates ==================== */
+
+.user-approval-info {
+  background: rgba(255, 200, 0, 0.08);
+  border: 1px solid rgba(255, 200, 0, 0.2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.user-approval-info.rejected {
+  background: rgba(161, 38, 38, 0.08);
+  border-color: rgba(161, 38, 38, 0.2);
+}
+
+.user-approval-info .info-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.user-approval-info .info-value {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.user-approval-info .rejection-reason {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(161, 38, 38, 0.06);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #a12626;
+}
+
+/* ==================== Approve/Reject Buttons ==================== */
+
+.approval-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.approval-actions .btn-approve {
+  background: var(--teal);
+  color: white;
+  flex: 1;
+}
+
+.approval-actions .btn-approve:hover {
+  background: #167a74;
+}
+
+.btn-approve {
+  background: var(--teal);
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-approve:hover {
+  background: #167a74;
+}
+
+.approval-actions .btn-reject {
+  background: #a12626;
+  color: white;
+  flex: 1;
+}
+
+.btn-reject {
+  background: #a12626;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-reject:hover {
+  background: #8b0000;
+}
+
+/* ==================== Rejection Modal ==================== */
+
+.modal-rejection-form {
+  margin-top: 16px;
+}
+
+.modal-rejection-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.modal-rejection-form textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.modal-rejection-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ==================== Dark Mode Support for Status Badges ==================== */
+
+body.dark .status-active {
+  background: rgba(123, 214, 207, 0.15);
+  color: var(--teal);
+}
+
+body.dark .status-pending {
+  background: rgba(255, 200, 0, 0.2);
+  color: #ffd700;
+}
+
+body.dark .status-disabled,
+body.dark .status-rejected {
+  background: rgba(255, 100, 100, 0.15);
+  color: #ff6b6b;
+}
+
+body.dark .user-approval-info {
+  background: rgba(255, 200, 0, 0.1);
+  border-color: rgba(255, 200, 0, 0.3);
+}
+
+body.dark .user-approval-info.rejected {
+  background: rgba(255, 100, 100, 0.1);
+  border-color: rgba(255, 100, 100, 0.3);
+}
+
+/* ==================== Notification System ==================== */
+
+.notification-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.notification-btn {
+  position: relative;
+  font-size: 1.1rem;
+  padding: 10px 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #a12626;
+  color: white;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+  height: 18px;
+  padding: 0 5px;
+  background: #a12626;
+  color: white;
+  border-radius: 9px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-badge.hidden {
+  display: none;
+}
+
+.notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: 420px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.notification-dropdown.hidden {
+  display: none;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.notification-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.notification-header button {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
+.notification-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 340px;
+}
+
+.notification-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.notification-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.notification-item:hover {
+  background: var(--surface);
+}
+
+.notification-item.unread {
+  background: rgba(255, 122, 89, 0.08);
+  box-shadow: inset 3px 0 0 0 var(--accent, #ff7a59), 0 1px 3px rgba(0,0,0,0.08);
+}
+
+body.dark .notification-item.unread {
+  background: rgba(255, 122, 89, 0.15);
+  box-shadow: inset 3px 0 0 0 var(--accent, #ff7a59), 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.notification-item.read {
+  opacity: 0.75;
+}
+
+.notification-item.read:hover {
+  opacity: 1;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item-content {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.notification-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.notification-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-left: 34px;
+}
+
+.notification-unread-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent, #ff7a59);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.notification-item-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 2px;
+  color: var(--text);
+}
+
+.notification-item-title.approve {
+  color: var(--teal);
+}
+
+.notification-item-title.reject {
+  color: #a12626;
+}
+
+.notification-item-message {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.notification-item-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* ==================== Pending Users Section ==================== */
+
+.pending-section {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+body.dark .pending-section {
+  background: rgba(255, 193, 7, 0.1);
+  border-color: rgba(255, 193, 7, 0.3);
+}
+
+.pending-section h4 {
+  margin: 0 0 12px 0;
+  color: #856404;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.dark .pending-section h4 {
+  color: #ffc107;
+}
+
+.btn-small {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+/* ==================== Pending Users Badge ==================== */
+
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #a12626;
+  color: white;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.pending-badge.hidden {
+  display: none;
 }

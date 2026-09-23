@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -21,6 +22,7 @@
         <div>
           <strong id="sidebar-username">Phiếu hỗ trợ</strong>
           <span id="sidebar-role">Bảng điều khiển</span>
+          <span id="sidebar-dept" class="sidebar-dept hidden"></span>
         </div>
       </div>
       <button class="ghost nav-toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu">Trình đơn</button>
@@ -31,11 +33,27 @@
           <span class="toggle-thumb"></span>
         </span>
       </button>
+      <div class="notification-wrapper">
+        <button class="ghost notification-btn" id="notification-btn" type="button" aria-label="Thông báo">
+          🔔<span id="notification-badge" class="notification-badge hidden">0</span>
+        </button>
+        <div class="notification-dropdown hidden" id="notification-dropdown">
+          <div class="notification-header">
+            <h4>Thông báo</h4>
+            <button id="clear-notifications" class="ghost">Xóa tất cả</button>
+          </div>
+          <div id="notification-list" class="notification-list">
+            <div class="notification-empty">Không có thông báo</div>
+          </div>
+        </div>
+      </div>
       <nav class="nav-links">
-        <a href="#/tickets" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Phiếu hỗ trợ</a>
-        <a href="#/reports" data-role="ROLE_ENGINEER,ROLE_ADMIN">Báo cáo</a>
-        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_ENGINEER">Người dùng</a>
-        <a href="#/profile" data-role="ROLE_REQUESTER,ROLE_ENGINEER,ROLE_ADMIN">Hồ sơ</a>
+        <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
+        <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
+        <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">
+          Quản lý<span id="pending-users-badge" class="pending-badge hidden"></span>
+        </a>
+        <a href="#/profile" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Hồ sơ</a>
       </nav>
       <button class="ghost" id="logout-btn" type="button">Đăng xuất</button>
       </div>
@@ -59,7 +77,7 @@
           <input type="password" name="password" autocomplete="current-password" required />
         </label>
         <p id="login-prefill-note" class="info-banner hidden">
-          Đăng nhập thử nghiệm: thông tin đăng nhập của kỹ sư đã được điền sẵn và sẵn sàng đăng nhập.
+          Thông tin đăng nhập đã được điền sẵn. Thử nghiệm với tài khoản nhân viên.
         </p>
         <button type="submit">Đăng nhập</button>
       </form>
@@ -207,7 +225,7 @@
           <input id="report-to" type="date" />
         </label>
         <div class="button-row report-buttons">
-          <button id="engineer-report-btn" class="secondary" type="button">Báo cáo kỹ sư</button>
+          <button id="engineer-report-btn" class="secondary" type="button">Báo cáo nhân viên IT</button>
           <button id="requester-report-btn" class="secondary" type="button">Báo cáo người yêu cầu</button>
           <button id="backlog-report-btn" class="secondary" type="button">Thời gian tồn đọng</button>
           <button id="sla-report-btn" class="secondary" type="button">Nhóm SLA</button>
@@ -219,14 +237,58 @@
 
     <section class="panel view" id="admin-panel" data-view="admin">
       <header>
-        <h3>Quản trị người dùng</h3>
-        <p>Quản lý người dùng và xem xét các sự kiện kiểm tra người dùng.</p>
+        <h3>Quản lý người dùng</h3>
+        <p id="admin-panel-description">Quản lý người dùng trong hệ thống.</p>
       </header>
       <div class="stack">
+        <!-- Pending Users Section (visible only for ADMIN) -->
+        <div id="pending-users-section" class="pending-section hidden">
+          <div class="panel-header compact">
+            <h4>⏳ Tài khoản chờ duyệt <span id="pending-count-badge" class="pending-badge"></span></h4>
+          </div>
+          <div id="pending-users-list" class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ tên</th>
+                  <th>Vai trò</th>
+                  <th>Phòng ban</th>
+                  <th>Ngày tạo</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="pending-users-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Delete Requests Section (visible only for ADMIN) -->
+        <div id="delete-requests-section" class="pending-section hidden">
+          <div class="panel-header compact">
+            <h4>🗑️ Yêu cầu xóa tài khoản <span id="delete-requests-count-badge" class="pending-badge"></span></h4>
+          </div>
+          <div id="delete-requests-list" class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ tên</th>
+                  <th>Vai trò</th>
+                  <th>Phòng ban</th>
+                  <th>Người yêu cầu</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="delete-requests-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="split-row">
           <div>
             <div class="panel-header compact">
-              <h4>Người dùng</h4>
+              <h4>Tất cả người dùng</h4>
               <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
                 +
               </button>
@@ -240,8 +302,10 @@
                 <thead>
                   <tr>
                     <th>Tên đăng nhập</th>
+                    <th>Họ tên</th>
                     <th>Vai trò</th>
-                    <th>Kích hoạt</th>
+                    <th>Phòng ban</th>
+                    <th>Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody id="admin-users"></tbody>
@@ -360,7 +424,7 @@
               Email người yêu cầu
               <input type="email" name="requesterEmail" maxlength="160" />
             </label>
-            <label>
+            <label class="hidden" id="assignee-create-label">
               Người được phân công (tùy chọn)
               <select name="assigneeName" id="assignee-create">
                 <option value="UNASSIGNED">Chưa phân công</option>
@@ -406,9 +470,13 @@
         <label>
           Vai trò
           <select name="role" id="admin-role-select" required>
-            <option value="REQUESTER">Người yêu cầu</option>
-            <option value="ENGINEER">Kỹ sư</option>
-            <option value="ADMIN">Quản trị viên</option>
+            <option value="NHAN_VIEN">Nhân viên</option>
+          </select>
+        </label>
+        <label>
+          Phòng ban
+          <select name="departmentId" id="admin-dept-select">
+            <option value="">— Chọn phòng ban —</option>
           </select>
         </label>
         <button type="submit">Tạo người dùng</button>
@@ -426,6 +494,36 @@
         <button id="close-user-detail" class="ghost" type="button">Đóng</button>
       </header>
       <div class="stack">
+        <!-- Approval Info Panel (shown for pending/rejected users) -->
+        <div id="user-approval-info" class="user-approval-info hidden">
+          <div class="info-label">Trạng thái phê duyệt</div>
+          <div id="user-approval-status" class="info-value"></div>
+          <div id="user-approval-date"></div>
+          <div id="user-approval-by"></div>
+          <div id="user-rejection-reason" class="rejection-reason hidden"></div>
+        </div>
+        
+        <!-- Warning for rejected users - cannot edit -->
+        <div id="user-rejected-warning" class="alert alert-danger hidden">
+          ⚠️ Tài khoản đã bị từ chối. Không thể chỉnh sửa thông tin. Chỉ có thể xóa tài khoản này.
+        </div>
+        
+        <!-- Approval Actions (shown for ADMIN only, for pending users) -->
+        <div id="user-approval-actions" class="approval-actions hidden">
+          <button id="user-approve-btn" class="btn-approve" type="button">✓ Duyệt tài khoản</button>
+          <button id="user-reject-btn" class="btn-reject" type="button">✗ Từ chối</button>
+        </div>
+        
+        <!-- Rejection Form (shown when rejecting) -->
+        <div id="user-rejection-form" class="modal-rejection-form hidden">
+          <label for="user-rejection-reason-input">Lý do từ chối:</label>
+          <textarea id="user-rejection-reason-input" placeholder="Nhập lý do từ chối..."></textarea>
+          <div class="button-row" style="margin-top: 12px;">
+            <button id="user-confirm-reject" class="btn-reject" type="button">Xác nhận từ chối</button>
+            <button id="user-cancel-reject" class="secondary" type="button">Hủy</button>
+          </div>
+        </div>
+        
         <div class="split">
           <label>
             Tên hiển thị
@@ -446,14 +544,20 @@
             <select id="user-role-select"></select>
           </label>
           <label>
+            Phòng ban
+            <select id="user-dept-select" disabled>
+              <option value="">— Chọn phòng ban —</option>
+            </select>
+          </label>
+        </div>
+        <div class="split">
+          <label>
             Kích hoạt
             <select id="user-enabled-select">
               <option value="true">Đã kích hoạt</option>
               <option value="false">Vô hiệu hóa</option>
             </select>
           </label>
-        </div>
-        <div class="split">
           <label>
             Mật khẩu mới
             <input type="password" id="user-password-input" minlength="8" />
@@ -461,6 +565,7 @@
         </div>
         <div class="button-row full-width">
           <button id="user-save-profile" type="button">Lưu thay đổi</button>
+          <button id="user-delete" class="ghost" type="button">Xóa người dùng</button>
         </div>
         <div>
           <h4>Nhật ký người dùng</h4>
@@ -470,6 +575,27 @@
             <span id="user-audit-page">Trang 1</span>
             <button id="user-audit-next" class="secondary" type="button">Sau</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rejection Confirmation Modal (for pending table) -->
+  <div class="modal hidden" id="reject-modal" aria-hidden="true">
+    <div class="modal-content" style="max-width: 400px;">
+      <header class="panel-header">
+        <div>
+          <h3>Từ chối tài khoản</h3>
+        </div>
+        <button class="close-btn" id="reject-modal-close" aria-label="Đóng">&times;</button>
+      </header>
+      <div class="panel-body">
+        <p id="reject-modal-username" style="margin-bottom: 12px; font-weight: 500;"></p>
+        <label for="reject-reason-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px;">Lý do từ chối:</label>
+        <textarea id="reject-reason-input" placeholder="Nhập lý do từ chối..." style="width: 100%; min-height: 80px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.9rem; resize: vertical;"></textarea>
+        <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px;">
+          <button id="reject-modal-confirm" class="btn-reject" type="button">Xác nhận từ chối</button>
+          <button id="reject-modal-cancel" class="secondary" type="button">Hủy</button>
         </div>
       </div>
     </div>

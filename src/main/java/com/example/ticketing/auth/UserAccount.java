@@ -1,5 +1,6 @@
 package com.example.ticketing.auth;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -7,16 +8,19 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import com.example.ticketing.ticket.TicketTypes;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+
+import com.example.ticketing.department.Department;
 
 @Entity
 @Table(name = "users")
@@ -24,7 +28,7 @@ public class UserAccount implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @Column(nullable = false, unique = true, length = 80)
     private String username;
 
@@ -33,14 +37,18 @@ public class UserAccount implements UserDetails {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private TicketTypes.TicketRole role;
+    private UserRole.Role role;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    private Department department;
 
     @Column(name = "display_name", length = 120)
     private String displayName;
 
     @Column(name = "title", length = 120)
     private String title;
-
+    
     @Column(name = "avatar_url", length = 255)
     private String avatarUrl;
 
@@ -49,17 +57,80 @@ public class UserAccount implements UserDetails {
 
     @Column(nullable = false)
     private boolean enabled = true;
+    
+    // Track password changes to invalidate old tokens
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+    
+    // ============ NEW: Approval System Fields ============
+    
+    /**
+     * Account approval status.
+     * - FALSE: Account is pending approval (created by TRUONG_PHONG, needs ADMIN approval)
+     * - TRUE: Account has been approved (can login if enabled)
+     */
+    @Column(nullable = false)
+    private boolean approved = false;
+    
+    /**
+     * Timestamp when the account was approved or rejected.
+     */
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+    
+    /**
+     * Username of the admin who approved/rejected this account.
+     */
+    @Column(name = "approved_by", length = 80)
+    private String approvedBy;
+    
+    /**
+     * Reason for rejection (if rejected).
+     */
+    @Column(name = "rejection_reason", length = 255)
+    private String rejectionReason;
+    
+    /**
+     * Username of the user who created this account.
+     * Used to send notifications when account is approved/rejected.
+     */
+    @Column(name = "created_by", length = 80)
+    private String createdBy;
+    
+    // ============ END NEW Fields ============
+
+    // ==================== Getters & Setters ====================
 
     public Long getId() {
         return id;
     }
 
-    public TicketTypes.TicketRole getRole() {
+    public UserRole.Role getRole() {
         return role;
     }
 
-    public void setRole(TicketTypes.TicketRole role) {
+    public void setRole(UserRole.Role role) {
         this.role = role;
+    }
+
+    public Department getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(Department department) {
+        this.department = department;
+    }
+
+    public Long getDepartmentId() {
+        return department != null ? department.getId() : null;
+    }
+
+    public String getDepartmentCode() {
+        return department != null ? department.getCode() : null;
+    }
+
+    public String getDepartmentName() {
+        return department != null ? department.getName() : null;
     }
 
     public String getDisplayName() {
@@ -105,6 +176,86 @@ public class UserAccount implements UserDetails {
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }
+    
+    public LocalDateTime getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+    
+    public void setPasswordChangedAt(LocalDateTime passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
+    }
+    
+    public void markPasswordChanged() {
+        this.passwordChangedAt = LocalDateTime.now();
+    }
+    
+    // ============ NEW: Approval System Getters and Setters ============
+    
+    public boolean isApproved() {
+        return approved;
+    }
+
+    public void setApproved(boolean approved) {
+        this.approved = approved;
+    }
+
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public String getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+    
+    /**
+     * Mark this account as approved by an admin.
+     */
+    public void markApproved(String approvedByUsername) {
+        this.approved = true;
+        this.approvedAt = LocalDateTime.now();
+        this.approvedBy = approvedByUsername;
+        this.rejectionReason = null;
+        this.enabled = true;
+    }
+    
+    /**
+     * Mark this account as rejected by an admin.
+     */
+    public void markRejected(String rejectedByUsername, String reason) {
+        this.approved = false;
+        this.approvedAt = LocalDateTime.now();
+        this.approvedBy = rejectedByUsername;
+        this.rejectionReason = reason;
+        this.enabled = false;
+    }
+    
+    // ============ END Approval System ============
+    
+    // ==================== UserDetails Implementation ====================
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -139,5 +290,46 @@ public class UserAccount implements UserDetails {
     @Override
     public boolean isEnabled() {
         return enabled;
+    }
+
+    // ==================== Role Check Helpers ====================
+
+    public boolean isAdmin() {
+        return role == UserRole.Role.ADMIN;
+    }
+
+    public boolean isGiamDoc() {
+        return role == UserRole.Role.GIAM_DOC;
+    }
+
+    public boolean isTruongPhong() {
+        return role == UserRole.Role.TRUONG_PHONG;
+    }
+
+    public boolean isNhanVien() {
+        return role == UserRole.Role.NHAN_VIEN;
+    }
+
+    /**
+     * Kiểm tra có phải Trưởng phòng IT không (có quyền assign tickets)
+     */
+    public boolean isTruongPhongIT() {
+        return role == UserRole.Role.TRUONG_PHONG 
+            && department != null 
+            && "IT".equals(department.getCode());
+    }
+
+    /**
+     * Kiểm tra có thuộc department IT không
+     */
+    public boolean isInITDepartment() {
+        return department != null && "IT".equals(department.getCode());
+    }
+
+    /**
+     * Kiểm tra có thuộc EXEC (Ban Giám đốc) không
+     */
+    public boolean isInExecDepartment() {
+        return department != null && "EXEC".equals(department.getCode());
     }
 }
