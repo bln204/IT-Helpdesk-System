@@ -204,31 +204,149 @@ public class NotificationService {
 
     /**
      * Notify user when their profile has been changed by an admin or manager.
-     * Sends both in-app notification and real email.
+     * Sends both in-app notification and real email with detailed change information.
+     * 
+     * @param recipientUsername Username of the user whose profile was changed
+     * @param recipientEmail Email address of the user
+     * @param displayName Display name of the user
+     * @param actorUsername Username of who made the changes
+     * @param actorRole Role of who made the changes
+     * @param changes ChangeSet containing all profile changes with old/new values
      */
     @Transactional
     public void notifyProfileChanged(String recipientUsername, String recipientEmail,
                                      String displayName, String actorUsername, 
-                                     String actorRole, String changes) {
+                                     String actorRole, ProfileChange.ChangeSet changes) {
         String actorLabel = formatActorRole(actorRole);
         String title = "Thông tin tài khoản đã được thay đổi";
-        String message = String.format("Thông tin tài khoản của bạn (%s) đã được %s \"%s\" thay đổi. Các thông tin được thay đổi: %s",
-                displayName != null ? displayName : recipientUsername,
-                actorLabel,
-                actorUsername,
-                changes != null && !changes.isBlank() ? changes : "Không xác định");
+        
+        // Generate message for in-app notification with change count
+        String message;
+        if (changes.hasChanges()) {
+            int count = changes.getChangeCount();
+            String countText = count == 1 ? "1 trường thông tin" : count + " trường thông tin";
+            message = String.format("Thông tin tài khoản (%s) đã được %s \"%s\" thay đổi. Có %s: %s",
+                    displayName != null ? displayName : recipientUsername,
+                    actorLabel,
+                    actorUsername,
+                    countText,
+                    changes.getChanges().stream()
+                        .map(ProfileChange::getFieldName)
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("không xác định"));
+        } else {
+            message = String.format("Thông tin tài khoản (%s) đã được %s \"%s\" thay đổi.",
+                    displayName != null ? displayName : recipientUsername,
+                    actorLabel,
+                    actorUsername);
+        }
 
         // Send in-app notification
         sendNotification(recipientUsername, Notification.NotificationType.PROFILE_CHANGED,
                 title, message, null, actorUsername);
         
-        // Send real email notification
+        // Send real email notification with detailed changes
         if (recipientEmail != null && !recipientEmail.isBlank()) {
             try {
-                emailService.sendProfileChangeNotification(recipientEmail, displayName, actorUsername, actorRole, changes);
+                emailService.sendProfileChangeNotification(
+                    recipientEmail, displayName, actorUsername, actorRole, changes);
                 log.info("Profile change email sent to: {}", recipientEmail);
             } catch (Exception e) {
                 log.error("Failed to send profile change email to {}: {}", recipientEmail, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Notify user when their profile AND/OR password has been changed.
+     * Sends ONE combined email notification for all changes including password.
+     * 
+     * @param recipientUsername Username of the user
+     * @param recipientEmail Email address of the user
+     * @param displayName Display name of the user
+     * @param actorUsername Username of who made the change
+     * @param actorRole Role of who made the change
+     * @param changes ChangeSet containing all profile changes (including password if any)
+     */
+    @Transactional
+    public void notifyProfileAndPasswordChanged(String recipientUsername, String recipientEmail,
+                                                 String displayName, String actorUsername, 
+                                                 String actorRole, ProfileChange.ChangeSet changes) {
+        String actorLabel = formatActorRole(actorRole);
+        String title = "Thong tin tai khoan da duoc thay doi";
+        
+        // Generate message for in-app notification with change count
+        String message;
+        if (changes.hasChanges()) {
+            int count = changes.getChangeCount();
+            String countText = count == 1 ? "1 truong thong tin" : count + " truong thong tin";
+            message = String.format("Thong tin tai khoan (%s) da duoc %s \"%s\" thay doi. Co %s: %s",
+                    displayName != null ? displayName : recipientUsername,
+                    actorLabel,
+                    actorUsername,
+                    countText,
+                    changes.getChanges().stream()
+                        .map(ProfileChange::getFieldName)
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("khong xac dinh"));
+        } else {
+            message = String.format("Thong tin tai khoan (%s) da duoc %s \"%s\" thay doi.",
+                    displayName != null ? displayName : recipientUsername,
+                    actorLabel,
+                    actorUsername);
+        }
+
+        // Send in-app notification
+        sendNotification(recipientUsername, Notification.NotificationType.PROFILE_CHANGED,
+                title, message, null, actorUsername);
+        
+        // Send ONE combined email notification for all changes
+        if (recipientEmail != null && !recipientEmail.isBlank()) {
+            try {
+                emailService.sendProfileChangeNotification(
+                    recipientEmail, displayName, actorUsername, actorRole, changes);
+                log.info("Combined profile+password change email sent to: {}", recipientEmail);
+            } catch (Exception e) {
+                log.error("Failed to send combined email to {}: {}", recipientEmail, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Notify user when their password has been reset by an admin or manager.
+     * Sends both in-app notification and real email with detailed information.
+     * Password change is sent as a profile change notification.
+     * 
+     * @param recipientUsername Username of the user whose password was reset
+     * @param recipientEmail Email address of the user
+     * @param displayName Display name of the user
+     * @param actorUsername Username of who reset the password
+     * @param actorRole Role of who reset the password
+     */
+    @Transactional
+    public void notifyPasswordReset(String recipientUsername, String recipientEmail,
+                                    String displayName, String actorUsername, String actorRole,
+                                    String newPassword) {
+        String actorLabel = formatActorRole(actorRole);
+        String title = "Mat khau tai khoan da duoc dat lai";
+        String message = String.format("Mat khau tai khoan cua ban da duoc %s \"%s\" dat lai. Vui long kiem tra email de biet mat khau moi.",
+                actorLabel, actorUsername);
+
+        // Send in-app notification
+        sendNotification(recipientUsername, Notification.NotificationType.PROFILE_CHANGED,
+                title, message, null, actorUsername);
+        
+        // Send email with password reset as a profile change
+        if (recipientEmail != null && !recipientEmail.isBlank()) {
+            try {
+                ProfileChange.ChangeSet changes = new ProfileChange.ChangeSet();
+                changes.addChange("Mat khau", "(khong hien thi)", newPassword);
+                
+                emailService.sendProfileChangeNotification(
+                    recipientEmail, displayName, actorUsername, actorRole, changes);
+                log.info("Password reset email sent to: {}", recipientEmail);
+            } catch (Exception e) {
+                log.error("Failed to send password reset email to {}: {}", recipientEmail, e.getMessage());
             }
         }
     }
