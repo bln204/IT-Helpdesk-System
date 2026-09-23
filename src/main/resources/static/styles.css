@@ -856,16 +856,27 @@ body.dark .toggle-thumb {
   gap: 10px;
   margin: 14px 0;
   align-items: center;
+  flex-wrap: nowrap;
 }
 
 #filter-search {
-  flex: 1;
-  min-width: 0;
+  width: 180px;
+  flex: none;
+}
+
+.toolbar .custom-select {
+  display: inline-block;
+  width: auto;
 }
 
 .toolbar .custom-select select {
-  min-width: 160px;
-  max-width: 200px;
+  min-width: 180px;
+  max-width: none;
+}
+
+.toolbar button,
+.toolbar .inline-toggle {
+  flex-shrink: 0;
 }
 
 .toolbar > input,
@@ -1908,8 +1919,7 @@ body.dark .pending-section h4 {
 
 .custom-select {
   position: relative;
-  display: block;
-  width: 100%;
+  display: inline-block;
 }
 
 .custom-select select {
