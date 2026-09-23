@@ -1,0 +1,27 @@
+/* ==================== Main CSS Import File ==================== */
+
+/* Import base styles */
+@import './base/variables.css';
+@import './base/reset.css';
+@import './base/typography.css';
+
+/* Import component styles */
+@import './components/buttons.css';
+@import './components/forms.css';
+@import './components/modals.css';
+@import './components/tabs.css';
+@import './components/badges.css';
+@import './components/cards.css';
+@import './components/notifications.css';
+@import './components/tables.css';
+
+/* Import layout styles */
+@import './layout/main.css';
+@import './layout/sidebar.css';
+@import './layout/responsive.css';
+
+/* Import page styles */
+@import './pages/tickets.css';
+@import './pages/reports.css';
+@import './pages/admin.css';
+@import './pages/auth.css';

@@ -1,0 +1,144 @@
+/* ==================== Badge Styles ==================== */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-active {
+  background: rgba(28, 141, 136, 0.12);
+  color: var(--teal);
+}
+
+.status-pending {
+  background: rgba(255, 200, 0, 0.15);
+  color: #b8860b;
+}
+
+.status-disabled {
+  background: rgba(161, 38, 38, 0.1);
+  color: #a12626;
+}
+
+.status-rejected {
+  background: rgba(161, 38, 38, 0.15);
+  color: #8b0000;
+}
+
+/* Dark mode support for status badges */
+body.dark .status-active {
+  background: rgba(123, 214, 207, 0.15);
+  color: var(--teal);
+}
+
+body.dark .status-pending {
+  background: rgba(255, 200, 0, 0.2);
+  color: #ffd700;
+}
+
+body.dark .status-disabled,
+body.dark .status-rejected {
+  background: rgba(255, 100, 100, 0.15);
+  color: #ff6b6b;
+}
+
+/* Priority badges */
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.priority.low {
+  background: #e6f7ed;
+  color: #0f7b46;
+}
+
+.priority.medium {
+  background: #fff4d9;
+  color: #a86b00;
+}
+
+.priority.high {
+  background: #ffe1d6;
+  color: #b23a2e;
+}
+
+.priority.urgent {
+  background: #ffe0ee;
+  color: #a0135d;
+}
+
+/* Status badges for tickets */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.status.new {
+  background: #e7f0ff;
+  color: #1b4f9b;
+}
+
+.status.in-progress {
+  background: #e2f3ff;
+  color: #0b5f7a;
+}
+
+.status.blocked {
+  background: #fde8e8;
+  color: #a12626;
+}
+
+.status.resolved {
+  background: #e4f6ef;
+  color: #187d50;
+}
+
+.status.closed {
+  background: #f1f1f1;
+  color: #5b5b5b;
+}
+
+/* Pending badge */
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #a12626;
+  color: white;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.pending-badge.hidden {
+  display: none;
+}
+
+/* Pill style */
+.pill {
+  border: 1px solid rgba(31, 111, 120, 0.35);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: var(--teal);
+}

@@ -1,0 +1,53 @@
+/* ==================== Table Styles ==================== */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  margin-top: 12px;
+}
+
+body.dark .table-wrap {
+  background: #121823;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface);
+}
+
+.data-table select,
+.data-table button {
+  font-size: 0.85rem;
+}
+
+.actions-cell button {
+  margin-right: 6px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}

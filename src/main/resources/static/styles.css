@@ -1694,18 +1694,6 @@ body.dark .user-approval-info.rejected {
   align-items: center;
   justify-content: center;
 }
-  height: 18px;
-  padding: 0 5px;
-  background: #a12626;
-  color: white;
-  border-radius: 9px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .notification-badge.hidden {
   display: none;
 }

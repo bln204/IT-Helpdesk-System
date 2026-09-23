@@ -1,0 +1,95 @@
+/* ==================== Modal Styles ==================== */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 32, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: min(560px, 90vw);
+  box-shadow: var(--shadow);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-header.compact {
+  margin-bottom: 8px;
+}
+
+.panel-header.compact h4 {
+  margin: 0;
+}
+
+.panel header h3 {
+  margin: 0 0 6px;
+}
+
+.panel header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+/* Rejection Modal Form */
+.modal-rejection-form {
+  margin-top: 16px;
+}
+
+.modal-rejection-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.modal-rejection-form textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.modal-rejection-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Close button */
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.close-btn:hover {
+  color: var(--ink);
+}

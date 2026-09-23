@@ -59,7 +59,9 @@ public class SecurityConfig {
                     "/styles.css",
                     "/app.js",
                     "/favicon.ico",
-                    "/api/auth/login"
+                    "/api/auth/login",
+                    "/css/**",
+                    "/js/**"
                 ).permitAll()
                 .requestMatchers(
                     "/api/test/**"

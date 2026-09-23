@@ -1,0 +1,249 @@
+/* ==================== Sidebar/Navigation Styles ==================== */
+.nav-card {
+  background: var(--panel);
+  padding: 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: sticky;
+  top: 16px;
+  align-self: stretch;
+  height: calc(100vh - 32px);
+}
+
+.nav-card.hidden {
+  display: none;
+}
+
+.nav-toggle {
+  display: none;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.logo {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.logo-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(30, 27, 22, 0.06);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  position: relative;
+  font-weight: 700;
+}
+
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  inset: 0;
+}
+
+.logo-mark-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(31, 111, 120, 0.85), rgba(255, 122, 89, 0.9));
+  position: absolute;
+  inset: 0;
+}
+
+.logo > div span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.nav-links {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-links a {
+  width: 100%;
+}
+
+.nav-card a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  background: var(--lavender);
+}
+
+.nav-card a.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.nav-card a.hidden {
+  display: none;
+}
+
+/* Theme toggle */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 8px 12px;
+}
+
+.theme-toggle .theme-label {
+  font-size: 0.85rem;
+}
+
+.toggle-track {
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(31, 111, 120, 0.25);
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+body.dark .toggle-track {
+  background: rgba(123, 214, 207, 0.5) !important;
+}
+
+body.dark .toggle-thumb {
+  transform: translateX(18px) !important;
+}
+
+/* Nav Dropdown */
+.nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-dropdown > a {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-dropdown > a::after {
+  content: '▼';
+  font-size: 8px;
+  margin-left: 4px;
+}
+
+.nav-dropdown-content {
+  display: none;
+  position: absolute;
+  background: var(--panel);
+  min-width: 160px;
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+  z-index: 100;
+  top: 100%;
+  left: 0;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.nav-dropdown:hover .nav-dropdown-content {
+  display: block;
+}
+
+.nav-dropdown-content a {
+  display: block;
+  padding: 10px 16px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.nav-dropdown-content a:hover {
+  background: var(--surface);
+}
+
+body.dark .nav-dropdown-content {
+  background: var(--panel);
+}
+
+/* Responsive nav */
+@media (max-width: 1024px) {
+  .nav-card {
+    position: relative;
+    top: 0;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+  }
+  
+  .nav-toggle {
+    display: inline-flex;
+    margin-left: auto;
+  }
+  
+  .nav-menu {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+  }
+  
+  .nav-card.open {
+    flex-wrap: wrap;
+  }
+  
+  .nav-card.open .nav-menu {
+    display: flex;
+  }
+  
+  .nav-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+  
+  .theme-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  #logout-btn {
+    width: 100%;
+  }
+  
+  .nav-card .logo {
+    flex-shrink: 0;
+  }
+}

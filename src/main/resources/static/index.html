@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
@@ -176,10 +176,10 @@
                 </label>
               </div>
               <div class="button-row">
-                <button id="update-status-btn" type="button">Cập nhật trạng thái</button>
-                <button id="update-priority-btn" class="secondary" type="button">Cập nhật độ ưu tiên</button>
-                <button id="update-assignee-btn" class="secondary" type="button">Cập nhật người phân công</button>
-                <button id="assign-me-btn" class="ghost" type="button">Giao cho tôi</button>
+                <button id="update-status-btn" type="button" onclick="ticketService_updateStatus()">Cập nhật trạng thái</button>
+                <button id="update-priority-btn" class="secondary" type="button" onclick="ticketService_updatePriority()">Cập nhật độ ưu tiên</button>
+                <button id="update-assignee-btn" class="secondary" type="button" onclick="ticketService_updateAssignee()">Cập nhật người phân công</button>
+                <button id="assign-me-btn" class="ghost" type="button" onclick="ticketService_assignToMe()">Giao cho tôi</button>
               </div>
             </div>
             <div class="stack hidden" id="comment-panel">
@@ -760,6 +760,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

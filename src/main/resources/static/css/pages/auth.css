@@ -1,0 +1,61 @@
+/* ==================== Login/Auth Styles ==================== */
+.login-container {
+  max-width: 520px;
+  margin: 0 auto;
+  padding-top: 10vh;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-error {
+  background: linear-gradient(135deg, rgba(161, 38, 38, 0.05) 0%, rgba(255, 122, 89, 0.08) 100%);
+  border: 1px solid rgba(161, 38, 38, 0.15);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.login-error-icon {
+  font-size: 2.5rem;
+  margin-bottom: 8px;
+}
+
+.login-error-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #a12626;
+  margin-bottom: 8px;
+}
+
+.login-error-message {
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.login-error-contact {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.login-error-reason {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(161, 38, 38, 0.08);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #8b0000;
+  font-style: italic;
+}
+
+.login-prefill-note {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

@@ -1,0 +1,15 @@
+/* ==================== CSS Variables ==================== */
+:root {
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --ink: #1c1f2a;
+  --muted: #6c6f80;
+  --accent: #ff7a59;
+  --accent-dark: #d95d3f;
+  --teal: #1c8d88;
+  --lavender: #eef0ff;
+  --shadow: 0 18px 40px rgba(31, 35, 50, 0.12);
+  --radius: 16px;
+  --border: rgba(30, 27, 22, 0.1);
+  --surface: #f9fafc;
+}
