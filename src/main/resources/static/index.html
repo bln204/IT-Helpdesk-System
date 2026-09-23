@@ -95,25 +95,31 @@
       </header>
       <div class="toolbar">
         <input id="filter-search" placeholder="Tìm kiếm phiếu hỗ trợ" />
-        <select id="filter-assignee">
-          <option value="">Tất cả người được phân công</option>
-          <option value="UNASSIGNED">Chưa phân công</option>
-        </select>
-        <select id="filter-status">
-          <option value="">Tất cả trạng thái</option>
-          <option value="NEW">Mới</option>
-          <option value="IN_PROGRESS">Đang xử lý</option>
-          <option value="BLOCKED">Bị chặn</option>
-          <option value="CLOSED">Đã đóng</option>
-        </select>
-        <select id="filter-sort">
-          <option value="createdAt,desc">Mới nhất</option>
-          <option value="createdAt,asc">Cũ nhất</option>
-          <option value="priority,desc">Độ ưu tiên (cao → thấp)</option>
-          <option value="priority,asc">Độ ưu tiên (thấp → cao)</option>
-          <option value="status,asc">Trạng thái</option>
-          <option value="assigneeDisplay,asc">Người được phân công (A → Z)</option>
-        </select>
+        <div class="custom-select">
+          <select id="filter-assignee">
+            <option value="">Tất cả người được phân công</option>
+            <option value="UNASSIGNED">Chưa phân công</option>
+          </select>
+        </div>
+        <div class="custom-select">
+          <select id="filter-status">
+            <option value="">Tất cả trạng thái</option>
+            <option value="NEW">Mới</option>
+            <option value="IN_PROGRESS">Đang xử lý</option>
+            <option value="BLOCKED">Bị chặn</option>
+            <option value="CLOSED">Đã đóng</option>
+          </select>
+        </div>
+        <div class="custom-select">
+          <select id="filter-sort">
+            <option value="createdAt,desc">Mới nhất</option>
+            <option value="createdAt,asc">Cũ nhất</option>
+            <option value="priority,desc">Độ ưu tiên (cao → thấp)</option>
+            <option value="priority,asc">Độ ưu tiên (thấp → cao)</option>
+            <option value="status,asc">Trạng thái</option>
+            <option value="assigneeDisplay,asc">Người được phân công (A → Z)</option>
+          </select>
+        </div>
         <button id="refresh-btn" class="secondary" type="button">Làm mới</button>
         <button id="clear-filters-btn" class="ghost" type="button">Xóa bộ lọc</button>
         <label class="inline-toggle">
@@ -138,29 +144,35 @@
               <div class="split">
                 <label>
                   Trạng thái
-                  <select id="status-select">
-                    <option value="NEW">Mới</option>
-                    <option value="IN_PROGRESS">Đang xử lý</option>
-                    <option value="BLOCKED">Bị chặn</option>
-                    <option value="CLOSED">Đã đóng</option>
-                  </select>
+                  <div class="custom-select">
+                    <select id="status-select">
+                      <option value="NEW">Mới</option>
+                      <option value="IN_PROGRESS">Đang xử lý</option>
+                      <option value="BLOCKED">Bị chặn</option>
+                      <option value="CLOSED">Đã đóng</option>
+                    </select>
+                  </div>
                 </label>
                 <label>
                   Độ ưu tiên
-                  <select id="priority-select">
-                    <option value="LOW">Thấp</option>
-                    <option value="MEDIUM">Trung bình</option>
-                    <option value="HIGH">Cao</option>
-                    <option value="URGENT">Khẩn cấp</option>
-                  </select>
+                  <div class="custom-select">
+                    <select id="priority-select">
+                      <option value="LOW">Thấp</option>
+                      <option value="MEDIUM">Trung bình</option>
+                      <option value="HIGH">Cao</option>
+                      <option value="URGENT">Khẩn cấp</option>
+                    </select>
+                  </div>
                 </label>
               </div>
               <div class="split">
                 <label class="full-span">
                   Người được phân công
-                  <select id="assignee-input">
-                    <option value="UNASSIGNED">Chưa phân công</option>
-                  </select>
+                  <div class="custom-select">
+                    <select id="assignee-input">
+                      <option value="UNASSIGNED">Chưa phân công</option>
+                    </select>
+                  </div>
                 </label>
               </div>
               <div class="button-row">
@@ -174,10 +186,12 @@
               <h4>Thêm bình luận</h4>
               <label>
                 Phạm vi hiển thị
-                <select id="comment-visibility">
-                  <option value="PUBLIC">Công khai</option>
-                  <option value="INTERNAL">Nội bộ</option>
-                </select>
+                <div class="custom-select">
+                  <select id="comment-visibility">
+                    <option value="PUBLIC">Công khai</option>
+                    <option value="INTERNAL">Nội bộ</option>
+                  </select>
+                </div>
               </label>
               <label>
                 Bình luận
@@ -187,12 +201,30 @@
             </div>
             <div class="ticket-tabs">
               <button class="tab-btn active" type="button" data-tab="comments">Bình luận</button>
+              <button class="tab-btn" type="button" data-tab="attachments">Đính kèm</button>
               <button class="tab-btn" type="button" data-tab="audit">Nhật ký kiểm tra</button>
               <button class="tab-btn" type="button" data-tab="assignments">Phân công</button>
             </div>
             <div class="tab-panel active" data-tab-panel="comments">
               <h4>Bình luận</h4>
               <div id="comments-list" class="list"></div>
+            </div>
+            <div class="tab-panel" data-tab-panel="attachments">
+              <h4>Đính kèm</h4>
+              <div id="ticket-attachments-list" class="list"></div>
+              <div class="attachment-upload-section" id="attachment-upload-section">
+                <div class="file-upload-area" id="ticket-file-upload-area">
+                  <input type="file" id="ticket-attachment-input" accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.pdf" multiple />
+                  <div class="file-upload-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                  </div>
+                  <span>Chọn tệp đính kèm</span>
+                </div>
+                <div id="ticket-selected-files" class="selected-files-list"></div>
+                <button id="upload-attachment-btn" class="secondary" type="button">Tải lên</button>
+              </div>
             </div>
             <div class="tab-panel" data-tab-panel="audit">
               <div class="panel-header compact">
@@ -436,22 +468,26 @@
             <div class="split">
               <label>
                 Độ ưu tiên
-                <select name="priority" required>
-                  <option value="LOW">Thấp</option>
-                  <option value="MEDIUM">Trung bình</option>
-                  <option value="HIGH">Cao</option>
-                  <option value="URGENT">Khẩn cấp</option>
-                </select>
+                <div class="custom-select">
+                  <select name="priority" required>
+                    <option value="LOW">Thấp</option>
+                    <option value="MEDIUM">Trung bình</option>
+                    <option value="HIGH">Cao</option>
+                    <option value="URGENT">Khẩn cấp</option>
+                  </select>
+                </div>
               </label>
               <label>
                 Danh mục
-                <select name="category" required>
-                  <option value="SOFTWARE">Phần mềm</option>
-                  <option value="ACCESS">Quyền truy cập</option>
-                  <option value="NETWORK">Mạng</option>
-                  <option value="HARDWARE">Phần cứng</option>
-                  <option value="OTHER">Khác</option>
-                </select>
+                <div class="custom-select">
+                  <select name="category" required>
+                    <option value="SOFTWARE">Phần mềm</option>
+                    <option value="ACCESS">Quyền truy cập</option>
+                    <option value="NETWORK">Mạng</option>
+                    <option value="HARDWARE">Phần cứng</option>
+                    <option value="OTHER">Khác</option>
+                  </select>
+                </div>
               </label>
             </div>
             <label>
@@ -464,9 +500,19 @@
             </label>
             <label class="hidden" id="assignee-create-label">
               Người được phân công (tùy chọn)
-              <select name="assigneeName" id="assignee-create">
-                <option value="UNASSIGNED">Chưa phân công</option>
-              </select>
+              <div class="custom-select">
+                <select name="assigneeName" id="assignee-create">
+                  <option value="UNASSIGNED">Chưa phân công</option>
+                </select>
+              </div>
+            </label>
+            <label>
+              Đính kèm (tùy chọn)
+              <div class="file-upload-wrapper">
+                <input type="file" id="attachment-input" accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.pdf" multiple />
+                <div id="selected-files" class="selected-files-list"></div>
+                <p class="file-hint">Hỗ trợ: JPG, PNG, GIF, WEBP, TXT, PDF (tối đa 10MB)</p>
+              </div>
             </label>
             <button type="submit">Tạo phiếu hỗ trợ</button>
           </form>
@@ -507,15 +553,19 @@
         </label>
         <label>
           Vai trò
-          <select name="role" id="admin-role-select" required>
-            <option value="NHAN_VIEN">Nhân viên</option>
-          </select>
+          <div class="custom-select">
+            <select name="role" id="admin-role-select" required>
+              <option value="NHAN_VIEN">Nhân viên</option>
+            </select>
+          </div>
         </label>
         <label>
           Phòng ban
-          <select name="departmentId" id="admin-dept-select">
-            <option value="">— Chọn phòng ban —</option>
-          </select>
+          <div class="custom-select">
+            <select name="departmentId" id="admin-dept-select">
+              <option value="">— Chọn phòng ban —</option>
+            </select>
+          </div>
         </label>
         <button type="submit">Tạo người dùng</button>
       </form>
@@ -579,13 +629,17 @@
         <div class="split">
           <label>
             Vai trò
-            <select id="user-role-select"></select>
+            <div class="custom-select">
+              <select id="user-role-select"></select>
+            </div>
           </label>
           <label>
             Phòng ban
-            <select id="user-dept-select" disabled>
-              <option value="">— Chọn phòng ban —</option>
-            </select>
+            <div class="custom-select">
+              <select id="user-dept-select" disabled>
+                <option value="">— Chọn phòng ban —</option>
+              </select>
+            </div>
           </label>
         </div>
         <div class="split">
@@ -665,9 +719,11 @@
         </label>
         <label>
           Trưởng phòng
-          <select id="dept-manager" style="width: 100%;">
-            <option value="">-- Chọn trưởng phòng --</option>
-          </select>
+          <div class="custom-select select-full">
+            <select id="dept-manager">
+              <option value="">-- Chọn trưởng phòng --</option>
+            </select>
+          </div>
         </label>
         <div class="toggle-row">
           <span class="toggle-label">Phòng ban đang hoạt động</span>

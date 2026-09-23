@@ -18,6 +18,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.core.io.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +26,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.example.ticketing.auth.UserAccount;
@@ -39,10 +42,15 @@ import jakarta.validation.Valid;
 @Validated
 public class TicketController {
     private final TicketService ticketService;
+    private final TicketAttachmentService attachmentService;
     private final UserAccountRepository userAccountRepository;
 
-    public TicketController(TicketService ticketService, UserAccountRepository userAccountRepository) {
+    public TicketController(
+            TicketService ticketService,
+            TicketAttachmentService attachmentService,
+            UserAccountRepository userAccountRepository) {
         this.ticketService = ticketService;
+        this.attachmentService = attachmentService;
         this.userAccountRepository = userAccountRepository;
     }
 
@@ -217,6 +225,55 @@ public class TicketController {
         return ticketService.listComments(id, user.getRole(), visibility).stream()
             .map(TicketDtos.TicketCommentResponse::from)
             .toList();
+    }
+
+    // ==================== Attachment Endpoints ====================
+
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<TicketDtos.TicketAttachmentResponse> uploadAttachment(
+        @PathVariable Long id,
+        @RequestPart("file") MultipartFile file,
+        Authentication authentication
+    ) {
+        // Verify ticket exists
+        ticketService.getTicket(id);
+        UserAccount user = getCurrentUser(authentication);
+        
+        TicketAttachment attachment = attachmentService.uploadAttachment(
+            id,
+            file,
+            authentication.getName()
+        );
+        
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(TicketDtos.TicketAttachmentResponse.from(attachment));
+    }
+
+    @GetMapping("/{id}/attachments")
+    public List<TicketDtos.TicketAttachmentResponse> listAttachments(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        // Verify ticket exists
+        ticketService.getTicket(id);
+        return attachmentService.getAttachmentsByTicketId(id).stream()
+            .map(TicketDtos.TicketAttachmentResponse::from)
+            .toList();
+    }
+
+    @GetMapping("/attachments/{attachmentId}/download")
+    public ResponseEntity<Resource> downloadAttachment(
+        @PathVariable Long attachmentId,
+        Authentication authentication
+    ) {
+        TicketAttachment attachment = attachmentService.getAttachment(attachmentId);
+        Resource resource = attachmentService.downloadAttachment(attachmentId);
+        
+        String contentDisposition = "attachment; filename=\"" + attachment.getOriginalName() + "\"";
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(attachment.getContentType()))
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+            .body(resource);
     }
 
     @GetMapping("/{id}/audit")

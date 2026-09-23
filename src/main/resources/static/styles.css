@@ -319,7 +319,6 @@ label.invalid {
 }
 
 input,
-select,
 textarea {
   padding: 10px 12px;
   border-radius: 10px;
@@ -330,7 +329,6 @@ textarea {
 }
 
 input:focus,
-select:focus,
 textarea:focus {
   outline: none;
   border-color: rgba(31, 111, 120, 0.6);
@@ -857,7 +855,28 @@ body.dark .toggle-thumb {
   display: flex;
   gap: 10px;
   margin: 14px 0;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+#filter-search {
+  width: 180px;
+  flex: none;
+}
+
+.toolbar .custom-select {
+  display: inline-block;
+  width: auto;
+}
+
+.toolbar .custom-select select {
+  min-width: 180px;
+  max-width: none;
+}
+
+.toolbar button,
+.toolbar .inline-toggle {
+  flex-shrink: 0;
 }
 
 .toolbar > input,
@@ -1087,6 +1106,33 @@ body.dark .toggle-thumb {
 .list-item {
   border-left: 3px solid rgba(31, 111, 120, 0.5);
   padding-left: 10px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-item strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.list-item .time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.list-item .actor {
+  font-size: 0.8rem;
+  color: var(--teal);
+}
+
+.list-item .assignment-change {
+  font-size: 0.9rem;
+  color: var(--ink);
 }
 
 .profile-layout {
@@ -1867,4 +1913,221 @@ body.dark .pending-section h4 {
 
 .pending-badge.hidden {
   display: none;
+}
+
+/* ==================== Custom Select Dropdown ==================== */
+
+.custom-select {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-select select {
+  appearance: none;
+  width: 100%;
+  padding: 10px 36px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 0.9rem;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.custom-select select:focus {
+  outline: none;
+  border-color: rgba(28, 141, 136, 0.6);
+  box-shadow: 0 0 0 3px rgba(28, 141, 136, 0.12);
+}
+
+.custom-select select:hover {
+  border-color: rgba(28, 141, 136, 0.4);
+}
+
+.custom-select::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  pointer-events: none;
+}
+
+body.dark .custom-select select {
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+body.dark .custom-select::after {
+  border-top-color: var(--muted);
+}
+
+/* Select variants */
+.select-sm select {
+  padding: 6px 28px 6px 10px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.select-full select {
+  width: 100%;
+}
+
+/* Toolbar selects */
+.toolbar .custom-select select {
+  min-width: 160px;
+}
+
+/* Status/Priority color variants for selects */
+select option[value="NEW"],
+select option[value="IN_PROGRESS"],
+select option[value="BLOCKED"],
+select option[value="RESOLVED"],
+select option[value="CLOSED"] {
+  padding: 8px;
+}
+
+/* ==================== File Upload Area ==================== */
+
+.file-upload-area {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.2s ease;
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-upload-area:hover,
+.file-upload-area.dragover {
+  border-color: var(--teal);
+  background: rgba(28, 141, 136, 0.04);
+}
+
+.file-upload-area input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.file-upload-area > .file-upload-icon,
+.file-upload-area > svg {
+  width: 24px;
+  height: 24px;
+  color: var(--teal);
+  flex-shrink: 0;
+}
+
+.file-upload-area > span {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* ==================== File Attachments ==================== */
+
+.file-upload-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.selected-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.selected-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.remove-file-btn:hover {
+  color: #a12626;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--surface);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.attachment-icon {
+  font-size: 1.5rem;
+}
+
+.attachment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name {
+  display: block;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.attachment-name:hover {
+  text-decoration: underline;
+}
+
+.attachment-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.attachment-upload-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body.dark .attachment-item {
+  background: rgba(255, 255, 255, 0.05);
 }

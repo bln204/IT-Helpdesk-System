@@ -674,4 +674,60 @@ public final class TicketDtos {
             return createdAt;
         }
     }
+
+    public static class TicketAttachmentResponse {
+        private Long id;
+        private Long ticketId;
+        private String fileName;
+        private String originalName;
+        private String contentType;
+        private Long fileSize;
+        private String uploadedBy;
+        private LocalDateTime createdAt;
+
+        public static TicketAttachmentResponse from(TicketAttachment attachment) {
+            TicketAttachmentResponse response = new TicketAttachmentResponse();
+            response.id = attachment.getId();
+            response.ticketId = attachment.getTicket().getId();
+            response.fileName = attachment.getFileName();
+            response.originalName = attachment.getOriginalName();
+            response.contentType = attachment.getContentType();
+            response.fileSize = attachment.getFileSize();
+            response.uploadedBy = attachment.getUploadedBy();
+            response.createdAt = attachment.getCreatedAt();
+            return response;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public Long getTicketId() {
+            return ticketId;
+        }
+
+        public String getFileName() {
+            return fileName;
+        }
+
+        public String getOriginalName() {
+            return originalName;
+        }
+
+        public String getContentType() {
+            return contentType;
+        }
+
+        public Long getFileSize() {
+            return fileSize;
+        }
+
+        public String getUploadedBy() {
+            return uploadedBy;
+        }
+
+        public LocalDateTime getCreatedAt() {
+            return createdAt;
+        }
+    }
 }

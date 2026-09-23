@@ -40,3 +40,5 @@ docs/
 WORKING_RULES.md
 
 .env
+
+uploads/
