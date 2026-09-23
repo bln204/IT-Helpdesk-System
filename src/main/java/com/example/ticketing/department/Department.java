@@ -16,6 +16,7 @@ import com.example.ticketing.auth.UserAccount;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @Entity
 @Table(name = "departments")
@@ -35,6 +36,7 @@ public class Department {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
+    @JsonIgnoreProperties({"passwordHash", "department", "enabled", "approved", "authorities", "accountNonExpired", "accountNonLocked", "credentialsNonExpired"})
     private UserAccount manager;
 
     @Column(nullable = false)

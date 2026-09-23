@@ -438,7 +438,6 @@ const userDeptSelect = document.getElementById('user-dept-select');
 const userEnabledSelect = document.getElementById('user-enabled-select');
 const userPasswordInput = document.getElementById('user-password-input');
 const userSaveRole = document.getElementById('user-save-role');
-const userSaveEnabled = document.getElementById('user-save-enabled');
 const userSavePassword = document.getElementById('user-save-password');
 const userSaveProfile = document.getElementById('user-save-profile');
 const userDelete = document.getElementById('user-delete');
@@ -467,6 +466,30 @@ const profileAvatarPreview = document.getElementById('profile-avatar-preview');
 const profileAvatarFallback = document.getElementById('profile-avatar-fallback');
 const profileCard = document.getElementById('profile-card');
 
+// Department Management Elements
+const departmentsSection = document.getElementById('departments-section');
+const departmentsTbody = document.getElementById('departments-tbody');
+const openDeptModal = document.getElementById('open-dept-modal');
+const deptModal = document.getElementById('dept-modal');
+const closeDeptModal = document.getElementById('close-dept-modal');
+const deptForm = document.getElementById('dept-form');
+const deptModalTitle = document.getElementById('dept-modal-title');
+const deptModalDesc = document.getElementById('dept-modal-desc');
+const deptId = document.getElementById('dept-id');
+const deptCode = document.getElementById('dept-code');
+const deptName = document.getElementById('dept-name');
+const deptDescription = document.getElementById('dept-description');
+const deptEnabled = document.getElementById('dept-enabled');
+const deptManager = document.getElementById('dept-manager');
+const deptSubmitBtn = document.getElementById('dept-submit-btn');
+const deptCancelBtn = document.getElementById('dept-cancel-btn');
+const deptDeleteModal = document.getElementById('dept-delete-modal');
+const closeDeptDeleteModal = document.getElementById('close-dept-delete-modal');
+const deptDeleteWarning = document.getElementById('dept-delete-warning');
+const deptDeleteAffected = document.getElementById('dept-delete-affected');
+const deptConfirmDelete = document.getElementById('dept-confirm-delete');
+const deptCancelDelete = document.getElementById('dept-cancel-delete');
+
 let selectedTicket = null;
 let userPage = 0;
 const userPageSize = 10;
@@ -474,6 +497,48 @@ let selectedUser = null;
 let userAuditPage = 0;
 const userAuditPageSize = 5;
 let userAuditEntries = [];
+let selectedDepartment = null;
+let selectedDepartmentForDelete = null;
+
+// Tab state
+let currentAdminTab = 'users';
+
+// Tab click handler
+const initTabs = () => {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      if (!tab) return;
+      
+      // Check role restrictions for departments tab
+      if (tab === 'departments' && !isAdminOrGiamDoc()) {
+        return;
+      }
+      
+      // Update active tab
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Show/hide content
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      const tabContent = document.getElementById(`tab-${tab}`);
+      if (tabContent) tabContent.classList.remove('hidden');
+      
+      currentAdminTab = tab;
+      
+      // Load data for tab
+      if (tab === 'departments') {
+        loadDepartmentsTable();
+      }
+    });
+  });
+};
+
+// Role check helper
+const isAdminOrGiamDoc = () => {
+  return currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'GIAM_DOC');
+};
+
 const userAvatarMap = new Map();
 let userAvatarReady = false;
 const reportButtons = [engineerReportBtn, requesterReportBtn, backlogReportBtn, slaReportBtn].filter(Boolean);
@@ -875,10 +940,26 @@ const applyUserDetailControls = () => {
     if (selectedUser.role !== 'ADMIN') {
       canDelete = true;
     }
+    // Admin can edit all users
+    canEdit = true;
+    // Admin can reset password for all users (except self)
+    if (selectedUser.username !== currentUser?.username) {
+      canResetPassword = true;
+    }
+  } else if (isGiamDoc()) {
+    // GIAM_DOC: can edit and reset password for all users (except ADMIN)
+    if (selectedUser.role !== 'ADMIN') {
+      canEdit = true;
+      canResetPassword = true;
+      canDelete = true;
+    }
   } else if (isTruongPhong()) {
-    // TruongPhong: can edit only approved NHAN_VIEN in their department
+    // TruongPhong: can edit only approved users in their department (except ADMIN/GIAM_DOC/other TRUONG_PHONG)
     if (isApprovedUser && canManage) {
       canEdit = true;
+    }
+    // TruongPhong can reset password for NHAN_VIEN in their department
+    if (selectedUser.role === 'NHAN_VIEN' && canManage) {
       canResetPassword = true;
     }
     // TruongPhong can request delete for NHAN_VIEN in their department (any status)
@@ -928,7 +1009,7 @@ const applyUserDetailControls = () => {
     userEmail.disabled = !canEdit;
   }
   if (userEnabledSelect) {
-    userEnabledSelect.value = selectedUser.enabled ? 'true' : 'false';
+    userEnabledSelect.checked = selectedUser.enabled;
     userEnabledSelect.disabled = !canEdit;
   }
   if (userPasswordInput) {
@@ -936,9 +1017,6 @@ const applyUserDetailControls = () => {
   }
   if (userSaveRole) {
     userSaveRole.disabled = true; // Always disabled
-  }
-  if (userSaveEnabled) {
-    userSaveEnabled.disabled = !canEdit;
   }
   if (userSavePassword) {
     userSavePassword.disabled = !canResetPassword;
@@ -1353,18 +1431,34 @@ const routeGuard = () => {
   }
   
   const hash = window.location.hash || '#/login';
-  const viewName = hash.replace('#/', '');
+  const hashPath = hash.replace('#/', '');
+  const viewName = hashPath.split('/')[0];
+  const subRoute = hashPath.split('/')[1];
   
   if (!token && viewName !== 'login') {
     showView('login');
     return;
   }
   
-  // Role-based route guards
-  if (viewName === 'admin' && !canManageUsers()) {
-    showView('tickets');
+  // Handle admin sub-routes
+  if (viewName === 'admin') {
+    if (!canManageUsers()) {
+      showView('tickets');
+      return;
+    }
+    showView('admin');
+    // Switch to appropriate tab
+    if (subRoute === 'departments' && isAdminOrGiamDoc()) {
+      const deptTab = document.querySelector('.tab-btn[data-tab="departments"]');
+      if (deptTab) deptTab.click();
+    } else {
+      const userTab = document.querySelector('.tab-btn[data-tab="users"]');
+      if (userTab) userTab.click();
+    }
     return;
   }
+  
+  // Role-based route guards
   if (viewName === 'reports' && !isStaff()) {
     showView('tickets');
     return;
@@ -1383,6 +1477,15 @@ const updateNavVisibility = () => {
     const roles = required.split(',').map((role) => role.trim()).filter(Boolean);
     const allowed = roles.some((role) => hasRole(role));
     link.classList.toggle('hidden', !allowed);
+  });
+  
+  // Show/hide tab buttons based on role
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const required = btn.dataset.role;
+    if (!required) return;
+    const roles = required.split(',').map((role) => role.trim()).filter(Boolean);
+    const allowed = roles.some((role) => hasRole(role));
+    btn.classList.toggle('hidden', !allowed);
   });
   
   // Show/hide assignee field based on role
@@ -2041,15 +2144,18 @@ const loadSlaReport = async () => {
 };
 
 const updatePendingBadge = (count) => {
-  const pendingBadge = document.getElementById('pending-users-badge');
-  if (pendingBadge) {
-    if (count > 0) {
-      pendingBadge.textContent = count;
-      pendingBadge.classList.remove('hidden');
-    } else {
-      pendingBadge.classList.add('hidden');
+  const badges = ['pending-users-badge', 'pending-users-badge-nav', 'pending-users-badge-dd'];
+  badges.forEach(id => {
+    const badge = document.getElementById(id);
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = count;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
     }
-  }
+  });
 };
 
 const loadAdminUsers = async () => {
@@ -2074,6 +2180,11 @@ const loadAdminUsers = async () => {
   // ADMIN sees with action buttons, TRUONG_PHONG sees as pending (read-only)
   if (isAdmin() || isTruongPhong()) {
     await loadDeleteRequests();
+  }
+
+  // Load departments section (visible for ADMIN and GIAM_DOC)
+  if (isAdmin() || isGiamDoc()) {
+    await loadDepartmentsTable();
   }
 
   // Count truly pending users from the loaded data (approved=false AND no rejectionReason)
@@ -3058,17 +3169,6 @@ if (userSaveRole) {
   });
 }
 
-if (userSaveEnabled) {
-  userSaveEnabled.addEventListener('click', async () => {
-    if (!selectedUser) return;
-    await request(`/api/users/${selectedUser.id}/enabled`, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: userEnabledSelect.value === 'true' }),
-    });
-    await loadAdminUsers();
-  });
-}
-
 if (userSavePassword) {
   userSavePassword.addEventListener('click', async () => {
     if (!selectedUser) return;
@@ -3100,6 +3200,30 @@ if (userSaveProfile) {
     ])) {
       return;
     }
+    
+    const hasPasswordChange = userPasswordInput && userPasswordInput.value.trim();
+    const hasProfileChange = 
+      userDisplayName.value !== selectedUser.displayName ||
+      userTitle.value !== selectedUser.title ||
+      userEmail.value !== selectedUser.email;
+    
+    // If password change is included, use the combined API
+    if (hasPasswordChange && hasProfileChange) {
+      const payload = {
+        displayName: userDisplayName.value,
+        title: userTitle.value,
+        email: userEmail.value,
+        newPassword: userPasswordInput.value,
+      };
+      await request(`/api/users/${selectedUser.id}/profile-and-password`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      userPasswordInput.value = '';
+      loadUsers();
+      return;
+    }
+    
     const updates = [];
     
     if (userRoleSelect && !userRoleSelect.disabled && userRoleSelect.value !== selectedUser.role) {
@@ -3114,7 +3238,7 @@ if (userSaveProfile) {
     }
     
     if (userEnabledSelect && !userEnabledSelect.disabled) {
-      const enabledValue = userEnabledSelect.value === 'true';
+      const enabledValue = userEnabledSelect.checked;
       if (enabledValue !== selectedUser.enabled) {
         updates.push(
           request(`/api/users/${selectedUser.id}/enabled`, {
@@ -3127,7 +3251,8 @@ if (userSaveProfile) {
       }
     }
     
-    if (userPasswordInput && userPasswordInput.value.trim()) {
+    // Password only change
+    if (hasPasswordChange) {
       updates.push(
         request(`/api/users/${selectedUser.id}/password`, {
           method: 'PATCH',
@@ -3136,16 +3261,13 @@ if (userSaveProfile) {
       );
     }
     
+    // Profile only change
     const profilePayload = {
       displayName: userDisplayName.value,
       title: userTitle.value,
       email: userEmail.value,
     };
-    if (
-      profilePayload.displayName !== selectedUser.displayName ||
-      profilePayload.title !== selectedUser.title ||
-      profilePayload.email !== selectedUser.email
-    ) {
+    if (hasProfileChange) {
       updates.push(
         request(`/api/users/${selectedUser.id}/profile`, {
           method: 'PATCH',
@@ -3367,6 +3489,330 @@ if (rejectModal) {
   });
 }
 
+// ============ Department Management ============
+
+// Load departments list (for admin panel table)
+const loadDepartmentsTable = async () => {
+  if (!isAdmin() && !isGiamDoc()) return;
+  const deptTbody = document.getElementById('departments-tbody');
+  if (!deptTbody) return;
+
+  try {
+    const departments = await request('/api/departments/all');
+    
+    deptTbody.innerHTML = '';
+
+    if (departments.length === 0) {
+      deptTbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Chưa có phòng ban nào.</td></tr>';
+      return;
+    }
+
+    departments.forEach((dept) => {
+      const row = document.createElement('tr');
+      const statusClass = dept.enabled ? 'status-active' : 'status-disabled';
+      const statusBadge = dept.enabled ? 'Hoạt động' : 'Vô hiệu hoá';
+      const managerName = dept.managerName || '—';
+      const userCount = dept.userCount || 0;
+      const description = dept.description || '—';
+
+      row.innerHTML = `
+        <td><strong>${dept.code}</strong></td>
+        <td>${dept.name}</td>
+        <td title="${description}">${description.length > 30 ? description.substring(0, 30) + '...' : description}</td>
+        <td>${managerName}</td>
+        <td>${userCount}</td>
+        <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
+        <td>
+          <button class="btn-edit-dept btn-small secondary" data-dept-id="${dept.id}">Sửa</button>
+          <button class="btn-delete-dept btn-small ghost" data-dept-id="${dept.id}" data-dept-name="${dept.name}">Xóa</button>
+        </td>
+      `;
+      deptTbody.appendChild(row);
+    });
+
+    // Attach event listeners for edit buttons
+    deptTbody.querySelectorAll('.btn-edit-dept').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const deptId = btn.dataset.deptId;
+        const dept = departments.find(d => d.id == deptId);
+        if (dept) openEditDeptModal(dept);
+      });
+    });
+
+    // Attach event listeners for delete buttons
+    deptTbody.querySelectorAll('.btn-delete-dept').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const deptId = btn.dataset.deptId;
+        const deptName = btn.dataset.deptName;
+        const dept = departments.find(d => d.id == deptId);
+        if (dept) openDeleteDeptModal(dept);
+      });
+    });
+  } catch (error) {
+    console.error('Error loading departments:', error);
+    deptSection.classList.add('hidden');
+  }
+};
+
+// Open create department modal
+const openCreateDeptModal = () => {
+  selectedDepartment = null;
+  deptModalTitle.textContent = 'Tạo phòng ban';
+  deptModalDesc.textContent = 'Thêm một phòng ban mới vào hệ thống.';
+  deptId.value = '';
+  deptCode.value = '';
+  deptCode.disabled = false;
+  deptName.value = '';
+  deptDescription.value = '';
+  deptEnabled.checked = true;
+  document.getElementById('dept-enabled-label').classList.add('hidden');
+  deptSubmitBtn.textContent = 'Tạo phòng ban';
+  deptModal.classList.remove('hidden');
+  deptModal.setAttribute('aria-hidden', 'false');
+  deptCode.focus();
+  
+  // Load users into manager dropdown
+  loadManagersForDepartment();
+};
+
+// Open edit department modal
+const openEditDeptModal = (dept) => {
+  selectedDepartment = dept;
+  deptModalTitle.textContent = 'Sửa phòng ban';
+  deptModalDesc.textContent = `Cập nhật thông tin phòng ban "${dept.name}".`;
+  deptId.value = dept.id;
+  deptCode.value = dept.code;
+  deptCode.disabled = true; // Cannot change code
+  deptName.value = dept.name;
+  deptDescription.value = dept.description || '';
+  deptEnabled.checked = dept.enabled;
+  document.getElementById('dept-enabled-label').classList.remove('hidden');
+  deptSubmitBtn.textContent = 'Lưu thay đổi';
+  deptModal.classList.remove('hidden');
+  deptModal.setAttribute('aria-hidden', 'false');
+  deptName.focus();
+  
+  // Load users into manager dropdown and select current manager
+  console.log('[DEBUG] openEditDeptModal called, managerId:', dept.managerId);
+  loadManagersForDepartment(dept.managerId);
+};
+
+// Load users into manager dropdown
+let managersCache = [];
+const loadManagersForDepartment = async (selectedId = null) => {
+  console.log('[DEBUG] loadManagersForDepartment called, selectedId:', selectedId);
+  console.log('[DEBUG] deptManager element:', deptManager);
+  
+  if (!deptManager) {
+    console.error('[DEBUG] deptManager is null!');
+    return;
+  }
+  
+  deptManager.innerHTML = '<option value="">-- Chọn trưởng phòng --</option>';
+  
+  try {
+    const response = await request('/api/users?page=0&size=100');
+    console.log('[DEBUG] loadManagersForDepartment response:', response);
+    
+    // Handle both paginated response and direct array
+    let users = [];
+    if (Array.isArray(response)) {
+      users = response;
+    } else if (response && typeof response === 'object') {
+      users = response.content || response.users || Object.values(response)[0] || [];
+    }
+    
+    managersCache = users;
+    console.log('[DEBUG] Parsed users count:', users.length);
+    
+    for (const user of managersCache) {
+      // Skip ADMIN and GIAM_DOC roles from manager selection
+      if (user.role === 'ADMIN' || user.role === 'GIAM_DOC') continue;
+      
+      const option = document.createElement('option');
+      option.value = user.id;
+      option.textContent = `${user.displayName || user.username} (${user.username})`;
+      if (selectedId && user.id === selectedId) {
+        option.selected = true;
+        console.log('[DEBUG] Selected manager:', option.textContent);
+      }
+      deptManager.appendChild(option);
+    }
+    
+    console.log('[DEBUG] deptManager options count:', deptManager.options.length);
+  } catch (e) {
+    console.error('Error loading managers:', e);
+  }
+};
+
+// Open delete department confirmation modal
+const openDeleteDeptModal = (dept) => {
+  selectedDepartmentForDelete = dept;
+  const userCount = dept.userCount || 0;
+  
+  deptDeleteWarning.textContent = `Bạn có chắc muốn xóa phòng ban "${dept.name}" (${dept.code})?`;
+  
+  if (userCount > 0) {
+    deptDeleteAffected.innerHTML = `
+      <strong>Cảnh báo:</strong> Phòng ban này có <strong>${userCount} nhân viên</strong>. 
+      Khi xóa, tất cả nhân viên sẽ được gỡ khỏi phòng ban này (phòng ban = null).
+    `;
+    deptDeleteAffected.classList.remove('hidden');
+  } else {
+    deptDeleteAffected.classList.add('hidden');
+  }
+  
+  deptDeleteModal.classList.remove('hidden');
+  deptDeleteModal.setAttribute('aria-hidden', 'false');
+};
+
+// Close department modal
+const closeDeptModalHandler = () => {
+  // Blur focused element before hiding modal (accessibility)
+  if (document.activeElement && deptModal.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+  deptModal.classList.add('hidden');
+  deptModal.setAttribute('aria-hidden', 'true');
+  selectedDepartment = null;
+};
+
+// Close delete confirmation modal
+const closeDeptDeleteModalHandler = () => {
+  deptDeleteModal.classList.add('hidden');
+  deptDeleteModal.setAttribute('aria-hidden', 'true');
+  selectedDepartmentForDelete = null;
+};
+
+// Handle department form submission
+deptForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  
+  const code = deptCode.value.trim();
+  const name = deptName.value.trim();
+  const description = deptDescription.value.trim();
+  const enabled = deptEnabled.checked;
+
+  if (!code) {
+    alert('Mã phòng ban là bắt buộc.');
+    deptCode.focus();
+    return;
+  }
+  if (!name) {
+    alert('Tên phòng ban là bắt buộc.');
+    deptName.focus();
+    return;
+  }
+
+  try {
+    const managerId = deptManager.value ? parseInt(deptManager.value) : null;
+    
+    if (selectedDepartment) {
+      // Update existing department
+      await request(`/api/departments/${selectedDepartment.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: name,
+          description: description,
+          enabled: enabled,
+          managerId: managerId
+        }),
+      });
+      alert('Đã cập nhật phòng ban thành công!');
+    } else {
+      // Create new department
+      await request('/api/departments', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: code,
+          name: name,
+          description: description,
+          managerId: managerId
+        }),
+      });
+      alert('Đã tạo phòng ban mới thành công!');
+    }
+    closeDeptModalHandler();
+    await loadDepartmentsTable();
+    // Refresh department dropdowns in user forms
+    await loadDepartmentsForSelects();
+  } catch (error) {
+    alert('Lỗi: ' + error.message);
+  }
+});
+
+// Handle delete confirmation
+deptConfirmDelete.addEventListener('click', async () => {
+  if (!selectedDepartmentForDelete) return;
+  
+  if (!confirm(`Xác nhận xóa phòng ban "${selectedDepartmentForDelete.name}"?`)) return;
+  
+  try {
+    await request(`/api/departments/${selectedDepartmentForDelete.id}`, {
+      method: 'DELETE',
+    });
+    alert('Đã xóa phòng ban thành công!');
+    closeDeptDeleteModalHandler();
+    await loadDepartments();
+    // Refresh department dropdowns in user forms
+    await loadDepartmentsForSelects();
+  } catch (error) {
+    alert('Lỗi: ' + error.message);
+  }
+});
+
+// Load departments for select dropdowns
+const loadDepartmentsForSelects = async () => {
+  try {
+    const depts = await request('/api/departments');
+    // Populate admin dept select (for user creation)
+    if (adminDeptSelect) {
+      populateDepartmentSelect(adminDeptSelect, depts);
+    }
+    // Also update user detail modal dept select
+    if (userDeptSelect) {
+      populateDepartmentSelect(userDeptSelect, depts);
+    }
+  } catch (error) {
+    console.error('Error loading departments for selects:', error);
+  }
+};
+
+// Department modal event listeners
+if (openDeptModal) {
+  openDeptModal.addEventListener('click', openCreateDeptModal);
+}
+if (closeDeptModal) {
+  closeDeptModal.addEventListener('click', closeDeptModalHandler);
+}
+if (deptCancelBtn) {
+  deptCancelBtn.addEventListener('click', closeDeptModalHandler);
+}
+if (deptModal) {
+  deptModal.addEventListener('click', (e) => {
+    if (e.target === deptModal) {
+      closeDeptModalHandler();
+    }
+  });
+}
+
+// Delete confirmation modal event listeners
+if (closeDeptDeleteModal) {
+  closeDeptDeleteModal.addEventListener('click', closeDeptDeleteModalHandler);
+}
+if (deptCancelDelete) {
+  deptCancelDelete.addEventListener('click', closeDeptDeleteModalHandler);
+}
+if (deptDeleteModal) {
+  deptDeleteModal.addEventListener('click', (e) => {
+    if (e.target === deptDeleteModal) {
+      closeDeptDeleteModalHandler();
+    }
+  });
+}
+
 adminCreateForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!validateForm(adminCreateForm)) {
@@ -3491,6 +3937,7 @@ if (navToggle && navCard) {
 updateTokenStatus();
 updateNavVisibility();
 routeGuard();
+initTabs();
 initReportDates();
 initAutoRefresh();
 initTicketInfiniteScroll();
