@@ -466,9 +466,10 @@ public class UserAdminService {
     /**
      * Cập nhật profile.
      * - User có thể tự sửa profile của mình (sau khi được duyệt)
-     * - ADMIN: có thể sửa profile của bất kỳ user nào
-     * - TRUONG_PHONG: có thể sửa profile của user trong phòng ban mình
-     * - GIAM_DOC: có thể sửa profile của user khác
+     * - ADMIN/GIAM_DOC có thể sửa profile của user khác (KHÔNG ÁP DỤNG cho tài khoản bị từ chối)
+     * 
+     * Lưu ý: Tài khoản bị từ chối (approved=false, rejectionReason!=null) chỉ có thể bị XOÁ,
+     * không thể chỉnh sửa bất kỳ thông tin nào.
      */
     public UserAccount updateProfile(
         Long id,
@@ -513,7 +514,7 @@ public class UserAdminService {
                 "Bạn không có quyền chỉnh sửa thông tin của tài khoản này.");
         }
         
-        // Self-edit: check if account is approved
+        // Self-edit: check if account is approved (not pending, not rejected)
         if (isSelf && !user.isApproved()) {
             userAuditService.log(
                 UserAuditAction.PROFILE_EDIT_REJECTED,

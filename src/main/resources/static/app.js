@@ -920,13 +920,23 @@ const applyUserDetailControls = () => {
   const isApprovedUser = selectedUser.approved;
   
   // Determine edit permissions based on role and status
+  // IMPORTANT: Rejected users (approved=false, rejectionReason!=null) CANNOT be edited
+  // - They can ONLY be deleted by ADMIN
+  // - No one can edit their profile, change enabled status, or reset password
   let canEdit = false;
   let canResetPassword = false;
   let canDelete = false;
   
-  if (isAdmin()) {
-    // Admin: can edit and delete all users (except other admins for delete)
-    // Check if target is not an admin
+  if (isRejectedUser) {
+    // Rejected accounts: only ADMIN can delete, NO ONE can edit
+    if (isAdmin()) {
+      // Admin can only DELETE rejected users, cannot edit
+      canDelete = selectedUser.role !== 'ADMIN';
+    }
+    // No canEdit or canResetPassword for rejected users
+  } else if (isAdmin()) {
+    // Admin: can delete all users (except other admins)
+    // Admin cannot edit user details from detail modal (only from pending table)
     if (selectedUser.role !== 'ADMIN') {
       canDelete = true;
     }
@@ -1014,6 +1024,17 @@ const applyUserDetailControls = () => {
   if (userSaveProfile) {
     userSaveProfile.disabled = !canEdit;
   }
+  
+  // Show/hide rejected user warning
+  const userRejectedWarning = document.getElementById('user-rejected-warning');
+  if (userRejectedWarning) {
+    if (isRejectedUser) {
+      userRejectedWarning.classList.remove('hidden');
+    } else {
+      userRejectedWarning.classList.add('hidden');
+    }
+  }
+  
   if (userDelete) {
     userDelete.disabled = !canDelete;
   }
@@ -2502,6 +2523,11 @@ const selectUser = async (user) => {
     userRejectionForm.classList.add('hidden');
     userRejectionForm.style.display = 'none';
   }
+  // Hide rejected warning by default
+  const userRejectedWarning = document.getElementById('user-rejected-warning');
+  if (userRejectedWarning) {
+    userRejectedWarning.classList.add('hidden');
+  }
 
   // Check user status
   const isPending = !user.approved && !user.rejectionReason;
@@ -2549,6 +2575,11 @@ const selectUser = async (user) => {
       if (userApprovalBy && user.approvedBy) {
         userApprovalBy.textContent = 'Bởi: ' + user.approvedBy;
       }
+    }
+    // Show warning that this rejected account cannot be edited
+    const userRejectedWarning = document.getElementById('user-rejected-warning');
+    if (userRejectedWarning) {
+      userRejectedWarning.classList.remove('hidden');
     }
     // Ensure buttons are hidden for rejected users
     if (userApprovalActions) userApprovalActions.classList.add('hidden');
