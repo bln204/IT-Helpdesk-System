@@ -212,11 +212,37 @@ public class UserAdminService {
             departmentId, UserRole.Role.TRUONG_PHONG);
     }
 
+    /**
+     * Lấy audit log.
+     * - ADMIN/GIAM_DOC: xem tất cả audit log
+     * - TRUONG_PHONG: xem tất cả audit log (nhưng chỉ quản lý users trong phòng ban)
+     */
+    @Transactional(readOnly = true)
+    public List<UserAudit> listAudit(String actorRole, Long actorDepartmentId) {
+        return userAuditService.listAll();
+    }
+
+    /**
+     * Lấy audit log theo target username.
+     * - ADMIN/GIAM_DOC: xem audit log của bất kỳ user nào
+     * - TRUONG_PHONG: xem audit log của bất kỳ user nào (nhưng chỉ quản lý users trong phòng ban)
+     */
+    @Transactional(readOnly = true)
+    public List<UserAudit> listAudit(String targetUsername, String actorRole, Long actorDepartmentId) {
+        return userAuditService.listForTarget(targetUsername);
+    }
+
+    /**
+     * Legacy method for backward compatibility - ADMIN/GIAM_DOC only.
+     */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit() {
         return userAuditService.listAll();
     }
 
+    /**
+     * Legacy method for backward compatibility - ADMIN/GIAM_DOC only.
+     */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit(String targetUsername) {
         return userAuditService.listForTarget(targetUsername);
@@ -455,7 +481,6 @@ public class UserAdminService {
         Long actorDepartmentId
     ) {
         UserAccount user = getUser(id);
-        rejectAvatarChange(user.getAvatarUrl(), avatarUrl);
 
         // Check if actor can modify this user
         boolean isSelf = user.getUsername().equals(actorUsername);
@@ -501,25 +526,17 @@ public class UserAdminService {
             throw new UserNotApprovedActionException("chỉnh sửa profile");
         }
 
-        // Track changes for notification
-        StringBuilder changes = new StringBuilder();
-        if (!normalize(displayName).equals(normalize(user.getDisplayName()))) {
-            changes.append("Họ tên");
-        }
-        if (!normalize(title).equals(normalize(user.getTitle()))) {
-            if (changes.length() > 0) changes.append(", ");
-            changes.append("Chức danh");
-        }
-        if (!normalize(email).equals(normalize(user.getEmail()))) {
-            if (changes.length() > 0) changes.append(", ");
-            changes.append("Email");
-        }
-        final String changesStr = changes.toString();
+        // Track changes for notification with old/new values
+        ProfileChange.ChangeSet changes = new ProfileChange.ChangeSet();
+        changes.addChange("Họ tên", user.getDisplayName(), displayName);
+        changes.addChange("Chức danh", user.getTitle(), title);
+        changes.addChange("Email", user.getEmail(), email);
 
-        // Update fields
+        // Update fields (avatarUrl is ignored - avatar changes are disabled)
         user.setDisplayName(displayName);
         user.setTitle(title);
         user.setEmail(email);
+        // Note: avatarUrl is NOT updated - changes are disabled
 
         userAuditService.log(
             UserAuditAction.PROFILE_UPDATED,
@@ -533,14 +550,124 @@ public class UserAdminService {
         UserAccount savedUser = userAccountRepository.save(user);
         
         // Send notification to the user whose profile was changed (only if not self-edit)
-        if (!isSelf && savedUser.getEmail() != null && !savedUser.getEmail().isBlank()) {
+        if (!isSelf && savedUser.getEmail() != null && !savedUser.getEmail().isBlank() && changes.hasChanges()) {
             notificationService.notifyProfileChanged(
                 savedUser.getUsername(),
                 savedUser.getEmail(),
                 savedUser.getDisplayName(),
                 actorUsername,
                 actorRole,
-                changesStr
+                changes
+            );
+        }
+        
+        return savedUser;
+    }
+    
+    /**
+     * Cập nhật profile VÀ reset password trong một thao tác.
+     * Gửi một email thông báo chung cho tất cả thay đổi.
+     */
+    public UserAccount updateProfileAndPassword(
+        Long id,
+        String displayName,
+        String title,
+        String avatarUrl,
+        String email,
+        String newPassword,
+        String actorUsername,
+        String actorRole,
+        Long actorDepartmentId
+    ) {
+        UserAccount user = getUser(id);
+
+        // Check if actor can modify this user
+        boolean isSelf = user.getUsername().equals(actorUsername);
+        
+        // Permission check same as updateProfile
+        boolean canEdit = false;
+        if (isSelf) {
+            canEdit = true;
+        } else if ("ADMIN".equals(actorRole)) {
+            canEdit = true;
+        } else if ("GIAM_DOC".equals(actorRole)) {
+            canEdit = true;
+        } else if ("TRUONG_PHONG".equals(actorRole)) {
+            if (user.getRole() != UserRole.Role.ADMIN && 
+                user.getRole() != UserRole.Role.GIAM_DOC && 
+                user.getRole() != UserRole.Role.TRUONG_PHONG &&
+                user.getDepartment() != null && 
+                user.getDepartment().getId().equals(actorDepartmentId)) {
+                canEdit = true;
+            }
+        }
+        
+        if (!canEdit) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                "Bạn không có quyền chỉnh sửa thông tin của tài khoản này.");
+        }
+        
+        // Self-edit: check if account is approved
+        if (isSelf && !user.isApproved()) {
+            throw new UserNotApprovedActionException("chỉnh sửa profile");
+        }
+
+        // Track changes for notification
+        ProfileChange.ChangeSet changes = new ProfileChange.ChangeSet();
+        
+        // Track profile changes
+        if (!user.getDisplayName().equals(displayName)) {
+            changes.addChange("Họ tên", user.getDisplayName(), displayName);
+        }
+        if (!String.valueOf(user.getTitle()).equals(String.valueOf(title))) {
+            changes.addChange("Chức danh", user.getTitle(), title);
+        }
+        if (!String.valueOf(user.getEmail()).equals(String.valueOf(email))) {
+            changes.addChange("Email", user.getEmail(), email);
+        }
+        
+        // Track password change
+        boolean passwordChanged = false;
+        if (newPassword != null && !newPassword.isBlank()) {
+            user.setPasswordHash(passwordEncoder.encode(newPassword));
+            user.markPasswordChanged();
+            changes.addChange("Mật khẩu", "(không hiển thị)", newPassword);
+            passwordChanged = true;
+            
+            userAuditService.log(
+                UserAuditAction.PASSWORD_RESET,
+                actorUsername,
+                actorRole,
+                user.getUsername()
+            );
+        }
+
+        // Update profile fields
+        user.setDisplayName(displayName);
+        user.setTitle(title);
+        user.setEmail(email);
+        // Note: avatarUrl is NOT updated - changes are disabled
+
+        userAuditService.log(
+            UserAuditAction.PROFILE_UPDATED,
+            actorUsername,
+            actorRole,
+            user.getUsername(),
+            null,
+            "profile and/or password updated"
+        );
+        
+        UserAccount savedUser = userAccountRepository.save(user);
+        
+        // Send combined notification to the user (only if not self-edit)
+        if (!isSelf && savedUser.getEmail() != null && !savedUser.getEmail().isBlank() && changes.hasChanges()) {
+            notificationService.notifyProfileAndPasswordChanged(
+                savedUser.getUsername(),
+                savedUser.getEmail(),
+                savedUser.getDisplayName(),
+                actorUsername,
+                actorRole,
+                changes
             );
         }
         
@@ -567,21 +694,36 @@ public class UserAdminService {
 
     /**
      * Reset password.
-     * - ADMIN/GIAM_DOC: reset được password tất cả users
-     * - User thường: không reset được
+     * - ADMIN/GIAM_DOC: reset password tất cả users
+     * - TRUONG_PHONG: reset password NHAN_VIEN trong phòng ban của mình
      */
     public UserAccount resetPassword(
         Long id,
         String rawPassword,
         String actorUsername,
-        String actorRole
+        String actorRole,
+        Long actorDepartmentId
     ) {
         UserAccount user = getUser(id);
 
-        // Only ADMIN and GIAM_DOC can reset passwords
-        if (!"ADMIN".equals(actorRole) && !"GIAM_DOC".equals(actorRole)) {
+        // Permission check based on role
+        boolean canReset = false;
+        
+        if ("ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole)) {
+            // ADMIN and GIAM_DOC can reset any user's password
+            canReset = true;
+        } else if ("TRUONG_PHONG".equals(actorRole)) {
+            // TRUONG_PHONG can only reset password for NHAN_VIEN in their department
+            if (user.getRole() == UserRole.Role.NHAN_VIEN &&
+                user.getDepartment() != null &&
+                user.getDepartment().getId().equals(actorDepartmentId)) {
+                canReset = true;
+            }
+        }
+        
+        if (!canReset) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Only ADMIN and GIAM_DOC can reset passwords.");
+                "Bạn không có quyền đặt lại mật khẩu cho tài khoản này.");
         }
 
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
@@ -594,7 +736,19 @@ public class UserAdminService {
             user.getUsername()
         );
         
-        return userAccountRepository.save(user);
+        UserAccount savedUser = userAccountRepository.save(user);
+        
+        // Send notification and email to user
+        notificationService.notifyPasswordReset(
+            user.getUsername(),
+            user.getEmail(),
+            user.getDisplayName(),
+            actorUsername,
+            actorRole,
+            rawPassword
+        );
+        
+        return savedUser;
     }
 
     /**
@@ -795,7 +949,12 @@ public class UserAdminService {
     }
 
     private void rejectAvatarChange(String currentAvatarUrl, String requestedAvatarUrl) {
-        if (!normalize(currentAvatarUrl).equals(normalize(requestedAvatarUrl))) {
+        // Normalize both values: null becomes empty string, trim whitespace
+        String current = normalize(currentAvatarUrl);
+        String requested = normalize(requestedAvatarUrl);
+        
+        // Only reject if there's an actual change (not just null vs empty string)
+        if (!current.equals(requested)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar changes are disabled.");
         }
     }

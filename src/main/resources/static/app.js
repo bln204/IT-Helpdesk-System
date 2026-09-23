@@ -932,10 +932,25 @@ const applyUserDetailControls = () => {
     }
     // Admin can edit all users
     canEdit = true;
+    // Admin can reset password for all users (except self)
+    if (selectedUser.username !== currentUser?.username) {
+      canResetPassword = true;
+    }
+  } else if (isGiamDoc()) {
+    // GIAM_DOC: can edit and reset password for all users (except ADMIN)
+    if (selectedUser.role !== 'ADMIN') {
+      canEdit = true;
+      canResetPassword = true;
+      canDelete = true;
+    }
   } else if (isTruongPhong()) {
     // TruongPhong: can edit only approved users in their department (except ADMIN/GIAM_DOC/other TRUONG_PHONG)
     if (isApprovedUser && canManage) {
       canEdit = true;
+    }
+    // TruongPhong can reset password for NHAN_VIEN in their department
+    if (selectedUser.role === 'NHAN_VIEN' && canManage) {
+      canResetPassword = true;
     }
     // TruongPhong can request delete for NHAN_VIEN in their department (any status)
     if (selectedUser.role === 'NHAN_VIEN' && canManage) {
@@ -3154,6 +3169,30 @@ if (userSaveProfile) {
     ])) {
       return;
     }
+    
+    const hasPasswordChange = userPasswordInput && userPasswordInput.value.trim();
+    const hasProfileChange = 
+      userDisplayName.value !== selectedUser.displayName ||
+      userTitle.value !== selectedUser.title ||
+      userEmail.value !== selectedUser.email;
+    
+    // If password change is included, use the combined API
+    if (hasPasswordChange && hasProfileChange) {
+      const payload = {
+        displayName: userDisplayName.value,
+        title: userTitle.value,
+        email: userEmail.value,
+        newPassword: userPasswordInput.value,
+      };
+      await request(`/api/users/${selectedUser.id}/profile-and-password`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      userPasswordInput.value = '';
+      loadUsers();
+      return;
+    }
+    
     const updates = [];
     
     if (userRoleSelect && !userRoleSelect.disabled && userRoleSelect.value !== selectedUser.role) {
@@ -3181,7 +3220,8 @@ if (userSaveProfile) {
       }
     }
     
-    if (userPasswordInput && userPasswordInput.value.trim()) {
+    // Password only change
+    if (hasPasswordChange) {
       updates.push(
         request(`/api/users/${selectedUser.id}/password`, {
           method: 'PATCH',
@@ -3190,16 +3230,13 @@ if (userSaveProfile) {
       );
     }
     
+    // Profile only change
     const profilePayload = {
       displayName: userDisplayName.value,
       title: userTitle.value,
       email: userEmail.value,
     };
-    if (
-      profilePayload.displayName !== selectedUser.displayName ||
-      profilePayload.title !== selectedUser.title ||
-      profilePayload.email !== selectedUser.email
-    ) {
+    if (hasProfileChange) {
       updates.push(
         request(`/api/users/${selectedUser.id}/profile`, {
           method: 'PATCH',

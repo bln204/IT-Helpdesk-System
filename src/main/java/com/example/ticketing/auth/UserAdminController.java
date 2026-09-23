@@ -125,18 +125,27 @@ public class UserAdminController {
             .toList();
     }
 
+    /**
+     * Lấy audit log.
+     * - ADMIN/GIAM_DOC: xem tất cả audit log
+     * - TRUONG_PHONG: chỉ xem audit log của users trong phòng ban của mình
+     */
     @GetMapping("/audit")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public List<UserDtos.UserAuditResponse> listAudit(
         @RequestParam(required = false) String targetUsername,
         Authentication authentication
     ) {
+        UserAccount actor = getCurrentUser(authentication);
+        
+        List<UserAudit> audits;
         if (targetUsername == null || targetUsername.isBlank()) {
-            return userAdminService.listAudit().stream()
-                .map(UserDtos.UserAuditResponse::from)
-                .toList();
+            audits = userAdminService.listAudit(actor.getRole().name(), actor.getDepartmentId());
+        } else {
+            audits = userAdminService.listAudit(targetUsername, actor.getRole().name(), actor.getDepartmentId());
         }
-        return userAdminService.listAudit(targetUsername).stream()
+        
+        return audits.stream()
             .map(UserDtos.UserAuditResponse::from)
             .toList();
     }
@@ -233,9 +242,10 @@ public class UserAdminController {
     /**
      * Reset password.
      * - ADMIN/GIAM_DOC: reset password tất cả users
+     * - TRUONG_PHONG: reset password NHAN_VIEN trong phòng ban của mình
      */
     @PatchMapping("/{id}/password")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<Void> resetPassword(
         @PathVariable Long id,
         @Valid @RequestBody UserDtos.UserPasswordResetRequest request,
@@ -246,9 +256,40 @@ public class UserAdminController {
             id,
             request.getPassword(),
             actor.getUsername(),
-            actor.getRole().name()
+            actor.getRole().name(),
+            actor.getDepartmentId()
         );
         return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Cập nhật profile VÀ reset password trong một thao tác.
+     * Gửi một email thông báo chung cho tất cả thay đổi.
+     * 
+     * - ADMIN: sửa profile bất kỳ user, reset password bất kỳ user
+     * - GIAM_DOC: sửa profile bất kỳ user, reset password bất kỳ user
+     * - TRUONG_PHONG: sửa profile user trong phòng mình, reset password NHAN_VIEN trong phòng mình
+     */
+    @PatchMapping("/{id}/profile-and-password")
+    public UserDtos.UserResponse updateProfileAndPassword(
+        @PathVariable Long id,
+        @Valid @RequestBody UserDtos.UserProfileAndPasswordUpdateRequest request,
+        Authentication authentication
+    ) {
+        UserAccount actor = getCurrentUser(authentication);
+        return UserDtos.UserResponse.from(
+            userAdminService.updateProfileAndPassword(
+                id,
+                request.getDisplayName(),
+                request.getTitle(),
+                request.getAvatarUrl(),
+                request.getEmail(),
+                request.getNewPassword(),
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId()
+            )
+        );
     }
 
     /**

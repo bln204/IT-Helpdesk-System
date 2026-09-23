@@ -84,6 +84,9 @@ public class EmailService {
      */
     @Async
     public void sendHtmlEmail(String to, String subject, String htmlContent) {
+        log.info("Attempting to send HTML email to: {}, subject: {}", to, subject);
+        log.info("Email enabled: {}, SMTP configured: {}", emailEnabled, isEmailConfigured());
+        
         if (!emailEnabled) {
             log.info("Email sending is disabled. Would send HTML email to: {}, subject: {}", to, subject);
             return;
@@ -103,26 +106,42 @@ public class EmailService {
             helper.setSubject(subject);
             helper.setText(htmlContent, true); // true = isHtml
 
+            log.info("Sending email via SMTP: host={}, port=587, from={}", 
+                mailSender.getClass().getSimpleName(), formatFromAddress());
             mailSender.send(message);
             log.info("HTML email sent successfully to: {}, subject: {}", to, subject);
-        } catch (MessagingException | MailException e) {
-            log.error("Failed to send HTML email to: {}, subject: {}, error: {}", to, subject, e.getMessage());
+        } catch (MessagingException e) {
+            log.error("MessagingException - Failed to send HTML email to: {}, subject: {}, error: {}", to, subject, e.getMessage());
+            log.error("Full exception: ", e);
+        } catch (MailException e) {
+            log.error("MailException - Failed to send HTML email to: {}, subject: {}, error: {}", to, subject, e.getMessage());
+            log.error("Full exception type: {}", e.getClass().getName());
+            log.error("Full exception: ", e);
+        } catch (Exception e) {
+            log.error("Unexpected error sending email to: {}, subject: {}, error: {}", to, subject, e.getMessage());
+            log.error("Full exception: ", e);
         }
     }
 
     /**
-     * Send profile change notification email.
+     * Send profile change notification email with detailed changes.
+     * Shows each field that was changed along with old and new values.
      * 
      * @param to Recipient email address
      * @param displayName User's display name
      * @param actorUsername Who made the change
      * @param actorRole Role of the person who made the change
-     * @param changes Description of what was changed
+     * @param changes ChangeSet containing all profile changes
      */
     public void sendProfileChangeNotification(String to, String displayName, 
-                                            String actorUsername, String actorRole, String changes) {
+                                            String actorUsername, String actorRole, 
+                                            ProfileChange.ChangeSet changes) {
         String actorLabel = formatActorRole(actorRole);
-        String subject = String.format("[IT Ticketing] Thông tin tài khoản của bạn đã được thay đổi");
+        String subject = String.format("[IT Ticketing] Thong tin tai khoan cua ban da duoc thay doi");
+        
+        String changesHtml = changes.toHtmlContent();
+        int changeCount = changes.getChangeCount();
+        String changeCountText = changeCount == 1 ? "1 truong thong tin" : changeCount + " truong thong tin";
         
         String htmlContent = String.format("""
             <!DOCTYPE html>
@@ -131,31 +150,41 @@ public class EmailService {
                 <meta charset="UTF-8">
                 <style>
                     body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
-                    .content { padding: 20px; background-color: #f9f9f9; }
-                    .changes { background-color: #fff; border: 1px solid #ddd; padding: 15px; margin: 15px 0; border-radius: 5px; }
-                    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-                    .highlight { color: #4CAF50; font-weight: bold; }
+                    .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+                    .header { background-color: #2196F3; color: white; padding: 25px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { padding: 25px; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px; }
+                    .changes { background-color: #fff; border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+                    .warning { background-color: #fff3cd; border: 1px solid #ffc107; padding: 12px; margin-top: 20px; border-radius: 5px; font-size: 14px; }
+                    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; margin-top: 20px; }
+                    .greeting { font-size: 16px; margin-bottom: 15px; }
+                    .actor-info { background-color: #e3f2fd; padding: 10px 15px; border-radius: 5px; margin-bottom: 15px; }
                 </style>
             </head>
             <body>
                 <div class="container">
                     <div class="header">
-                        <h2>🔔 Thông báo thay đổi thông tin tài khoản</h2>
+                        <h1>Thong bao thay doi thong tin tai khoan</h1>
                     </div>
                     <div class="content">
-                        <p>Xin chào <strong>%s</strong>,</p>
-                        <p>Thông tin tài khoản của bạn đã được thay đổi bởi <span class="highlight">%s "%s"</span>.</p>
-                        <div class="changes">
-                            <h4>📋 Các thông tin đã được thay đổi:</h4>
-                            <p>%s</p>
+                        <p class="greeting">Xin chao <strong>%s</strong>,</p>
+                        
+                        <div class="actor-info">
+                            <p style="margin: 0;"><strong>%s "%s"</strong> da thay doi thong tin tai khoan cua ban.</p>
                         </div>
-                        <p>Nếu bạn không thực hiện thay đổi này, vui lòng liên hệ với quản trị viên ngay lập tức để bảo vệ tài khoản của bạn.</p>
+                        
+                        <p>He thong ghi nhan <strong>%d thay doi</strong>:</p>
+                        
+                        <div class="changes">
+                            %s
+                        </div>
+                        
+                        <div class="warning">
+                            <strong>Luu y:</strong> Neu ban khong thuc hien thay doi nay, vui long lien he voi quan tri vien ngay lap tuc de bao ve tai khoan cua ban.
+                        </div>
                     </div>
                     <div class="footer">
-                        <p>Đây là email tự động từ <strong>Hệ thống IT Ticketing</strong>.</p>
-                        <p>Vui lòng không trả lời email này.</p>
+                        <p>Day la email tu dong tu <strong>He thong IT Ticketing</strong>.</p>
+                        <p>Vui long khong tra loi email nay.</p>
                     </div>
                 </div>
             </body>
@@ -164,7 +193,8 @@ public class EmailService {
             displayName != null ? displayName : "User",
             actorLabel,
             actorUsername,
-            changes != null && !changes.isBlank() ? changes : "Không xác định");
+            changeCount,
+            changesHtml);
 
         sendHtmlEmail(to, subject, htmlContent);
     }

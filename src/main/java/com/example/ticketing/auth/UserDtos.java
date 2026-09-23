@@ -202,6 +202,73 @@ public final class UserDtos {
             this.password = password;
         }
     }
+    
+    /**
+     * Request to update profile and/or reset password in a single operation.
+     * Sends one combined email notification for all changes.
+     */
+    public static class UserProfileAndPasswordUpdateRequest {
+        @Size(max = 120)
+        private String displayName;
+
+        @Size(max = 120)
+        private String title;
+
+        @Size(max = 255)
+        private String avatarUrl;
+
+        @Email
+        @Size(max = 160)
+        private String email;
+        
+        // Optional: if provided, password will be reset to this value
+        @Size(min = 8, max = 128)
+        private String newPassword;
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public void setDisplayName(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getAvatarUrl() {
+            return avatarUrl;
+        }
+
+        public void setAvatarUrl(String avatarUrl) {
+            this.avatarUrl = avatarUrl;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+        
+        public String getNewPassword() {
+            return newPassword;
+        }
+        
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
+        }
+        
+        public boolean hasNewPassword() {
+            return newPassword != null && !newPassword.isBlank();
+        }
+    }
 
     public static class UserPasswordChangeRequest {
         @NotBlank
