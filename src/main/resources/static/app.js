@@ -409,6 +409,19 @@ const addCommentBtn = document.getElementById('add-comment-btn');
 const commentsList = document.getElementById('comments-list');
 const auditList = document.getElementById('audit-list');
 const assignmentsList = document.getElementById('assignments-list');
+const attachmentsList = document.getElementById('ticket-attachments-list');
+const attachmentInput = document.getElementById('attachment-input');
+const selectedFilesList = document.getElementById('selected-files');
+const uploadAttachmentBtn = document.getElementById('upload-attachment-btn');
+const ticketAttachmentInput = document.getElementById('ticket-attachment-input');
+const attachmentUploadSection = document.getElementById('attachment-upload-section');
+const ticketFileUploadArea = document.getElementById('ticket-file-upload-area');
+const ticketSelectedFiles = document.getElementById('ticket-selected-files');
+
+// Track selected files for create form
+let selectedFiles = [];
+// Track selected files for ticket detail
+let ticketSelectedFilesList = [];
 
 const reportFrom = document.getElementById('report-from');
 const reportTo = document.getElementById('report-to');
@@ -880,7 +893,6 @@ const loadUserAvatarMap = async () => {
     populateAssigneeSelect(filterAssignee, {
       includeAll: true,
       includeUnassigned: true,
-      useDisplayNameValues: true,
     });
     populateAssigneeSelect(assigneeInput, { includeUnassigned: true });
     populateAssigneeSelect(assigneeCreate, { includeUnassigned: true });
@@ -1143,7 +1155,7 @@ let engineerOptions = [];
 
 const populateAssigneeSelect = (
   select,
-  { includeAll = false, includeUnassigned = false, useDisplayNameValues = false } = {}
+  { includeAll = false, includeUnassigned = false } = {}
 ) => {
   if (!select) return;
   const current = select.value;
@@ -1163,8 +1175,9 @@ const populateAssigneeSelect = (
   engineerOptions.forEach((username) => {
     const displayName = getDisplayName(username);
     const option = document.createElement('option');
-    option.value = useDisplayNameValues && displayName ? displayName : username;
-    option.textContent = displayName || formatName(username);
+    // Display username (Tên đăng nhập) for consistency across all dropdowns
+    option.value = username;
+    option.textContent = formatName(username);
     option.dataset.username = username;
     if (displayName) {
       option.dataset.displayName = displayName;
@@ -1206,7 +1219,6 @@ const loadEngineerOptions = async () => {
     populateAssigneeSelect(filterAssignee, {
       includeAll: true,
       includeUnassigned: true,
-      useDisplayNameValues: true,
     });
     populateAssigneeSelect(assigneeInput, { includeUnassigned: true });
     populateAssigneeSelect(assigneeCreate, { includeUnassigned: true });
@@ -1697,7 +1709,7 @@ const selectTicket = async (ticket) => {
   ensureAssigneeOption(assigneeInput, full.assigneeName);
   assigneeInput.value = full.assigneeName || UNASSIGNED_VALUE;
   applyRoleControls();
-  await Promise.all([loadComments(full.id), loadAudit(full.id), loadAssignments(full.id)]);
+  await Promise.all([loadComments(full.id), loadAudit(full.id), loadAssignments(full.id), loadAttachments(full.id)]);
 };
 
 const loadComments = async (ticketId) => {
@@ -1764,6 +1776,152 @@ const loadAssignments = async (ticketId) => {
     item.textContent = `${prev} → ${next}`;
     assignmentsList.appendChild(item);
   });
+};
+
+// ==================== Attachment Functions ====================
+
+const loadAttachments = async (ticketId) => {
+  console.log('loadAttachments: Loading for ticketId =', ticketId);
+  try {
+    const data = await request(`/api/tickets/${ticketId}/attachments`);
+    console.log('loadAttachments: Received data =', data);
+    attachmentsList.innerHTML = '';
+    
+    if (!data || data.length === 0) {
+      attachmentsList.innerHTML = '<p class="muted">Chưa có tệp đính kèm.</p>';
+      return;
+    }
+    
+    data.forEach((attachment) => {
+      const item = document.createElement('div');
+      item.className = 'attachment-item';
+      
+      const icon = getFileIcon(attachment.contentType);
+      const size = formatFileSize(attachment.fileSize);
+      const date = new Date(attachment.createdAt).toLocaleString('vi-VN');
+      
+      const downloadLink = document.createElement('a');
+      downloadLink.href = '#';
+      downloadLink.className = 'attachment-name';
+      downloadLink.textContent = attachment.originalName;
+      downloadLink.style.color = 'var(--accent)';
+      downloadLink.style.textDecoration = 'none';
+      downloadLink.style.fontWeight = '500';
+      downloadLink.style.wordBreak = 'break-all';
+      downloadLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        downloadAttachmentFile(attachment.id, attachment.originalName, attachment.contentType);
+      });
+      
+      item.innerHTML = `<span class="attachment-icon">${icon}</span>`;
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'attachment-info';
+      infoDiv.appendChild(downloadLink);
+      const metaSpan = document.createElement('span');
+      metaSpan.className = 'attachment-meta';
+      metaSpan.textContent = `${size} • ${date}`;
+      infoDiv.appendChild(metaSpan);
+      item.appendChild(infoDiv);
+      attachmentsList.appendChild(item);
+    });
+  } catch (error) {
+    console.error('loadAttachments: Error =', error);
+    attachmentsList.innerHTML = '<p class="muted">Lỗi khi tải danh sách đính kèm.</p>';
+  }
+};
+
+const downloadAttachmentFile = async (attachmentId, fileName, contentType) => {
+  try {
+    const token = localStorage.getItem(tokenKey);
+    const response = await fetch(`/api/tickets/attachments/${attachmentId}/download`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Download error:', error);
+    alert('Lỗi khi tải tệp: ' + error.message);
+  }
+};
+
+const uploadAttachments = async (ticketId, files) => {
+  if (!files || files.length === 0) return;
+  
+  const token = localStorage.getItem(tokenKey);
+  let uploadCount = 0;
+  let errorCount = 0;
+  
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      // NOTE: Do NOT set Content-Type header manually with FormData!
+      // Browser must set it with the correct boundary
+      const response = await fetch(`/api/tickets/${ticketId}/attachments`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Content-Type will be auto-set to multipart/form-data with boundary
+        },
+        body: formData
+      });
+      
+      if (response.ok) {
+        uploadCount++;
+        console.log(`Uploaded: ${file.name}`);
+      } else {
+        errorCount++;
+        const errorText = await response.text();
+        console.error(`Upload failed for ${file.name}:`, response.status, errorText);
+        alert(`Lỗi khi tải lên tệp ${file.name}: ${errorText}`);
+      }
+    } catch (error) {
+      errorCount++;
+      console.error('Error uploading attachment:', error);
+      alert(`Lỗi khi tải lên tệp ${file.name}: ${error.message}`);
+    }
+  }
+  
+  console.log(`Upload complete: ${uploadCount} success, ${errorCount} failed`);
+  
+  // Refresh attachments list
+  await loadAttachments(ticketId);
+};
+
+const getFileIcon = (contentType) => {
+  if (!contentType) return '📄';
+  if (contentType.startsWith('image/')) return '🖼️';
+  if (contentType === 'application/pdf') return '📕';
+  if (contentType === 'text/plain') return '📝';
+  return '📎';
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return `${size.toFixed(1)} ${units[i]}`;
 };
 
 const updateStatus = async () => {
@@ -2877,11 +3035,23 @@ createForm.addEventListener('submit', async (event) => {
   const payload = Object.fromEntries(formData.entries());
   payload.assigneeName = normalizeAssigneeInput(payload.assigneeName);
   try {
-    await request('/api/tickets', {
+    const result = await request('/api/tickets', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    
+    // Save files to upload before clearing
+    const filesToUpload = [...selectedFiles];
+    
     createForm.reset();
+    selectedFiles = [];
+    if (selectedFilesList) selectedFilesList.innerHTML = '';
+    
+    // Upload attachments if any
+    if (filesToUpload.length > 0) {
+      await uploadAttachments(result.id, filesToUpload);
+    }
+    
     await loadTickets({ reset: true });
     if (createModal) {
       createModal.classList.add('hidden');
@@ -2954,6 +3124,131 @@ const initTicketInfiniteScroll = () => {
     });
   }, { root: document.querySelector('.app-main'), threshold: 0.1 });
   observer.observe(ticketsSentinel);
+};
+
+// ==================== File Attachment Event Handlers ====================
+
+const initAttachmentHandlers = () => {
+  // Handle file selection in create form
+  if (attachmentInput) {
+    attachmentInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      selectedFiles = [...selectedFiles, ...files];
+      renderSelectedFiles();
+    });
+  }
+  
+  // Handle drag and drop on ticket file upload area
+  if (ticketFileUploadArea) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      ticketFileUploadArea.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ticketFileUploadArea.classList.add('dragover');
+      });
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+      ticketFileUploadArea.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        ticketFileUploadArea.classList.remove('dragover');
+      });
+    });
+    
+    ticketFileUploadArea.addEventListener('drop', (e) => {
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        ticketSelectedFilesList = [...ticketSelectedFilesList, ...files];
+        renderTicketSelectedFiles();
+      }
+    });
+  }
+  
+  // Handle file selection via input
+  if (ticketAttachmentInput) {
+    ticketAttachmentInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      ticketSelectedFilesList = [...ticketSelectedFilesList, ...files];
+      renderTicketSelectedFiles();
+    });
+  }
+  
+  // Handle upload button in ticket detail
+  if (uploadAttachmentBtn) {
+    uploadAttachmentBtn.addEventListener('click', async () => {
+      if (!selectedTicket) return;
+      if (ticketSelectedFilesList.length === 0) {
+        alert('Vui lòng chọn tệp đính kèm.');
+        return;
+      }
+      await uploadAttachments(selectedTicket.id, ticketSelectedFilesList);
+      ticketSelectedFilesList = [];
+      renderTicketSelectedFiles();
+      ticketAttachmentInput.value = '';
+    });
+  }
+};
+
+const renderSelectedFiles = () => {
+  if (!selectedFilesList) return;
+  selectedFilesList.innerHTML = '';
+  
+  if (selectedFiles.length === 0) {
+    selectedFilesList.innerHTML = '';
+    return;
+  }
+  
+  selectedFiles.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.className = 'selected-file-item';
+    const icon = getFileIcon(file.type);
+    const size = formatFileSize(file.size);
+    item.innerHTML = `
+      <span>${icon} ${file.name} (${size})</span>
+      <button type="button" class="remove-file-btn" data-index="${index}">×</button>
+    `;
+    selectedFilesList.appendChild(item);
+  });
+  
+  // Add remove button handlers
+  document.querySelectorAll('.remove-file-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt(e.target.dataset.index, 10);
+      selectedFiles.splice(index, 1);
+      renderSelectedFiles();
+    });
+  });
+};
+
+const renderTicketSelectedFiles = () => {
+  if (!ticketSelectedFiles) return;
+  ticketSelectedFiles.innerHTML = '';
+  
+  if (ticketSelectedFilesList.length === 0) {
+    return;
+  }
+  
+  ticketSelectedFilesList.forEach((file, index) => {
+    const item = document.createElement('div');
+    item.className = 'selected-file-item';
+    const icon = getFileIcon(file.type);
+    const size = formatFileSize(file.size);
+    item.innerHTML = `
+      <span>${icon} ${file.name} (${size})</span>
+      <button type="button" class="remove-file-btn" data-ticket-index="${index}">×</button>
+    `;
+    ticketSelectedFiles.appendChild(item);
+  });
+  
+  // Add remove button handlers
+  document.querySelectorAll('[data-ticket-index]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt(e.target.dataset.ticketIndex, 10);
+      ticketSelectedFilesList.splice(index, 1);
+      renderTicketSelectedFiles();
+    });
+  });
 };
 
 if (filterAssignee) {
@@ -3941,6 +4236,7 @@ initTabs();
 initReportDates();
 initAutoRefresh();
 initTicketInfiniteScroll();
+initAttachmentHandlers();
 loadNotifications();
 loadNotifications(); // Load saved notifications
 
@@ -3965,7 +4261,6 @@ if (isTokenValid()) {
         populateAssigneeSelect(filterAssignee, {
           includeAll: true,
           includeUnassigned: true,
-          useDisplayNameValues: true,
         });
       }
       // Load saved filter values AFTER dropdowns are populated
