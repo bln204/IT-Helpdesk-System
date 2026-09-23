@@ -22,6 +22,8 @@ import jakarta.persistence.Table;
 
 import com.example.ticketing.department.Department;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Entity
 @Table(name = "users")
 public class UserAccount implements UserDetails {
@@ -41,6 +43,7 @@ public class UserAccount implements UserDetails {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
+    @JsonIgnoreProperties({"manager", "description", "enabled", "createdAt", "updatedAt"})
     private Department department;
 
     @Column(name = "display_name", length = 120)

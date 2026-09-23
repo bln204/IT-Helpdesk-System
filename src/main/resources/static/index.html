@@ -51,7 +51,7 @@
         <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
         <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
         <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">
-          Quản lý<span id="pending-users-badge" class="pending-badge hidden"></span>
+          Quản lý<span id="pending-users-badge-nav" class="pending-badge hidden"></span>
         </a>
         <a href="#/profile" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Hồ sơ</a>
       </nav>
@@ -216,14 +216,16 @@
         <p>Tổng quan vận hành nhanh (mặc định trong 30 ngày qua).</p>
       </header>
       <div class="stack">
-        <label>
-          Từ ngày
-          <input id="report-from" type="date" />
-        </label>
-        <label>
-          Đến ngày
-          <input id="report-to" type="date" />
-        </label>
+        <div class="date-range-row">
+          <label>
+            Từ ngày
+            <input id="report-from" type="date" />
+          </label>
+          <label>
+            Đến ngày
+            <input id="report-to" type="date" />
+          </label>
+        </div>
         <div class="button-row report-buttons">
           <button id="engineer-report-btn" class="secondary" type="button">Báo cáo nhân viên IT</button>
           <button id="requester-report-btn" class="secondary" type="button">Báo cáo người yêu cầu</button>
@@ -237,10 +239,22 @@
 
     <section class="panel view" id="admin-panel" data-view="admin">
       <header>
-        <h3>Quản lý người dùng</h3>
-        <p id="admin-panel-description">Quản lý người dùng trong hệ thống.</p>
+        <h3>Quản lý</h3>
+        <p id="admin-panel-description">Quản lý tài khoản và phòng ban trong hệ thống.</p>
       </header>
-      <div class="stack">
+      
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="users">
+          Tài khoản<span id="pending-users-badge" class="pending-badge hidden"></span>
+        </button>
+        <button class="tab-btn" data-tab="departments" data-role="ROLE_ADMIN,ROLE_GIAM_DOC">
+          Phòng ban
+        </button>
+      </div>
+      
+      <!-- Users Tab Content -->
+      <div id="tab-users" class="tab-content">
         <!-- Pending Users Section (visible only for ADMIN) -->
         <div id="pending-users-section" class="pending-section hidden">
           <div class="panel-header compact">
@@ -285,38 +299,62 @@
           </div>
         </div>
 
-        <div class="split-row">
-          <div>
-            <div class="panel-header compact">
-              <h4>Tất cả người dùng</h4>
-              <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
-                +
-              </button>
-            </div>
-            <div class="toolbar">
-              <input id="user-search" placeholder="Tìm kiếm tên đăng nhập" />
-              <button id="user-search-btn" class="secondary" type="button">Tìm kiếm</button>
-            </div>
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Tên đăng nhập</th>
-                    <th>Họ tên</th>
-                    <th>Vai trò</th>
-                    <th>Phòng ban</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody id="admin-users"></tbody>
-              </table>
-            </div>
-            <div class="pager">
-              <button id="users-prev" class="secondary" type="button">Trước</button>
-              <span id="users-page">Trang 1</span>
-              <button id="users-next" class="secondary" type="button">Sau</button>
-            </div>
+        <div>
+          <div class="panel-header compact">
+            <h4>Tất cả người dùng</h4>
+            <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
+              +
+            </button>
           </div>
+          <div class="toolbar">
+            <input id="user-search" placeholder="Tìm kiếm tên đăng nhập" />
+            <button id="user-search-btn" class="secondary" type="button">Tìm kiếm</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ tên</th>
+                  <th>Vai trò</th>
+                  <th>Phòng ban</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <button id="users-prev" class="secondary" type="button">Trước</button>
+            <span id="users-page">Trang 1</span>
+            <button id="users-next" class="secondary" type="button">Sau</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Departments Tab Content -->
+      <div id="tab-departments" class="tab-content hidden">
+        <div class="panel-header compact">
+          <h4>🏢 Quản lý Phòng ban</h4>
+          <button id="open-dept-modal" class="icon-btn" type="button" aria-label="Tạo phòng ban">
+            +
+          </button>
+        </div>
+        <div id="departments-list" class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên phòng ban</th>
+                <th>Mô tả</th>
+                <th>Trưởng phòng</th>
+                <th>Số nhân viên</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="departments-tbody"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -546,13 +584,13 @@
           </label>
         </div>
         <div class="split">
-          <label>
-            Kích hoạt
-            <select id="user-enabled-select">
-              <option value="true">Đã kích hoạt</option>
-              <option value="false">Vô hiệu hóa</option>
-            </select>
-          </label>
+          <div class="toggle-row compact" style="margin: 0;">
+            <span class="toggle-label">Kích hoạt</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="user-enabled-select" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
           <label>
             Mật khẩu mới
             <input type="password" id="user-password-input" minlength="8" />
@@ -591,6 +629,71 @@
         <div class="button-row" style="margin-top: 16px; display: flex; gap: 8px;">
           <button id="reject-modal-confirm" class="btn-reject" type="button">Xác nhận từ chối</button>
           <button id="reject-modal-cancel" class="secondary" type="button">Hủy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Create/Edit Modal -->
+  <div class="modal hidden" id="dept-modal" aria-hidden="true">
+    <div class="modal-content" style="max-width: 500px;">
+      <header class="panel-header">
+        <div>
+          <h3 id="dept-modal-title">Tạo phòng ban</h3>
+          <p id="dept-modal-desc">Thêm một phòng ban mới vào hệ thống.</p>
+        </div>
+        <button class="close-btn" id="close-dept-modal" aria-label="Đóng">&times;</button>
+      </header>
+      <form id="dept-form" class="stack">
+        <input type="hidden" id="dept-id" />
+        <label>
+          Mã phòng ban
+          <input type="text" id="dept-code" maxlength="20" required placeholder="VD: IT, HR, SALE" />
+        </label>
+        <label>
+          Tên phòng ban
+          <input type="text" id="dept-name" maxlength="120" required placeholder="VD: Phòng Công nghệ thông tin" />
+        </label>
+        <label>
+          Mô tả
+          <textarea id="dept-description" rows="3" maxlength="500" placeholder="Mô tả về phòng ban..."></textarea>
+        </label>
+        <label>
+          Trưởng phòng
+          <select id="dept-manager" style="width: 100%;">
+            <option value="">-- Chọn trưởng phòng --</option>
+          </select>
+        </label>
+        <div class="toggle-row">
+          <span class="toggle-label">Phòng ban đang hoạt động</span>
+          <label class="toggle-switch" id="dept-enabled-label">
+            <input type="checkbox" id="dept-enabled" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="button-row" style="margin-top: 16px;">
+          <button type="submit" id="dept-submit-btn">Tạo phòng ban</button>
+          <button type="button" id="dept-cancel-btn" class="secondary">Hủy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Department Delete Confirmation Modal -->
+  <div class="modal hidden" id="dept-delete-modal" aria-hidden="true">
+    <div class="modal-content" style="max-width: 450px;">
+      <header class="panel-header">
+        <div>
+          <h3>Xóa phòng ban</h3>
+        </div>
+        <button class="close-btn" id="close-dept-delete-modal" aria-label="Đóng">&times;</button>
+      </header>
+      <div class="panel-body">
+        <p id="dept-delete-warning" style="margin-bottom: 12px;"></p>
+        <div id="dept-delete-affected" class="info-banner" style="margin-bottom: 16px;"></div>
+        <div class="button-row" style="display: flex; gap: 8px;">
+          <button id="dept-confirm-delete" class="btn-reject" type="button">Xác nhận xóa</button>
+          <button id="dept-cancel-delete" class="secondary" type="button">Hủy</button>
         </div>
       </div>
     </div>
