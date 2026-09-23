@@ -1768,12 +1768,26 @@ const downloadAuditCsv = async () => {
 const loadAssignments = async (ticketId) => {
   const data = await request(`/api/tickets/${ticketId}/assignments`);
   assignmentsList.innerHTML = '';
+  
+  if (!data || data.length === 0) {
+    assignmentsList.innerHTML = '<p class="muted">Chưa có lịch sử phân công.</p>';
+    return;
+  }
+  
   data.forEach((assignment) => {
     const item = document.createElement('div');
     item.className = 'list-item';
-    const prev = assignment.previousAssignee ? formatName(assignment.previousAssignee) : 'Chưa phân công';
-    const next = assignment.newAssignee ? formatName(assignment.newAssignee) : 'Chưa phân công';
-    item.textContent = `${prev} → ${next}`;
+    
+    const when = assignment.createdAt ? new Date(assignment.createdAt).toLocaleString('vi-VN') : '';
+    const actor = assignment.actorName ? `<span class="actor">bởi ${assignment.actorName}</span>` : '';
+    const prev = assignment.previousAssignee ? formatName(assignment.previousAssignee) : '<span class="muted">Chưa phân công</span>';
+    const next = assignment.newAssignee ? formatName(assignment.newAssignee) : '<span class="muted">Chưa phân công</span>';
+    
+    item.innerHTML = `
+      <span class="time">${when}</span>
+      <span class="assignment-change">${prev} → ${next}</span>
+      ${actor}
+    `;
     assignmentsList.appendChild(item);
   });
 };

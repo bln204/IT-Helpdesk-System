@@ -855,7 +855,17 @@ body.dark .toggle-thumb {
   display: flex;
   gap: 10px;
   margin: 14px 0;
-  flex-wrap: wrap;
+  align-items: center;
+}
+
+#filter-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar .custom-select select {
+  min-width: 160px;
+  max-width: 200px;
 }
 
 .toolbar > input,
@@ -1085,6 +1095,33 @@ body.dark .toggle-thumb {
 .list-item {
   border-left: 3px solid rgba(31, 111, 120, 0.5);
   padding-left: 10px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-item strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.list-item .time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.list-item .actor {
+  font-size: 0.8rem;
+  color: var(--teal);
+}
+
+.list-item .assignment-change {
+  font-size: 0.9rem;
+  color: var(--ink);
 }
 
 .profile-layout {
