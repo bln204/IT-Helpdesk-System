@@ -19,18 +19,14 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-
-import com.example.ticketing.auth.UserAccount;
-import com.example.ticketing.auth.UserAccountRepository;
-import com.example.ticketing.auth.UserRole;
 
 import jakarta.validation.Valid;
 
@@ -39,11 +35,9 @@ import jakarta.validation.Valid;
 @Validated
 public class TicketController {
     private final TicketService ticketService;
-    private final UserAccountRepository userAccountRepository;
 
-    public TicketController(TicketService ticketService, UserAccountRepository userAccountRepository) {
+    public TicketController(TicketService ticketService) {
         this.ticketService = ticketService;
-        this.userAccountRepository = userAccountRepository;
     }
 
     @PostMapping
@@ -51,9 +45,6 @@ public class TicketController {
         @Valid @RequestBody TicketDtos.TicketCreateRequest request,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        UserRole.Role actorRole = user.getRole();
-
         Ticket ticket = new Ticket();
         ticket.setTitle(request.getTitle());
         ticket.setDescription(request.getDescription());
@@ -63,7 +54,8 @@ public class TicketController {
         ticket.setRequesterEmail(request.getRequesterEmail());
         ticket.setAssigneeName(request.getAssigneeName());
 
-        Ticket created = ticketService.createTicket(ticket, authentication.getName(), actorRole);
+        TicketTypes.TicketRole actorRole = resolveActorRole(authentication);
+        Ticket created = ticketService.createTicket(ticket, actorRole, authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketDtos.TicketResponse.from(created));
     }
 
@@ -75,26 +67,15 @@ public class TicketController {
         @RequestParam(defaultValue = "false") boolean excludeClosed,
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "createdAt,desc") String sort,
-        Authentication authentication
+        @RequestParam(defaultValue = "createdAt,desc") String sort
     ) {
-        UserAccount user = getCurrentUser(authentication);
-
         String[] parts = sort.split(",", 2);
         String sortField = parts[0];
         String sortDirection = parts.length > 1 ? parts[1] : "asc";
         Sort.Direction direction = Sort.Direction.fromOptionalString(sortDirection).orElse(Sort.Direction.ASC);
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortField));
-
-        return ticketService.listTickets(
-            assignee,
-            status,
-            search,
-            excludeClosed,
-            pageRequest,
-            user.getRole().name(),
-            user.getDepartmentId()
-        ).map(TicketDtos.TicketResponse::from);
+        return ticketService.listTickets(assignee, status, search, excludeClosed, pageRequest)
+            .map(TicketDtos.TicketResponse::from);
     }
 
     @GetMapping("/{id}")
@@ -115,14 +96,11 @@ public class TicketController {
         @PathVariable Long id,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
-
+        requireStaff(authentication);
         Ticket updated = ticketService.assignTicket(
             id,
             authentication.getName(),
-            user.getRole(),
-            user.getDepartmentId(),
+            resolveActorRole(authentication),
             authentication.getName()
         );
         return TicketDtos.TicketResponse.from(updated);
@@ -134,13 +112,10 @@ public class TicketController {
         @Valid @RequestBody TicketDtos.TicketStatusUpdateRequest request,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.updateStatus(
             id,
             request.getStatus(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
+            resolveActorRole(authentication),
             authentication.getName()
         );
         return TicketDtos.TicketResponse.from(updated);
@@ -152,12 +127,10 @@ public class TicketController {
         @Valid @RequestBody TicketDtos.TicketPriorityUpdateRequest request,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.updatePriority(
             id,
             request.getPriority(),
-            user.getRole(),
-            user.getDepartmentId(),
+            resolveActorRole(authentication),
             authentication.getName()
         );
         return TicketDtos.TicketResponse.from(updated);
@@ -169,14 +142,10 @@ public class TicketController {
         @Valid @RequestBody TicketDtos.TicketAssigneeUpdateRequest request,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
-
         Ticket updated = ticketService.assignTicket(
             id,
             request.getAssigneeName(),
-            user.getRole(),
-            user.getDepartmentId(),
+            resolveActorRole(authentication),
             authentication.getName()
         );
         return TicketDtos.TicketResponse.from(updated);
@@ -195,12 +164,11 @@ public class TicketController {
         @Valid @RequestBody TicketDtos.TicketCommentCreateRequest request,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
         TicketComment comment = ticketService.addComment(
             id,
             request.getVisibility(),
             request.getBody(),
-            user.getRole(),
+            resolveActorRole(authentication),
             authentication.getName()
         );
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -213,8 +181,7 @@ public class TicketController {
         @RequestParam(required = false) TicketTypes.CommentVisibility visibility,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        return ticketService.listComments(id, user.getRole(), visibility).stream()
+        return ticketService.listComments(id, resolveActorRole(authentication), visibility).stream()
             .map(TicketDtos.TicketCommentResponse::from)
             .toList();
     }
@@ -265,7 +232,7 @@ public class TicketController {
     ) {
         requireStaff(authentication);
         Map<TicketTypes.TicketStatus, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged())) {
             if (!withinRange(ticket.getCreatedAt(), from, to)) {
                 continue;
             }
@@ -292,9 +259,8 @@ public class TicketController {
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
         LocalDateTime to
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        String requesterUsername = user.getRole() == UserRole.Role.NHAN_VIEN 
-            ? authentication.getName() : null;
+        TicketTypes.TicketRole role = resolveActorRole(authentication);
+        String requesterUsername = role == TicketTypes.TicketRole.REQUESTER ? authentication.getName() : null;
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildDashboardSummary(requesterUsername, range[0], range[1]);
     }
@@ -312,7 +278,7 @@ public class TicketController {
     ) {
         requireStaff(authentication);
         Map<String, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged())) {
             if (status != null && ticket.getStatus() != status) {
                 continue;
             }
@@ -343,7 +309,7 @@ public class TicketController {
         requireStaff(authentication);
         long resolvedCount = 0;
         long totalSeconds = 0;
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged())) {
             if (ticket.getResolvedAt() != null && ticket.getCreatedAt() != null) {
                 if (!withinRange(ticket.getResolvedAt(), from, to)) {
                     continue;
@@ -423,38 +389,6 @@ public class TicketController {
         return ticketService.buildSlaBuckets(range[0], range[1]);
     }
 
-    // ==================== Helper Methods ====================
-
-    private UserAccount getCurrentUser(Authentication authentication) {
-        return userAccountRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
-    }
-
-    private void requireStaff(Authentication authentication) {
-        UserAccount user = getCurrentUser(authentication);
-        if (user.getRole() == UserRole.Role.NHAN_VIEN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This action requires staff privileges.");
-        }
-    }
-
-    private void requireAssignPermission(UserAccount user) {
-        boolean canAssign = switch (user.getRole()) {
-            case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> {
-                if (user.getDepartment() == null) {
-                    yield false;
-                }
-                yield "IT".equals(user.getDepartment().getCode());
-            }
-            case NHAN_VIEN -> false;
-        };
-
-        if (!canAssign) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "You don't have permission to assign tickets. Only IT Manager can assign tickets.");
-        }
-    }
-
     private boolean withinRange(LocalDateTime value, LocalDateTime from, LocalDateTime to) {
         if (value == null) {
             return false;
@@ -466,6 +400,13 @@ public class TicketController {
             return false;
         }
         return true;
+    }
+
+    private void requireStaff(Authentication authentication) {
+        TicketTypes.TicketRole role = resolveActorRole(authentication);
+        if (role == TicketTypes.TicketRole.REQUESTER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Reports require engineer or admin role.");
+        }
     }
 
     private LocalDateTime[] resolveReportRange(LocalDateTime from, LocalDateTime to) {
@@ -483,5 +424,15 @@ public class TicketController {
             return "\"" + text.replace("\"", "\"\"") + "\"";
         }
         return text;
+    }
+
+    private TicketTypes.TicketRole resolveActorRole(Authentication authentication) {
+        for (GrantedAuthority authority : authentication.getAuthorities()) {
+            String role = authority.getAuthority();
+            if (role.startsWith("ROLE_")) {
+                return TicketTypes.TicketRole.valueOf(role.substring(5));
+            }
+        }
+        throw new TicketRuleViolationException("Authenticated user does not have a role.");
     }
 }

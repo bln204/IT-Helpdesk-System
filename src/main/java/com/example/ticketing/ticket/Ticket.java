@@ -6,17 +6,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-
-import com.example.ticketing.department.Department;
 
 @Entity
 @Table(name = "tickets")
@@ -58,10 +53,6 @@ public class Ticket {
     @Column(name = "assignee_name", length = 120)
     private String assigneeName;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id")
-    private Department department;
-
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -88,8 +79,6 @@ public class Ticket {
     void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
-    // ==================== Getters & Setters ====================
 
     public Long getId() {
         return id;
@@ -173,22 +162,6 @@ public class Ticket {
 
     public void setAssigneeName(String assigneeName) {
         this.assigneeName = assigneeName;
-    }
-
-    public Department getDepartment() {
-        return department;
-    }
-
-    public void setDepartment(Department department) {
-        this.department = department;
-    }
-
-    public Long getDepartmentId() {
-        return department != null ? department.getId() : null;
-    }
-
-    public String getDepartmentCode() {
-        return department != null ? department.getCode() : null;
     }
 
     public LocalDateTime getCreatedAt() {

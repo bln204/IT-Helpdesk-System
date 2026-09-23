@@ -35,11 +35,10 @@ public class UserSelfService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.markPasswordChanged(); // Invalidate all existing tokens
         userAuditService.log(
             UserAuditAction.PASSWORD_CHANGED,
             user.getUsername(),
-            user.getRole().name(),
+            user.getRole(),
             user.getUsername()
         );
     }
@@ -59,7 +58,7 @@ public class UserSelfService {
         userAuditService.log(
             UserAuditAction.PROFILE_UPDATED,
             user.getUsername(),
-            user.getRole().name(),
+            user.getRole(),
             user.getUsername()
         );
         return user;
