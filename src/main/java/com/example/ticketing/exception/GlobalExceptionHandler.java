@@ -1,6 +1,8 @@
 package com.example.ticketing.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -257,35 +259,133 @@ public class GlobalExceptionHandler {
     // ==================== Validation Exceptions ====================
     
     /**
-     * Handle validation errors from @Valid annotations
+     * Handle validation errors from @Valid annotations (field-level validation)
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(
-            MethodArgumentNotValidException ex, 
+            MethodArgumentNotValidException ex,
             HttpServletRequest request) {
-        
+
         String errors = ex.getBindingResult().getFieldErrors().stream()
-            .map(FieldError::getDefaultMessage)
+            .map(this::formatFieldError)
             .collect(Collectors.joining("; "));
-        
+
         log.warn("Validation failed: {} on path: {}", errors, request.getRequestURI());
-        
+
         Map<String, Object> details = new HashMap<>();
         details.put("validationErrors", ex.getBindingResult().getFieldErrors().stream()
             .collect(Collectors.toMap(
                 FieldError::getField,
-                FieldError::getDefaultMessage,
+                this::formatFieldError,
                 (e1, e2) -> e1 + "; " + e2
             ))
         );
-        
+
+        ErrorResponse error = new ErrorResponse(
+            "VALIDATION_ERROR",
+            "Vui lòng kiểm tra lại các trường thông tin: " + errors,
+            request.getRequestURI(),
+            details
+        );
+
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST)
+            .body(error);
+    }
+
+    /**
+     * Format field error message in Vietnamese
+     */
+    private String formatFieldError(FieldError error) {
+        String message = error.getDefaultMessage();
+        String field = translateFieldName(error.getField());
+
+        if (message == null || message.isEmpty()) {
+            return field + " không được để trống";
+        }
+
+        // Make messages more user-friendly
+        if (message.contains("must not be blank")) {
+            return field + " không được để trống";
+        }
+        if (message.contains("must not be null")) {
+            return field + " không được để trống";
+        }
+        if (message.contains("must not be empty")) {
+            return field + " không được để trống";
+        }
+        if (message.contains("must be a valid email")) {
+            return field + " phải là địa chỉ email hợp lệ";
+        }
+        if (message.contains("size must be between")) {
+            return field + " có độ dài không hợp lệ";
+        }
+
+        // If message already contains the field name, return as-is
+        if (message.toLowerCase().contains(field.toLowerCase())) {
+            return message;
+        }
+
+        return field + ": " + message;
+    }
+
+    /**
+     * Translate field names to Vietnamese
+     */
+    private String translateFieldName(String field) {
+        return switch (field) {
+            case "username" -> "Tên đăng nhập";
+            case "password" -> "Mật khẩu";
+            case "role" -> "Vai trò";
+            case "displayName" -> "Họ tên";
+            case "title" -> "Chức danh";
+            case "avatarUrl" -> "URL avatar";
+            case "email" -> "Email";
+            case "departmentId" -> "Phòng ban";
+            case "enabled" -> "Trạng thái";
+            case "currentPassword" -> "Mật khẩu hiện tại";
+            case "newPassword" -> "Mật khẩu mới";
+            case "reason" -> "Lý do";
+            case "notes" -> "Ghi chú";
+            default -> field;
+        };
+    }
+    
+    /**
+     * Handle validation errors from @Valid annotations (object-level validation)
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(
+            ConstraintViolationException ex,
+            HttpServletRequest request) {
+
+        String errors = ex.getConstraintViolations().stream()
+            .map(ConstraintViolation::getMessage)
+            .collect(Collectors.joining("; "));
+
+        log.warn("Constraint violation: {} on path: {}", errors, request.getRequestURI());
+
+        Map<String, Object> details = new HashMap<>();
+        details.put("validationErrors", ex.getConstraintViolations().stream()
+            .collect(Collectors.toMap(
+                v -> {
+                    String path = v.getPropertyPath().toString();
+                    // Extract field name from property path (e.g., "createUser.request.departmentId" -> "departmentId")
+                    String[] parts = path.split("\\.");
+                    return parts.length > 0 ? parts[parts.length - 1] : path;
+                },
+                ConstraintViolation::getMessage,
+                (e1, e2) -> e1 + "; " + e2
+            ))
+        );
+
         ErrorResponse error = new ErrorResponse(
             "VALIDATION_ERROR",
             errors,
             request.getRequestURI(),
             details
         );
-        
+
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(error);

@@ -37,7 +37,8 @@ import {
   loadEngineerOptions,
   applyRoleControls,
   applyAdminRoleOptions,
-  canManageUsers
+  canManageUsers,
+  renderUserAuditPage
 } from '../services/userService.js';
 import {
   loadDepartments,
@@ -440,13 +441,40 @@ export const attachEventHandlers = () => {
   }
   if (closeUserDetail) {
     closeUserDetail.addEventListener('click', () => {
-      if (userDetailModal) userDetailModal.classList.add('hidden');
+      // Move focus to body before hiding modal to avoid aria-hidden focus issue
+      document.body.focus();
+      if (userDetailModal) {
+        userDetailModal.classList.add('hidden');
+      }
       window.selectedUser = null;
       window.userAuditEntries = [];
       window.userAuditPage = 0;
     });
   }
-  
+
+  // User Audit Pagination
+  const userAuditPrev = document.getElementById('user-audit-prev');
+  const userAuditNext = document.getElementById('user-audit-next');
+  if (userAuditPrev) {
+    userAuditPrev.addEventListener('click', () => {
+      if (!window.userAuditEntries) window.userAuditEntries = [];
+      if (window.userAuditPage > 0) {
+        window.userAuditPage -= 1;
+        renderUserAuditPage();
+      }
+    });
+  }
+  if (userAuditNext) {
+    userAuditNext.addEventListener('click', () => {
+      if (!window.userAuditEntries) window.userAuditEntries = [];
+      const totalPages = Math.max(1, Math.ceil(window.userAuditEntries.length / 5));
+      if (window.userAuditPage + 1 < totalPages) {
+        window.userAuditPage += 1;
+        renderUserAuditPage();
+      }
+    });
+  }
+
   // User Detail Actions
   const userSaveProfile = document.getElementById('user-save-profile');
   const userDelete = document.getElementById('user-delete');
@@ -455,7 +483,11 @@ export const attachEventHandlers = () => {
   
   if (userSaveProfile) {
     userSaveProfile.addEventListener('click', async () => {
-      if (!window.selectedUser) return;
+      console.log('[DEBUG] userSaveProfile clicked');
+      if (!window.selectedUser) {
+        console.log('[DEBUG] No selectedUser');
+        return;
+      }
       const userDisplayName = document.getElementById('user-display-name');
       const userTitle = document.getElementById('user-title');
       const userEmail = document.getElementById('user-email');
@@ -467,6 +499,7 @@ export const attachEventHandlers = () => {
         { label: 'Chức danh', input: userTitle },
         { label: 'Email', input: userEmail },
       ])) {
+        console.log('[DEBUG] validateProfileFields failed');
         return;
       }
       
@@ -476,36 +509,36 @@ export const attachEventHandlers = () => {
         userTitle.value !== window.selectedUser.title ||
         userEmail.value !== window.selectedUser.email;
       
+      console.log('[DEBUG] hasPasswordChange:', hasPasswordChange);
+      console.log('[DEBUG] hasProfileChange:', hasProfileChange);
+      
       if (hasPasswordChange && hasProfileChange) {
+        console.log('[DEBUG] Case: password + profile change');
         const payload = {
           displayName: userDisplayName.value,
           title: userTitle.value,
           email: userEmail.value,
           newPassword: userPasswordInput.value,
         };
-        await request(`/api/users/${window.selectedUser.id}/profile-and-password`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
-        userPasswordInput.value = '';
-        loadAdminUsers();
+        try {
+          await request(`/api/users/${window.selectedUser.id}/profile-and-password`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          });
+          addNotification('success', 'Cập nhật thành công', 'Thông tin và mật khẩu đã được cập nhật. Email thông báo đã được gửi.');
+          userPasswordInput.value = '';
+          loadAdminUsers();
+          console.log('[DEBUG] profile-and-password success');
+        } catch (error) {
+          alert('Lỗi: ' + error.message);
+        }
         return;
       }
       
       const updates = [];
-      if (userEnabledSelect && !userEnabledSelect.disabled) {
-        const enabledValue = userEnabledSelect.checked;
-        if (enabledValue !== window.selectedUser.enabled) {
-          updates.push(
-            request(`/api/users/${window.selectedUser.id}/enabled`, {
-              method: 'PATCH',
-              body: JSON.stringify({ enabled: enabledValue }),
-            })
-          );
-        }
-      }
       
       if (hasPasswordChange) {
+        console.log('[DEBUG] Adding password update');
         updates.push(
           request(`/api/users/${window.selectedUser.id}/password`, {
             method: 'PATCH',
@@ -515,6 +548,7 @@ export const attachEventHandlers = () => {
       }
       
       if (hasProfileChange) {
+        console.log('[DEBUG] Adding profile update');
         updates.push(
           request(`/api/users/${window.selectedUser.id}/profile`, {
             method: 'PATCH',
@@ -527,29 +561,49 @@ export const attachEventHandlers = () => {
         );
       }
       
-      if (!updates.length) return;
-      await Promise.all(updates);
-      if (userPasswordInput) userPasswordInput.value = '';
-      applyRoleControls();
-      await loadAdminUsers();
-      await loadUserAvatarMap();
+      if (!updates.length) {
+        console.log('[DEBUG] No updates needed');
+        return;
+      }
+      
+      console.log('[DEBUG] Sending updates:', updates.length);
+      try {
+        await Promise.all(updates);
+        addNotification('success', 'Cập nhật thành công', 'Thông tin người dùng đã được cập nhật.');
+        if (userPasswordInput) userPasswordInput.value = '';
+        await loadAdminUsers();
+        console.log('[DEBUG] Updates complete');
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+      }
     });
   }
   
   if (userDelete) {
     userDelete.addEventListener('click', async () => {
-      if (!window.selectedUser) return;
+      console.log('[DEBUG] userDelete clicked');
+      if (!window.selectedUser) {
+        console.log('[DEBUG] No selectedUser for delete');
+        return;
+      }
       
       const { isAdmin, isTruongPhong } = await import('../core/auth.js');
+      console.log('[DEBUG] isAdmin:', isAdmin(), 'isTruongPhong:', isTruongPhong());
       
       if (isAdmin()) {
         const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${window.selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
-        if (!confirm(confirmMsg)) return;
+        if (!confirm(confirmMsg)) {
+          console.log('[DEBUG] Delete cancelled by user');
+          return;
+        }
         try {
+          console.log('[DEBUG] Deleting user:', window.selectedUser.id);
           await request(`/api/users/${window.selectedUser.id}`, { method: 'DELETE' });
           addNotification('delete', 'Xóa tài khoản', `Tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" đã được xóa.`);
           alert('Đã xóa tài khoản thành công!');
+          console.log('[DEBUG] Delete success');
         } catch (error) {
+          console.log('[DEBUG] Delete error:', error);
           alert('Lỗi: ' + error.message);
           return;
         }
@@ -567,6 +621,7 @@ export const attachEventHandlers = () => {
       }
       
       window.selectedUser = null;
+      document.body.focus();
       if (userDetailModal) userDetailModal.classList.add('hidden');
       await loadAdminUsers();
     });

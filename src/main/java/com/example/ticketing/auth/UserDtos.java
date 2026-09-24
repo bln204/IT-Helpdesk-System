@@ -1,5 +1,6 @@
 package com.example.ticketing.auth;
 
+import com.example.ticketing.validation.DepartmentRequired;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,6 +10,11 @@ public final class UserDtos {
     private UserDtos() {
     }
 
+    /**
+     * DTO for creating a new user.
+     * Validation: departmentId is required for all roles except ADMIN.
+     */
+    @DepartmentRequired(message = "Phòng ban không được để trống")
     public static class UserCreateRequest {
         @NotBlank
         @Size(max = 80)
@@ -38,7 +44,10 @@ public final class UserDtos {
         @Size(max = 160)
         private String email;
 
-        @NotNull
+        /**
+         * Department ID - required for all roles except ADMIN.
+         * For ADMIN role, this field can be null since admin doesn't belong to any department.
+         */
         private Long departmentId;
 
         public String getUsername() {
