@@ -1,0 +1,78 @@
+/* ==================== Tab Styles ==================== */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+  border-radius: 8px 8px 0 0;
+}
+
+.tab-btn:hover {
+  color: var(--accent);
+}
+
+.tab-btn.active {
+  color: var(--muted);
+  border-bottom: 2px solid var(--accent);
+  background: transparent;
+}
+
+.tab-btn.active:hover {
+  color: var(--accent);
+}
+
+.tab-content {
+  animation: fadeIn 0.2s ease;
+}
+
+.tab-content.hidden {
+  display: none;
+}
+
+/* Ticket tabs */
+.ticket-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.ticket-tabs .tab-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.ticket-tabs .tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
+
+.tab-panel {
+  display: none;
+  margin-top: 12px;
+}
+
+.tab-panel.active {
+  display: block;
+}

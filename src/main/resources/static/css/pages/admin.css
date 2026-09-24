@@ -1,0 +1,81 @@
+/* ==================== Admin Page Styles ==================== */
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-description {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Approval actions */
+.approval-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.approval-actions .btn-approve {
+  background: var(--teal);
+  color: white;
+  flex: 1;
+}
+
+.approval-actions .btn-approve:hover {
+  background: #167a74;
+}
+
+.approval-actions .btn-reject {
+  background: #a12626;
+  color: white;
+  flex: 1;
+}
+
+/* Rejected user warning */
+#user-rejected-warning {
+  background: rgba(161, 38, 38, 0.1);
+  border: 1px solid rgba(161, 38, 38, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  color: #a12626;
+}
+
+/* Department styles */
+.department-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dept-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dept-form-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.dept-delete-warning {
+  margin-bottom: 12px;
+}
+
+.dept-affected-users {
+  background: rgba(255, 200, 0, 0.1);
+  border: 1px solid rgba(255, 200, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}

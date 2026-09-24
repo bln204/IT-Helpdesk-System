@@ -1,0 +1,114 @@
+/* ==================== Button Styles ==================== */
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(215, 107, 45, 0.25);
+}
+
+button.secondary {
+  background: #f2f4f9;
+  color: var(--ink);
+  border-color: rgba(30, 27, 22, 0.15);
+  box-shadow: none;
+}
+
+body.dark button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+button.secondary:hover {
+  background: #e9edf6;
+  box-shadow: 0 8px 18px rgba(31, 35, 50, 0.12);
+}
+
+button.danger {
+  background: #e35b52;
+}
+
+button.danger:hover {
+  background: #cc4b43;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--teal);
+  border: 1px solid rgba(31, 111, 120, 0.5);
+}
+
+body.dark button.ghost {
+  border-color: rgba(123, 214, 207, 0.35);
+}
+
+button.ghost:hover {
+  box-shadow: none;
+  background: rgba(31, 111, 120, 0.08);
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  padding: 0;
+}
+
+.btn-small {
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+.btn-approve {
+  background: var(--teal);
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-approve:hover {
+  background: #167a74;
+}
+
+.btn-reject {
+  background: #a12626;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-reject:hover {
+  background: #8b0000;
+}
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.remove-file-btn:hover {
+  color: #a12626;
+}

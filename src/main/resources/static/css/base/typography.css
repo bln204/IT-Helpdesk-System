@@ -1,0 +1,78 @@
+/* ==================== Typography ==================== */
+body {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 15% 20%, #e8f4ff 0%, transparent 45%),
+    radial-gradient(circle at 80% 10%, #fff1e6 0%, transparent 45%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 3.4vw, 3.8rem);
+  margin: 0 0 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.kicker {
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 8px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+input,
+textarea {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: #fff;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(31, 111, 120, 0.6);
+  box-shadow: 0 0 0 3px rgba(31, 111, 120, 0.12);
+}
+
+.field-error {
+  font-size: 0.78rem;
+  color: #b34235;
+}
+
+label.invalid {
+  color: #b34235;
+}
+
+label.invalid input,
+label.invalid select,
+label.invalid textarea {
+  border-color: rgba(179, 66, 53, 0.85);
+  box-shadow: 0 0 0 2px rgba(179, 66, 53, 0.15);
+}
+
+.footer {
+  padding: 16px 32px 32px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+  gap: 8px;
+}

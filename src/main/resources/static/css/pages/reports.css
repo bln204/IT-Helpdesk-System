@@ -1,0 +1,49 @@
+/* ==================== Reports Page Styles ==================== */
+.report-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.report-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-output {
+  min-height: 200px;
+}
+
+.report-output .empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+/* Report buttons */
+.report-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.report-buttons button {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.report-buttons button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(215, 107, 45, 0.25);
+}
+
+.report-buttons button.secondary.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(215, 107, 45, 0.25);
+}
