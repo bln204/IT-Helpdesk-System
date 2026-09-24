@@ -324,9 +324,22 @@ export const attachEventHandlers = () => {
   const ticketBoard = document.getElementById('ticket-board');
   
   if (closeDetails) {
-    closeDetails.addEventListener('click', () => {
+    closeDetails.addEventListener('click', async () => {
       if (ticketDetailsPanel) ticketDetailsPanel.classList.add('hidden');
       if (ticketBoard) ticketBoard.classList.remove('has-detail');
+      // Refresh ticket list to show any updates
+      const { loadTickets } = await import('../services/ticketService.js');
+      await loadTickets({ reset: true }).catch((err) => console.error('[closeDetails] loadTickets error:', err));
+      // Clear selected ticket
+      window.selectedTicket = null;
+      // Reset detail panel to empty state
+      const ticketDetails = document.getElementById('ticket-details');
+      const ticketActions = document.getElementById('ticket-actions');
+      if (ticketDetails) {
+        ticketDetails.classList.remove('hidden');
+        ticketDetails.innerHTML = 'Chọn một phiếu hỗ trợ để xem chi tiết.';
+      }
+      if (ticketActions) ticketActions.classList.add('hidden');
     });
   }
   

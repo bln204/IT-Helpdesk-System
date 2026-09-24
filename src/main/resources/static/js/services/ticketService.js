@@ -29,47 +29,90 @@ export const initTicketEvents = () => {
   const updateAssigneeBtn = document.getElementById('update-assignee-btn');
   const assignMeBtn = document.getElementById('assign-me-btn');
 
-  console.log('[DEBUG] initTicketEvents called');
-  console.log('[DEBUG] updateStatusBtn:', updateStatusBtn);
-  console.log('[DEBUG] updatePriorityBtn:', updatePriorityBtn);
-  console.log('[DEBUG] updateAssigneeBtn:', updateAssigneeBtn);
-  console.log('[DEBUG] assignMeBtn:', assignMeBtn);
+  console.log('[initTicketEvents] Buttons found:', {
+    updateStatusBtn: !!updateStatusBtn,
+    updatePriorityBtn: !!updatePriorityBtn,
+    updateAssigneeBtn: !!updateAssigneeBtn,
+    assignMeBtn: !!assignMeBtn
+  });
 
+  // Remove any existing onclick attributes to avoid conflicts
+  if (updateStatusBtn) updateStatusBtn.removeAttribute('onclick');
+  if (updatePriorityBtn) updatePriorityBtn.removeAttribute('onclick');
+  if (updateAssigneeBtn) updateAssigneeBtn.removeAttribute('onclick');
+  if (assignMeBtn) assignMeBtn.removeAttribute('onclick');
+
+  // Attach event listeners with error handling
   if (updateStatusBtn) {
-    updateStatusBtn.addEventListener('click', () => {
-      console.log('[DEBUG] Update status button clicked');
-      updateStatus();
-    });
-  } else {
-    console.log('[DEBUG] updateStatusBtn not found!');
+    updateStatusBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[initTicketEvents] Update status button clicked', {
+        disabled: updateStatusBtn.disabled,
+        selectedTicket: window.selectedTicket?.id
+      });
+      try {
+        await updateStatus();
+      } catch (err) {
+        console.error('[initTicketEvents] updateStatus error:', err);
+        alert('Lỗi: ' + err.message);
+      }
+    };
+    console.log('[initTicketEvents] updateStatusBtn onclick set:', typeof updateStatusBtn.onclick);
   }
 
   if (updatePriorityBtn) {
-    updatePriorityBtn.addEventListener('click', () => {
-      console.log('[DEBUG] Update priority button clicked');
-      updatePriority();
-    });
-  } else {
-    console.log('[DEBUG] updatePriorityBtn not found!');
+    updatePriorityBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[initTicketEvents] Update priority button clicked', {
+        disabled: updatePriorityBtn.disabled,
+        selectedTicket: window.selectedTicket?.id
+      });
+      try {
+        await updatePriority();
+      } catch (err) {
+        console.error('[initTicketEvents] updatePriority error:', err);
+        alert('Lỗi: ' + err.message);
+      }
+    };
   }
 
   if (updateAssigneeBtn) {
-    updateAssigneeBtn.addEventListener('click', () => {
-      console.log('[DEBUG] Update assignee button clicked');
-      updateAssignee();
-    });
-  } else {
-    console.log('[DEBUG] updateAssigneeBtn not found!');
+    updateAssigneeBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[initTicketEvents] Update assignee button clicked', {
+        disabled: updateAssigneeBtn.disabled,
+        selectedTicket: window.selectedTicket?.id
+      });
+      try {
+        await updateAssignee();
+      } catch (err) {
+        console.error('[initTicketEvents] updateAssignee error:', err);
+        alert('Lỗi: ' + err.message);
+      }
+    };
   }
 
   if (assignMeBtn) {
-    assignMeBtn.addEventListener('click', () => {
-      console.log('[DEBUG] Assign to me button clicked');
-      assignToMe();
-    });
-  } else {
-    console.log('[DEBUG] assignMeBtn not found!');
+    assignMeBtn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[initTicketEvents] Assign to me button clicked', {
+        disabled: assignMeBtn.disabled,
+        selectedTicket: window.selectedTicket?.id
+      });
+      try {
+        await assignToMe();
+      } catch (err) {
+        console.error('[initTicketEvents] assignToMe error:', err);
+        alert('Lỗi: ' + err.message);
+      }
+    };
   }
+
+  console.log('[initTicketEvents] All event listeners attached');
 };
 
 export const setSelectedTicket = (ticket) => {
@@ -239,8 +282,10 @@ export const loadTickets = async ({ reset = false } = {}) => {
 };
 
 export const selectTicket = async (ticket) => {
+  console.log('[selectTicket] START - ticket:', ticket);
   const full = await request(`/api/tickets/${ticket.id}`);
   window.selectedTicket = full;
+  console.log('[selectTicket] window.selectedTicket set:', full.id, full.ticketNumber);
   
   ticketDetails = document.getElementById('ticket-details');
   ticketActions = document.getElementById('ticket-actions');
@@ -254,6 +299,18 @@ export const selectTicket = async (ticket) => {
   statusSelect = document.getElementById('status-select');
   prioritySelect = document.getElementById('priority-select');
   assigneeInput = document.getElementById('assignee-input');
+  
+  // Get buttons for debugging
+  const btnUpdateStatus = document.getElementById('update-status-btn');
+  const btnUpdatePriority = document.getElementById('update-priority-btn');
+  const btnUpdateAssignee = document.getElementById('update-assignee-btn');
+  const btnAssignMe = document.getElementById('assign-me-btn');
+  console.log('[selectTicket] Buttons found:', {
+    btnUpdateStatus: !!btnUpdateStatus,
+    btnUpdatePriority: !!btnUpdatePriority,
+    btnUpdateAssignee: !!btnUpdateAssignee,
+    btnAssignMe: !!btnAssignMe
+  });
   
   const createdAt = full.createdAt ? new Date(full.createdAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
   const updatedAt = full.updatedAt ? new Date(full.updatedAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
@@ -339,6 +396,22 @@ export const selectTicket = async (ticket) => {
   
   const { applyRoleControls } = await import('./userService.js');
   applyRoleControls();
+  
+  // Re-enable buttons after role controls (in case they were disabled)
+  const btns = ['update-status-btn', 'update-priority-btn', 'update-assignee-btn', 'assign-me-btn'];
+  btns.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.disabled = false;
+      console.log(`[selectTicket] Button ${id} enabled, disabled=${btn.disabled}`);
+    }
+  });
+  
+  console.log('[selectTicket] Buttons re-enabled after role controls');
+  console.log('[selectTicket] Final button states:', btns.map(id => {
+    const btn = document.getElementById(id);
+    return { id, disabled: btn?.disabled, onclick: btn?.onclick ? 'set' : 'null' };
+  }));
   
   await Promise.all([loadComments(full.id), loadAudit(full.id), loadAssignments(full.id), loadAttachments(full.id)]);
 };
@@ -580,17 +653,24 @@ export const updateStatus = async () => {
     return;
   }
   statusSelect = document.getElementById('status-select');
-  if (statusSelect.value === window.selectedTicket.status) {
-    console.log('[updateStatus] No change, skipping');
-    return;
+  const newStatus = statusSelect.value;
+  const currentStatus = window.selectedTicket.status;
+  
+  console.log('[updateStatus] Current:', currentStatus, '-> New:', newStatus);
+  
+  // Always call API - let backend handle idempotency
+  try {
+    await request(`/api/tickets/${window.selectedTicket.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus }),
+    });
+    console.log('[updateStatus] Success, reloading...');
+    await loadTickets();
+    await selectTicket({ id: window.selectedTicket.id });
+  } catch (err) {
+    console.error('[updateStatus] API error:', err);
+    alert('Lỗi cập nhật trạng thái: ' + err.message);
   }
-  console.log('[updateStatus] Updating status to:', statusSelect.value);
-  await request(`/api/tickets/${window.selectedTicket.id}/status`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: statusSelect.value }),
-  });
-  await loadTickets();
-  await selectTicket({ id: window.selectedTicket.id });
 };
 
 export const updatePriority = async () => {
@@ -599,17 +679,23 @@ export const updatePriority = async () => {
     return;
   }
   prioritySelect = document.getElementById('priority-select');
-  if (prioritySelect.value === window.selectedTicket.priority) {
-    console.log('[updatePriority] No change, skipping');
-    return;
+  const newPriority = prioritySelect.value;
+  const currentPriority = window.selectedTicket.priority;
+  
+  console.log('[updatePriority] Current:', currentPriority, '-> New:', newPriority);
+  
+  try {
+    await request(`/api/tickets/${window.selectedTicket.id}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority: newPriority }),
+    });
+    console.log('[updatePriority] Success, reloading...');
+    await loadTickets();
+    await selectTicket({ id: window.selectedTicket.id });
+  } catch (err) {
+    console.error('[updatePriority] API error:', err);
+    alert('Lỗi cập nhật độ ưu tiên: ' + err.message);
   }
-  console.log('[updatePriority] Updating priority to:', prioritySelect.value);
-  await request(`/api/tickets/${window.selectedTicket.id}/priority`, {
-    method: 'PATCH',
-    body: JSON.stringify({ priority: prioritySelect.value }),
-  });
-  await loadTickets();
-  await selectTicket({ id: window.selectedTicket.id });
 };
 
 export const updateAssignee = async () => {
@@ -624,24 +710,31 @@ export const updateAssignee = async () => {
     alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
     return;
   }
+  
   const normalizeAssigneeInput = (value) => {
     if (!value || value === UNASSIGNED_VALUE) {
       return null;
     }
     return value;
   };
+  
   const assigneeName = normalizeAssigneeInput(assigneeInput.value);
-  if ((window.selectedTicket.assigneeName || null) === assigneeName) {
-    console.log('[updateAssignee] No change, skipping');
-    return;
+  const currentAssignee = window.selectedTicket.assigneeName || null;
+  
+  console.log('[updateAssignee] Current:', currentAssignee, '-> New:', assigneeName);
+  
+  try {
+    await request(`/api/tickets/${window.selectedTicket.id}/assignee`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assigneeName }),
+    });
+    console.log('[updateAssignee] Success, reloading...');
+    await loadTickets();
+    await selectTicket({ id: window.selectedTicket.id });
+  } catch (err) {
+    console.error('[updateAssignee] API error:', err);
+    alert('Lỗi cập nhật người phân công: ' + err.message);
   }
-  console.log('[updateAssignee] Updating assignee to:', assigneeName);
-  await request(`/api/tickets/${window.selectedTicket.id}/assignee`, {
-    method: 'PATCH',
-    body: JSON.stringify({ assigneeName }),
-  });
-  await loadTickets();
-  await selectTicket({ id: window.selectedTicket.id });
 };
 
 export const assignToMe = async () => {
@@ -649,19 +742,27 @@ export const assignToMe = async () => {
     console.log('[assignToMe] No ticket selected');
     return;
   }
-  const { canAssignTickets } = await import('./userService.js');
+  const { canAssignTickets, currentUser } = await import('./userService.js');
   
   if (!canAssignTickets()) {
     alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
     return;
   }
-  console.log('[assignToMe] Assigning ticket to current user');
-  await request(`/api/tickets/${window.selectedTicket.id}/assign/me`, {
-    method: 'POST',
-  });
-  await loadTickets();
-  await loadQueue();
-  await selectTicket({ id: window.selectedTicket.id });
+  
+  console.log('[assignToMe] Assigning ticket to current user:', currentUser?.username);
+  
+  try {
+    await request(`/api/tickets/${window.selectedTicket.id}/assign/me`, {
+      method: 'POST',
+    });
+    console.log('[assignToMe] Success, reloading...');
+    await loadTickets();
+    await loadQueue();
+    await selectTicket({ id: window.selectedTicket.id });
+  } catch (err) {
+    console.error('[assignToMe] API error:', err);
+    alert('Lỗi giao phiếu: ' + err.message);
+  }
 };
 
 export const addComment = async () => {
@@ -859,49 +960,3 @@ let reportState = {
 };
 
 export const getReportState = () => reportState;
-
-// ==================== Expose to Window for Inline Handlers ====================
-// These are used by inline onclick handlers in HTML for reliability
-window.ticketService_updateStatus = async () => {
-  console.log('[WINDOW] ticketService_updateStatus called');
-  try {
-    await updateStatus();
-    console.log('[WINDOW] updateStatus completed');
-  } catch (err) {
-    console.error('[WINDOW] updateStatus error:', err);
-    alert('Lỗi cập nhật trạng thái: ' + err.message);
-  }
-};
-
-window.ticketService_updatePriority = async () => {
-  console.log('[WINDOW] ticketService_updatePriority called');
-  try {
-    await updatePriority();
-    console.log('[WINDOW] updatePriority completed');
-  } catch (err) {
-    console.error('[WINDOW] updatePriority error:', err);
-    alert('Lỗi cập nhật độ ưu tiên: ' + err.message);
-  }
-};
-
-window.ticketService_updateAssignee = async () => {
-  console.log('[WINDOW] ticketService_updateAssignee called');
-  try {
-    await updateAssignee();
-    console.log('[WINDOW] updateAssignee completed');
-  } catch (err) {
-    console.error('[WINDOW] updateAssignee error:', err);
-    alert('Lỗi cập nhật người phân công: ' + err.message);
-  }
-};
-
-window.ticketService_assignToMe = async () => {
-  console.log('[WINDOW] ticketService_assignToMe called');
-  try {
-    await assignToMe();
-    console.log('[WINDOW] assignToMe completed');
-  } catch (err) {
-    console.error('[WINDOW] assignToMe error:', err);
-    alert('Lỗi giao cho tôi: ' + err.message);
-  }
-};
