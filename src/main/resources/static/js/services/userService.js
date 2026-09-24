@@ -4,6 +4,14 @@ import { hasRole, isAdmin, isGiamDoc, isTruongPhong, isNhanVien, isITStaff, isIn
 import { formatRole, formatName, formatDateTime } from '../ui/utils.js';
 import { engineerOptions as globalEngineerOptions } from '../config/constants.js';
 
+// Initialize window.userPage to avoid undefined issues
+if (typeof window.userPage === 'undefined') {
+  window.userPage = 0;
+}
+
+// Prevent race conditions - flag to track if a load is in progress
+let adminUsersLoading = false;
+
 let adminUsers, userPage = 0;
 const userPageSize = 10;
 let selectedUser = null;
@@ -182,89 +190,100 @@ export const loadEngineerOptions = async () => {
 export const loadAdminUsers = async () => {
   if (!canManageUsers()) return;
   
-  adminUsers = document.getElementById('admin-users');
-  const userSearch = document.getElementById('user-search');
-  const usersPage = document.getElementById('users-page');
-  const usersPrev = document.getElementById('users-prev');
-  const usersNext = document.getElementById('users-next');
+  // Prevent race conditions - ignore if already loading
+  if (adminUsersLoading) {
+    console.log('[loadAdminUsers] Already loading, skipping...');
+    return;
+  }
+  adminUsersLoading = true;
   
-  const params = new URLSearchParams({
-    page: String(userPage),
-    size: String(userPageSize),
-  });
-  if (userSearch && userSearch.value.trim()) {
-    params.append('search', userSearch.value.trim());
-  }
-  const data = await request(`/api/users?${params.toString()}`);
-  if (!adminUsers) return;
-  adminUsers.innerHTML = '';
-
-  // Load pending users section
-  if (isAdmin() || isTruongPhong()) {
-    await loadPendingUsers();
-  }
-
-  // Load delete requests section
-  if (isAdmin() || isTruongPhong()) {
-    await loadDeleteRequests();
-  }
-
-  // Load departments section
-  if (isAdmin() || isGiamDoc()) {
-    const { loadDepartmentsTable } = await import('./departmentService.js');
-    await loadDepartmentsTable();
-  }
-
-  // Count pending users
-  let pendingCount = 0;
-  data.content.forEach((user) => {
-    if (user.approved === false && !user.rejectionReason) {
-      pendingCount++;
+  try {
+    adminUsers = document.getElementById('admin-users');
+    const userSearch = document.getElementById('user-search');
+    const usersPage = document.getElementById('users-page');
+    const usersPrev = document.getElementById('users-prev');
+    const usersNext = document.getElementById('users-next');
+    
+    const params = new URLSearchParams({
+      page: String(window.userPage),  // Use window.userPage to sync with event handlers
+      size: String(userPageSize),
+    });
+    if (userSearch && userSearch.value.trim()) {
+      params.append('search', userSearch.value.trim());
     }
-  });
+    const data = await request(`/api/users?${params.toString()}`);
+    if (!adminUsers) return;
+    adminUsers.innerHTML = '';
 
-  data.content.forEach((user) => {
-    const row = document.createElement('tr');
-    const deptInfo = user.departmentCode ? ` (${user.departmentCode})` : ' (—)';
-
-    let statusBadge = '';
-    let statusClass = '';
-    if (!user.approved && user.rejectionReason) {
-      statusBadge = 'Từ chối';
-      statusClass = 'status-rejected';
-    } else if (!user.approved) {
-      statusBadge = 'Chờ duyệt';
-      statusClass = 'status-pending';
-    } else if (!user.enabled) {
-      statusBadge = 'Vô hiệu hoá';
-      statusClass = 'status-disabled';
-    } else {
-      statusBadge = 'Hoạt động';
-      statusClass = 'status-active';
+    // Load pending users section
+    if (isAdmin() || isTruongPhong()) {
+      await loadPendingUsers();
     }
 
-    row.innerHTML = `
-      <td>${user.username}</td>
-      <td>${user.displayName || '—'}</td>
-      <td>${formatRole(user.role)}</td>
-      <td>${deptInfo}</td>
-      <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
-    `;
-    row.addEventListener('click', () => selectUser(user));
-    adminUsers.appendChild(row);
-  });
+    // Load delete requests section
+    if (isAdmin() || isTruongPhong()) {
+      await loadDeleteRequests();
+    }
 
-  if (usersPage) {
-    usersPage.textContent = `Trang ${data.number + 1} / ${data.totalPages || 1}`;
-  }
-  if (usersPrev) {
-    usersPrev.disabled = data.first;
-  }
-  if (usersNext) {
-    usersNext.disabled = data.last;
-  }
+    // Load departments section
+    if (isAdmin() || isGiamDoc()) {
+      const { loadDepartmentsTable } = await import('./departmentService.js');
+      await loadDepartmentsTable();
+    }
 
-  updatePendingBadge(pendingCount);
+    // Count pending users
+    let pendingCount = 0;
+    data.content.forEach((user) => {
+      if (user.approved === false && !user.rejectionReason) {
+        pendingCount++;
+      }
+    });
+
+    data.content.forEach((user) => {
+      const row = document.createElement('tr');
+      const deptInfo = user.departmentCode ? ` (${user.departmentCode})` : ' (—)';
+
+      let statusBadge = '';
+      let statusClass = '';
+      if (!user.approved && user.rejectionReason) {
+        statusBadge = 'Từ chối';
+        statusClass = 'status-rejected';
+      } else if (!user.approved) {
+        statusBadge = 'Chờ duyệt';
+        statusClass = 'status-pending';
+      } else if (!user.enabled) {
+        statusBadge = 'Vô hiệu hoá';
+        statusClass = 'status-disabled';
+      } else {
+        statusBadge = 'Hoạt động';
+        statusClass = 'status-active';
+      }
+
+      row.innerHTML = `
+        <td>${user.username}</td>
+        <td>${user.displayName || '—'}</td>
+        <td>${formatRole(user.role)}</td>
+        <td>${deptInfo}</td>
+        <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
+      `;
+      row.addEventListener('click', () => selectUser(user));
+      adminUsers.appendChild(row);
+    });
+
+    if (usersPage) {
+      usersPage.textContent = `Trang ${data.number + 1} / ${data.totalPages || 1}`;
+    }
+    if (usersPrev) {
+      usersPrev.disabled = data.first;
+    }
+    if (usersNext) {
+      usersNext.disabled = data.last;
+    }
+
+    updatePendingBadge(pendingCount);
+  } finally {
+    adminUsersLoading = false;
+  }
 };
 
 export const loadPendingUsers = async () => {
@@ -998,8 +1017,8 @@ const formatAuditAction = (action) => {
   return AUDIT_ACTION_LABELS[upper] || formatName(action.replace(/_/g, ' '));
 };
 
-export const getUserPage = () => userPage;
-export const setUserPage = (page) => { userPage = page; };
+export const getUserPage = () => window.userPage;
+export const setUserPage = (page) => { window.userPage = page; };
 export const getSelectedUser = () => selectedUser;
 export const setSelectedUser = (user) => { selectedUser = user; };
 export const getUserAuditPage = () => userAuditPage;
