@@ -1,7 +1,6 @@
 // ==================== Main Application Entry Point ====================
 // IT Ticketing System - Modular Frontend
 
-// Import core modules
 import { initElements, updateTokenStatus, updateNavVisibility, isTokenValid } from './core/auth.js';
 import { routeGuard, setRoute } from './core/router.js';
 

@@ -70,13 +70,16 @@ public class UserAdminService {
         Department department = null;
         if (departmentId != null) {
             department = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Department not found."));
-            // ADMIN không thuộc department
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phòng ban không tồn tại."));
+            // ADMIN không thuộc phòng ban (để departmentId = null)
             if (role == UserRole.Role.ADMIN) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Admin cannot belong to a department.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                    "Admin không thuộc phòng ban nào. Vui lòng để trống trường Phòng ban.");
             }
         } else if (role != UserRole.Role.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Non-admin users must belong to a department.");
+            // Validation annotation sẽ catch trường hợp này, nhưng đây là backup
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                "Phòng ban không được để trống. Vui lòng chọn một phòng ban.");
         }
 
         UserAccount user = new UserAccount();

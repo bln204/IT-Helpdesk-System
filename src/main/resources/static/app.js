@@ -457,6 +457,8 @@ const userDelete = document.getElementById('user-delete');
 const userAudit = document.getElementById('user-audit');
 const userAuditPrev = document.getElementById('user-audit-prev');
 const userAuditNext = document.getElementById('user-audit-next');
+console.log('[DEBUG] userAuditPrev:', userAuditPrev);
+console.log('[DEBUG] userAuditNext:', userAuditNext);
 const userAuditPageLabel = document.getElementById('user-audit-page');
 const openUserModal = document.getElementById('open-user-modal');
 const closeUserModal = document.getElementById('close-user-modal');
@@ -3439,6 +3441,7 @@ if (closeUserModal) {
 
 if (closeUserDetail) {
   closeUserDetail.addEventListener('click', () => {
+    document.body.focus();
     if (userDetailModal) {
       userDetailModal.classList.add('hidden');
     }
@@ -3449,22 +3452,31 @@ if (closeUserDetail) {
 }
 
 if (userAuditPrev) {
+  console.log('[DEBUG] userAuditPrev found:', userAuditPrev);
   userAuditPrev.addEventListener('click', () => {
+    console.log('[DEBUG] userAuditPrev clicked, current page:', userAuditPage);
     if (userAuditPage > 0) {
       userAuditPage -= 1;
       renderUserAuditPage();
     }
   });
+} else {
+  console.log('[DEBUG] userAuditPrev is null!');
 }
 
 if (userAuditNext) {
+  console.log('[DEBUG] userAuditNext found:', userAuditNext);
   userAuditNext.addEventListener('click', () => {
+    console.log('[DEBUG] userAuditNext clicked, current page:', userAuditPage, 'total entries:', userAuditEntries.length);
     const totalPages = Math.max(1, Math.ceil(userAuditEntries.length / userAuditPageSize));
+    console.log('[DEBUG] totalPages:', totalPages);
     if (userAuditPage + 1 < totalPages) {
       userAuditPage += 1;
       renderUserAuditPage();
     }
   });
+} else {
+  console.log('[DEBUG] userAuditNext is null!');
 }
 
 if (userSaveRole) {

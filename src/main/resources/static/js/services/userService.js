@@ -15,9 +15,9 @@ let adminUsersLoading = false;
 let adminUsers, userPage = 0;
 const userPageSize = 10;
 let selectedUser = null;
-let userAuditPage = 0;
+window.userAuditPage = 0;
 const userAuditPageSize = 5;
-let userAuditEntries = [];
+window.userAuditEntries = [];
 let userAvatarMap = new Map();
 let userAvatarReady = false;
 let pendingUsersCache = [];
@@ -488,7 +488,9 @@ export const loadDeleteRequests = async () => {
 };
 
 export const selectUser = async (user) => {
+  console.log('[DEBUG] selectUser called with:', user);
   selectedUser = user;
+  window.selectedUser = user;
   
   const userDeptSelect = document.getElementById('user-dept-select');
   if (userDeptSelect) {
@@ -504,6 +506,7 @@ export const selectUser = async (user) => {
   
   if (userDetailModal) {
     userDetailModal.classList.remove('hidden');
+    userDetailModal.removeAttribute('aria-hidden');
   }
   if (userDetailHeader) {
     const deptInfo = user.departmentName ? ` - ${user.departmentName}` : '';
@@ -631,8 +634,8 @@ export const selectUser = async (user) => {
     userAudit.innerHTML = '';
   }
   try {
-    userAuditEntries = await request(`/api/users/audit?targetUsername=${encodeURIComponent(user.username)}`);
-    userAuditPage = 0;
+    window.userAuditEntries = await request(`/api/users/audit?targetUsername=${encodeURIComponent(user.username)}`);
+    window.userAuditPage = 0;
     renderUserAuditPage();
   } catch (error) {
     if (userAudit) {
@@ -780,34 +783,36 @@ export const renderUserAuditPage = () => {
   const userAudit = document.getElementById('user-audit');
   if (!userAudit) return;
   userAudit.innerHTML = '';
-  if (!userAuditEntries.length) {
+  if (!window.userAuditEntries.length) {
     const item = document.createElement('div');
     item.className = 'list-item';
     item.textContent = 'Chưa có nhật ký kiểm tra.';
     userAudit.appendChild(item);
   } else {
-    const start = userAuditPage * userAuditPageSize;
-    const pageItems = userAuditEntries.slice(start, start + userAuditPageSize);
+    const start = window.userAuditPage * userAuditPageSize;
+    const pageItems = window.userAuditEntries.slice(start, start + userAuditPageSize);
     pageItems.forEach((entry) => {
       const item = document.createElement('div');
       item.className = 'list-item';
+      const actionLabel = formatAuditAction(entry.action);
+      const actorRoleLabel = formatRole(entry.actorRole);
       const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
-      item.textContent = `${when} • ${formatAuditAction(entry.action)} bởi ${entry.actorUsername} (${formatRole(entry.actorRole)})`;
+      item.textContent = `${when} • ${actionLabel} bởi ${entry.actorUsername} (${actorRoleLabel})`;
       userAudit.appendChild(item);
     });
   }
-  const totalPages = Math.max(1, Math.ceil(userAuditEntries.length / userAuditPageSize));
+  const totalPages = Math.max(1, Math.ceil(window.userAuditEntries.length / userAuditPageSize));
   const userAuditPageLabel = document.getElementById('user-audit-page');
   const userAuditPrev = document.getElementById('user-audit-prev');
   const userAuditNext = document.getElementById('user-audit-next');
   if (userAuditPageLabel) {
-    userAuditPageLabel.textContent = `Trang ${Math.min(userAuditPage + 1, totalPages)} / ${totalPages}`;
+    userAuditPageLabel.textContent = `Trang ${Math.min(window.userAuditPage + 1, totalPages)} / ${totalPages}`;
   }
   if (userAuditPrev) {
-    userAuditPrev.disabled = userAuditPage <= 0;
+    userAuditPrev.disabled = window.userAuditPage <= 0;
   }
   if (userAuditNext) {
-    userAuditNext.disabled = userAuditPage + 1 >= totalPages;
+    userAuditNext.disabled = window.userAuditPage + 1 >= totalPages;
   }
 };
 
@@ -1021,5 +1026,5 @@ export const getUserPage = () => window.userPage;
 export const setUserPage = (page) => { window.userPage = page; };
 export const getSelectedUser = () => selectedUser;
 export const setSelectedUser = (user) => { selectedUser = user; };
-export const getUserAuditPage = () => userAuditPage;
-export const setUserAuditPage = (page) => { userAuditPage = page; };
+export const getUserAuditPage = () => window.userAuditPage;
+export const setUserAuditPage = (page) => { window.userAuditPage = page; };
