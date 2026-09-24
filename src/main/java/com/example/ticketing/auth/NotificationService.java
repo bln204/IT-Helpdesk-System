@@ -64,13 +64,18 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserAccountRepository userAccountRepository;
+    private final NotificationPreferencesRepository preferencesRepository;
     
     @Autowired
     private EmailService emailService;
-
-    public NotificationService(NotificationRepository notificationRepository, UserAccountRepository userAccountRepository) {
+    
+    public NotificationService(
+            NotificationRepository notificationRepository,
+            UserAccountRepository userAccountRepository,
+            NotificationPreferencesRepository preferencesRepository) {
         this.notificationRepository = notificationRepository;
         this.userAccountRepository = userAccountRepository;
+        this.preferencesRepository = preferencesRepository;
     }
 
     /**
@@ -415,5 +420,58 @@ public class NotificationService {
     @Transactional
     public void deleteAllNotifications(String username) {
         notificationRepository.deleteByRecipientUsername(username);
+    }
+    
+    /**
+     * Delete a single notification.
+     */
+    @Transactional
+    public void deleteNotification(Long notificationId) {
+        if (notificationRepository.existsById(notificationId)) {
+            notificationRepository.deleteById(notificationId);
+        }
+    }
+    
+    /**
+     * Update notification preferences.
+     */
+    @Transactional
+    public NotificationPreferences updatePreferences(String username, NotificationPreferences.NotificationPreferencesRequest request) {
+        NotificationPreferences prefs = preferencesRepository.findByUserUsername(username)
+            .orElseThrow(() -> new RuntimeException("User preferences not found"));
+        
+        if (request.notifyTicketCreated != null) prefs.setNotifyTicketCreated(request.notifyTicketCreated);
+        if (request.notifyTicketAssigned != null) prefs.setNotifyTicketAssigned(request.notifyTicketAssigned);
+        if (request.notifyStatusChanged != null) prefs.setNotifyStatusChanged(request.notifyStatusChanged);
+        if (request.notifyCommentAdded != null) prefs.setNotifyCommentAdded(request.notifyCommentAdded);
+        if (request.notifySlaWarning != null) prefs.setNotifySlaWarning(request.notifySlaWarning);
+        if (request.notifySlaBreached != null) prefs.setNotifySlaBreached(request.notifySlaBreached);
+        if (request.notifyEscalated != null) prefs.setNotifyEscalated(request.notifyEscalated);
+        if (request.emailEnabled != null) prefs.setEmailEnabled(request.emailEnabled);
+        if (request.inAppEnabled != null) prefs.setInAppEnabled(request.inAppEnabled);
+        
+        return preferencesRepository.save(prefs);
+    }
+    
+    /**
+     * Enable/disable email notifications.
+     */
+    @Transactional
+    public NotificationPreferences setEmailEnabled(String username, boolean enabled) {
+        NotificationPreferences prefs = preferencesRepository.findByUserUsername(username)
+            .orElseThrow(() -> new RuntimeException("User preferences not found"));
+        prefs.setEmailEnabled(enabled);
+        return preferencesRepository.save(prefs);
+    }
+    
+    /**
+     * Enable/disable in-app notifications.
+     */
+    @Transactional
+    public NotificationPreferences setInAppEnabled(String username, boolean enabled) {
+        NotificationPreferences prefs = preferencesRepository.findByUserUsername(username)
+            .orElseThrow(() -> new RuntimeException("User preferences not found"));
+        prefs.setInAppEnabled(enabled);
+        return preferencesRepository.save(prefs);
     }
 }

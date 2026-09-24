@@ -17,10 +17,17 @@ let ticketLoading = false;
 let ticketsCache = [];
 let selectedFiles = [];
 let ticketSelectedFilesList = [];
+let showUnassignedOnly = false;
 let currentReport = null;
 let autoRefreshTimer = null;
 const autoRefreshKey = 'ticketing.autoRefresh';
 const autoRefreshMs = 60000;
+
+// ==================== Filter Functions ====================
+
+export const setFilterUnassigned = () => {
+  showUnassignedOnly = true;
+};
 
 // ==================== Initialize Event Listeners ====================
 export const initTicketEvents = () => {
@@ -241,6 +248,16 @@ export const loadTickets = async ({ reset = false } = {}) => {
     params.append('sort', 'createdAt,desc');
   }
   let data = await request(`/api/tickets?${params.toString()}`);
+  
+  // Filter for unassigned if flag is set
+  if (showUnassignedOnly) {
+    data = {
+      ...data,
+      content: data.content.filter(t => !t.assigneeName)
+    };
+    showUnassignedOnly = false; // Reset after use
+  }
+  
   if (assigneeFallback && data.content.length === 0 && assigneeFallback !== params.get('assignee')) {
     params.set('assignee', assigneeFallback);
     data = await request(`/api/tickets?${params.toString()}`);

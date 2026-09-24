@@ -3,6 +3,10 @@
 
 import { initElements, updateTokenStatus, updateNavVisibility, isTokenValid } from './core/auth.js';
 import { routeGuard, setRoute } from './core/router.js';
+import { DashboardModule } from './modules/dashboard.js';
+
+// Expose DashboardModule globally
+window.DashboardModule = DashboardModule;
 
 // Import services
 import { 
@@ -121,8 +125,30 @@ const init = async () => {
       loadAdminUsers().catch(() => {});
       loadDepartments().catch(() => {});
     }
+    
+    // Load IT Staff Dashboard if on dashboard view
+    loadITDashboard();
   }
 };
+
+// Load IT Staff Dashboard Module
+const loadITDashboard = async () => {
+  const dashboardContent = document.getElementById('dashboard-content');
+  if (!dashboardContent) return;
+  
+  // DashboardModule is already imported at top of file
+  if (window.DashboardModule) {
+    window.DashboardModule.init();
+  }
+};
+
+// Watch for hash changes to load dashboard
+window.addEventListener('hashchange', () => {
+  const hash = window.location.hash;
+  if (hash === '#/dashboard' || hash.includes('dashboard')) {
+    loadITDashboard();
+  }
+});
 
 // Theme key
 const themeKey = 'ticketing.theme';

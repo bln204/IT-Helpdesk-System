@@ -833,9 +833,9 @@ export const loadProfile = async () => {
     profileDetails.innerHTML = '';
     const item = document.createElement('div');
     item.className = 'list-item';
-    const displayName = profile.displayName || profile.username;
+    const profileDisplayName = profile.displayName || profile.username;
     const deptInfo = profile.departmentName ? ` - ${profile.departmentName}` : '';
-    const nameLine = displayName ? `${displayName} (${formatRole(profile.role)}${deptInfo})` : `${profile.username} (${formatRole(profile.role)})`;
+    const nameLine = profileDisplayName ? `${profileDisplayName} (${formatRole(profile.role)}${deptInfo})` : `${profile.username} (${formatRole(profile.role)})`;
     item.textContent = nameLine;
     profileDetails.appendChild(item);
     if (profile.email) {
@@ -860,12 +860,12 @@ export const loadProfile = async () => {
     profileAvatarPreview.classList.toggle('hidden', !profile.avatarUrl);
   }
   if (profileAvatarFallback) {
-    const initialSource = displayName || profile.username || 'U';
+    const initialSource = profileDisplayName || profile.username || 'U';
     profileAvatarFallback.textContent = initialSource.trim().charAt(0).toUpperCase();
     profileAvatarFallback.classList.toggle('hidden', !!profile.avatarUrl);
   }
   if (sidebarUsername) {
-    sidebarUsername.textContent = formatName(displayName || profile.username);
+    sidebarUsername.textContent = formatName(profileDisplayName || profile.username);
   }
   if (logoMarkImg) {
     logoMarkImg.src = profile.avatarUrl || '';

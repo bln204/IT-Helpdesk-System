@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,6 +35,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 
 import jakarta.validation.Valid;
 
@@ -54,6 +56,10 @@ public class TicketController {
         this.userAccountRepository = userAccountRepository;
     }
 
+    // ============================================================
+    // TICKET CREATION
+    // ============================================================
+    
     @PostMapping
     public ResponseEntity<TicketDtos.TicketResponse> createTicket(
         @Valid @RequestBody TicketDtos.TicketCreateRequest request,
@@ -75,6 +81,10 @@ public class TicketController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketDtos.TicketResponse.from(created));
     }
 
+    // ============================================================
+    // TICKET LISTING
+    // ============================================================
+    
     @GetMapping
     public Page<TicketDtos.TicketResponse> listTickets(
         @RequestParam(required = false) String assignee,
@@ -110,6 +120,24 @@ public class TicketController {
         return TicketDtos.TicketResponse.from(ticketService.getTicket(id));
     }
 
+    @GetMapping("/{id}/valid-transitions")
+    public ResponseEntity<Set<TicketTypes.TicketStatus>> getValidTransitions(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Set<TicketTypes.TicketStatus> validStatuses = ticketService.getValidNextStatuses(id);
+        
+        // Filter CANCELLED cho non-admin users
+        if (user.getRole() != UserRole.Role.ADMIN) {
+            validStatuses = validStatuses.stream()
+                .filter(s -> s != TicketTypes.TicketStatus.CANCELLED)
+                .collect(java.util.stream.Collectors.toSet());
+        }
+        
+        return ResponseEntity.ok(validStatuses);
+    }
+
     @GetMapping("/queue")
     public List<TicketDtos.TicketResponse> unassignedQueue(Authentication authentication) {
         requireStaff(authentication);
@@ -118,6 +146,10 @@ public class TicketController {
             .toList();
     }
 
+    // ============================================================
+    // ASSIGNMENT ENDPOINTS
+    // ============================================================
+    
     @PostMapping("/{id}/assign/me")
     public TicketDtos.TicketResponse assignToMe(
         @PathVariable Long id,
@@ -135,35 +167,17 @@ public class TicketController {
         );
         return TicketDtos.TicketResponse.from(updated);
     }
-
-    @PatchMapping("/{id}/status")
-    public TicketDtos.TicketResponse updateStatus(
+    
+    @PostMapping("/{id}/unassign")
+    public TicketDtos.TicketResponse unassignTicket(
         @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketStatusUpdateRequest request,
         Authentication authentication
     ) {
         UserAccount user = getCurrentUser(authentication);
-        Ticket updated = ticketService.updateStatus(
-            id,
-            request.getStatus(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            authentication.getName()
-        );
-        return TicketDtos.TicketResponse.from(updated);
-    }
+        requireAssignPermission(user);
 
-    @PatchMapping("/{id}/priority")
-    public TicketDtos.TicketResponse updatePriority(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketPriorityUpdateRequest request,
-        Authentication authentication
-    ) {
-        UserAccount user = getCurrentUser(authentication);
-        Ticket updated = ticketService.updatePriority(
+        Ticket updated = ticketService.unassignTicket(
             id,
-            request.getPriority(),
             user.getRole(),
             user.getDepartmentId(),
             authentication.getName()
@@ -190,6 +204,236 @@ public class TicketController {
         return TicketDtos.TicketResponse.from(updated);
     }
 
+    // ============================================================
+    // STATUS MANAGEMENT ENDPOINTS (Phase 2.2)
+    // ============================================================
+    
+    @PatchMapping("/{id}/status")
+    public TicketDtos.TicketResponse updateStatus(
+        @PathVariable Long id,
+        @Valid @RequestBody TicketDtos.TicketStatusUpdateRequest request,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.updateStatus(
+            id,
+            request.getStatus(),
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName(),
+            authentication.getName(),
+            request.getComment()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Bắt đầu xử lý ticket (chuyển sang IN_PROGRESS).
+     * POST /api/tickets/{id}/start
+     */
+    @PostMapping("/{id}/start")
+    public TicketDtos.TicketResponse startProgress(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.startProgress(
+            id,
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Yêu cầu thông tin từ user (chuyển sang WAITING_FOR_USER).
+     * POST /api/tickets/{id}/request-info
+     */
+    @PostMapping("/{id}/request-info")
+    public TicketDtos.TicketResponse requestUserInfo(
+        @PathVariable Long id,
+        @RequestParam(required = false) String message,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.requestUserInfo(
+            id,
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName(),
+            message
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * User cung cấp thông tin (chuyển từ WAITING_FOR_USER về IN_PROGRESS).
+     * POST /api/tickets/{id}/provide-info
+     */
+    @PostMapping("/{id}/provide-info")
+    public TicketDtos.TicketResponse provideUserInfo(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.provideUserInfo(
+            id,
+            user.getRole(),
+            authentication.getName()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Resolve ticket.
+     * POST /api/tickets/{id}/resolve
+     */
+    @PostMapping("/{id}/resolve")
+    public TicketDtos.TicketResponse resolveTicket(
+        @PathVariable Long id,
+        @RequestParam(required = false) String resolution,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.resolveTicket(
+            id,
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName(),
+            resolution
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Close ticket (user confirm resolution).
+     * POST /api/tickets/{id}/close
+     */
+    @PostMapping("/{id}/close")
+    public TicketDtos.TicketResponse closeTicket(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.closeTicket(
+            id,
+            authentication.getName(),
+            user.getRole()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Reopen ticket.
+     * POST /api/tickets/{id}/reopen
+     */
+    @PostMapping("/{id}/reopen")
+    public TicketDtos.TicketResponse reopenTicket(
+        @PathVariable Long id,
+        @RequestParam(required = false) String reason,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.reopenTicket(
+            id,
+            authentication.getName(),
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName(),
+            reason
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Escalate ticket.
+     * POST /api/tickets/{id}/escalate
+     */
+    @PostMapping("/{id}/escalate")
+    public TicketDtos.TicketResponse escalateTicket(
+        @PathVariable Long id,
+        @RequestParam(required = false) String reason,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.escalateTicket(
+            id,
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName(),
+            reason
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    /**
+     * Cancel ticket (Admin only).
+     * POST /api/tickets/{id}/cancel
+     */
+    @PostMapping("/{id}/cancel")
+    public TicketDtos.TicketResponse cancelTicket(
+        @PathVariable Long id,
+        @RequestParam(required = false) String reason,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.cancelTicket(
+            id,
+            user.getRole(),
+            authentication.getName(),
+            reason
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+
+    // ============================================================
+    // PRIORITY ENDPOINT
+    // ============================================================
+    
+    @PatchMapping("/{id}/priority")
+    public TicketDtos.TicketResponse updatePriority(
+        @PathVariable Long id,
+        @Valid @RequestBody TicketDtos.TicketPriorityUpdateRequest request,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.updatePriority(
+            id,
+            request.getPriority(),
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+    
+    // ============================================================
+    // CATEGORY ENDPOINT
+    // ============================================================
+    
+    @PatchMapping("/{id}/category")
+    public TicketDtos.TicketResponse updateCategory(
+        @PathVariable Long id,
+        @Valid @RequestBody TicketDtos.TicketCategoryUpdateRequest request,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.updateCategory(
+            id,
+            request.getCategoryId(),
+            request.getSubcategoryId(),
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+
+    // ============================================================
+    // COMMENTS ENDPOINTS
+    // ============================================================
+    
     @GetMapping("/{id}/assignments")
     public List<TicketDtos.TicketAssignmentResponse> listAssignments(@PathVariable Long id) {
         return ticketService.listAssignments(id).stream()
@@ -227,55 +471,10 @@ public class TicketController {
             .toList();
     }
 
-    // ==================== Attachment Endpoints ====================
-
-    @PostMapping("/{id}/attachments")
-    public ResponseEntity<TicketDtos.TicketAttachmentResponse> uploadAttachment(
-        @PathVariable Long id,
-        @RequestPart("file") MultipartFile file,
-        Authentication authentication
-    ) {
-        // Verify ticket exists
-        ticketService.getTicket(id);
-        UserAccount user = getCurrentUser(authentication);
-        
-        TicketAttachment attachment = attachmentService.uploadAttachment(
-            id,
-            file,
-            authentication.getName()
-        );
-        
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .body(TicketDtos.TicketAttachmentResponse.from(attachment));
-    }
-
-    @GetMapping("/{id}/attachments")
-    public List<TicketDtos.TicketAttachmentResponse> listAttachments(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
-        // Verify ticket exists
-        ticketService.getTicket(id);
-        return attachmentService.getAttachmentsByTicketId(id).stream()
-            .map(TicketDtos.TicketAttachmentResponse::from)
-            .toList();
-    }
-
-    @GetMapping("/attachments/{attachmentId}/download")
-    public ResponseEntity<Resource> downloadAttachment(
-        @PathVariable Long attachmentId,
-        Authentication authentication
-    ) {
-        TicketAttachment attachment = attachmentService.getAttachment(attachmentId);
-        Resource resource = attachmentService.downloadAttachment(attachmentId);
-        
-        String contentDisposition = "attachment; filename=\"" + attachment.getOriginalName() + "\"";
-        return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType(attachment.getContentType()))
-            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-            .body(resource);
-    }
-
+    // ============================================================
+    // AUDIT ENDPOINTS
+    // ============================================================
+    
     @GetMapping("/{id}/audit")
     public List<TicketDtos.TicketAuditResponse> listAudit(@PathVariable Long id) {
         return ticketService.listAudit(id).stream()
@@ -309,6 +508,59 @@ public class TicketController {
         headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=ticket-" + id + "-audit.csv");
         return new ResponseEntity<>(csv.toString(), headers, HttpStatus.OK);
     }
+
+    // ============================================================
+    // ATTACHMENT ENDPOINTS
+    // ============================================================
+
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<TicketDtos.TicketAttachmentResponse> uploadAttachment(
+        @PathVariable Long id,
+        @RequestPart("file") MultipartFile file,
+        Authentication authentication
+    ) {
+        ticketService.getTicket(id);
+        UserAccount user = getCurrentUser(authentication);
+        
+        TicketAttachment attachment = attachmentService.uploadAttachment(
+            id,
+            file,
+            authentication.getName()
+        );
+        
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(TicketDtos.TicketAttachmentResponse.from(attachment));
+    }
+
+    @GetMapping("/{id}/attachments")
+    public List<TicketDtos.TicketAttachmentResponse> listAttachments(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        ticketService.getTicket(id);
+        return attachmentService.getAttachmentsByTicketId(id).stream()
+            .map(TicketDtos.TicketAttachmentResponse::from)
+            .toList();
+    }
+
+    @GetMapping("/attachments/{attachmentId}/download")
+    public ResponseEntity<Resource> downloadAttachment(
+        @PathVariable Long attachmentId,
+        Authentication authentication
+    ) {
+        TicketAttachment attachment = attachmentService.getAttachment(attachmentId);
+        Resource resource = attachmentService.downloadAttachment(attachmentId);
+        
+        String contentDisposition = "attachment; filename=\"" + attachment.getOriginalName() + "\"";
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(attachment.getContentType()))
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+            .body(resource);
+    }
+
+    // ============================================================
+    // REPORTS ENDPOINTS
+    // ============================================================
 
     @GetMapping("/reports/status-counts")
     public List<TicketDtos.TicketStatusCountResponse> statusCounts(
@@ -480,7 +732,9 @@ public class TicketController {
         return ticketService.buildSlaBuckets(range[0], range[1]);
     }
 
-    // ==================== Helper Methods ====================
+    // ============================================================
+    // HELPER METHODS
+    // ============================================================
 
     private UserAccount getCurrentUser(Authentication authentication) {
         return userAccountRepository.findByUsername(authentication.getName())

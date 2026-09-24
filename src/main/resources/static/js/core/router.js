@@ -24,6 +24,36 @@ export const showView = (viewName) => {
     ticketDetailsPanel.classList.add('hidden');
     window.selectedTicket = null;
   }
+  
+  // Load tickets when tickets view is shown
+  if (viewName === 'tickets') {
+    // Check for pending filter from dashboard
+    const pendingFilter = sessionStorage.getItem('ticketing.pendingFilter');
+    const selectedTicketId = sessionStorage.getItem('ticketing.selectedTicketId');
+    
+    if (pendingFilter === 'unassigned') {
+      sessionStorage.removeItem('ticketing.pendingFilter');
+      // Set filter to show unassigned tickets
+      import('../services/ticketService.js').then(module => {
+        module.setFilterUnassigned();
+        module.loadTickets({ reset: true }).catch(() => {});
+        // Select ticket if one was pending
+        if (selectedTicketId) {
+          sessionStorage.removeItem('ticketing.selectedTicketId');
+          module.selectTicket({ id: parseInt(selectedTicketId) }).catch(() => {});
+        }
+      });
+    } else {
+      import('../services/ticketService.js').then(module => {
+        module.loadTickets({ reset: false }).catch(() => {});
+        // Select ticket if one was pending
+        if (selectedTicketId) {
+          sessionStorage.removeItem('ticketing.selectedTicketId');
+          module.selectTicket({ id: parseInt(selectedTicketId) }).catch(() => {});
+        }
+      });
+    }
+  }
   if (viewName === 'admin' && canManageUsers()) {
     const adminDesc = document.getElementById('admin-panel-description');
     if (adminDesc) {
