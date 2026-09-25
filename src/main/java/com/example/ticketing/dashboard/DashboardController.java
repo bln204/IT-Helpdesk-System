@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketTypes;
@@ -38,6 +39,9 @@ public class DashboardController {
     
     @Autowired
     private TeamService teamService;
+    
+    @Autowired
+    private DepartmentRepository departmentRepository;
     
     @Autowired
     private SlaSchedulerService slaSchedulerService;
@@ -129,6 +133,36 @@ public class DashboardController {
             @PathVariable Long teamId) {
         List<TeamService.TeamMemberWorkload> workload = teamService.getTeamWorkload(teamId);
         return ResponseEntity.ok(workload);
+    }
+    
+    /**
+     * Lấy IT Department Workload - hiển thị workload của tất cả IT Staff.
+     * GET /api/dashboard/it-workload
+     */
+    @GetMapping("/it-workload")
+    public ResponseEntity<List<ITStaffWorkload>> getITWorkload() {
+        // Tìm IT Department
+        var itDept = departmentRepository.findByCode("IT").orElse(null);
+        if (itDept == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        
+        // Lấy tất cả IT Staff (users trong IT department)
+        List<UserAccount> itStaff = userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(itDept.getId());
+        
+        // Lấy workload cho từng staff
+        List<ITStaffWorkload> workloads = itStaff.stream().map(staff -> {
+            long ticketCount = ticketRepository.countByAssigneeIdAndStatusNotIn(staff.getId(), staff.getUsername());
+            return new ITStaffWorkload(
+                staff.getId(),
+                staff.getUsername(),
+                staff.getDisplayName(),
+                staff.getRole().name(),
+                (int) ticketCount
+            );
+        }).toList();
+        
+        return ResponseEntity.ok(workloads);
     }
     
     /**
@@ -285,5 +319,36 @@ public class DashboardController {
         public void setPriority(String priority) { this.priority = priority; }
         public LocalDateTime getCreatedAt() { return createdAt; }
         public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    }
+    
+    /**
+     * DTO cho IT Staff Workload.
+     */
+    public static class ITStaffWorkload {
+        private Long staffId;
+        private String username;
+        private String displayName;
+        private String role;
+        private int ticketCount;
+        
+        public ITStaffWorkload(Long staffId, String username, String displayName, String role, int ticketCount) {
+            this.staffId = staffId;
+            this.username = username;
+            this.displayName = displayName;
+            this.role = role;
+            this.ticketCount = ticketCount;
+        }
+        
+        // Getters & Setters
+        public Long getStaffId() { return staffId; }
+        public void setStaffId(Long staffId) { this.staffId = staffId; }
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
+        public String getDisplayName() { return displayName; }
+        public void setDisplayName(String displayName) { this.displayName = displayName; }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
+        public int getTicketCount() { return ticketCount; }
+        public void setTicketCount(int ticketCount) { this.ticketCount = ticketCount; }
     }
 }

@@ -371,4 +371,16 @@ export const initElements = () => {
   tokenStatus = document.getElementById('token-status');
 };
 
+/**
+ * Clear auth state for logout
+ */
+export const clearAuthState = () => {
+  currentUser = null;
+  notifications = [];
+  if (notificationPollingTimer) {
+    clearInterval(notificationPollingTimer);
+    notificationPollingTimer = null;
+  }
+};
+
 export { DEMO_CREDENTIALS, currentUser, notifications, notificationPollingTimer };

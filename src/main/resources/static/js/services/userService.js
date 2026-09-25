@@ -1,6 +1,6 @@
 // ==================== User Service ====================
 import { request } from '../core/api.js';
-import { hasRole, isAdmin, isGiamDoc, isTruongPhong, isNhanVien, isITStaff, isInITDepartment } from '../core/auth.js';
+import { hasRole, isAdmin, isGiamDoc, isTruongPhong, isNhanVien, isITStaff, isInITDepartment, getCurrentUser } from '../core/auth.js';
 import { formatRole, formatName, formatDateTime } from '../ui/utils.js';
 import { engineerOptions as globalEngineerOptions } from '../config/constants.js';
 
@@ -21,17 +21,16 @@ window.userAuditEntries = [];
 let userAvatarMap = new Map();
 let userAvatarReady = false;
 let pendingUsersCache = [];
-let currentUser = null;
 
 // Permission checks
 export const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG');
 export const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
-export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || (hasRole('ROLE_TRUONG_PHONG') && currentUser?.departmentCode === 'IT');
+export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || (hasRole('ROLE_TRUONG_PHONG') && getCurrentUser()?.departmentCode === 'IT');
 export const canViewInternalComments = () => !isNhanVien() || isITStaff();
 export const canAddInternalComments = () => isInITDepartment() || isAdmin() || isGiamDoc();
 export const isStaff = () => !isNhanVien() || isITStaff();
-
-export const getCurrentUser = () => currentUser;
+// Re-export isITStaff for app.js
+export { isITStaff };
 
 export const updatePendingBadge = (count) => {
   const badges = ['pending-users-badge', 'pending-users-badge-nav', 'pending-users-badge-dd'];
@@ -51,7 +50,9 @@ export const updatePendingBadge = (count) => {
 export const loadUserAvatarMap = async () => {
   userAvatarMap.clear();
   userAvatarReady = false;
-  if (!canManageUsers()) return;
+  // Load for IT Staff and users who can manage users
+  const { isITStaff, canManageUsers } = await import('../core/auth.js');
+  if (!canManageUsers() && !isITStaff()) return;
   try {
     const data = await request('/api/users?page=0&size=200');
     data.content.forEach((user) => {
@@ -124,7 +125,7 @@ export const populateAssigneeSelect = (
     const displayName = getDisplayName(username);
     const option = document.createElement('option');
     option.value = username;
-    option.textContent = formatName(username);
+    option.textContent = displayName;
     option.dataset.username = username;
     if (displayName) {
       option.dataset.displayName = displayName;
@@ -142,33 +143,36 @@ export const setEngineerOptions = (options) => { engineerOptions = options; };
 export const loadEngineerOptions = async () => {
   const { isTokenValid, hasRole, isAdmin, isGiamDoc, isTruongPhong, isNhanVien, isITStaff } = await import('../core/auth.js');
   if (!isTokenValid()) {
-    console.log('loadEngineerOptions: Token invalid');
     return;
   }
-  
-  console.log('loadEngineerOptions: isAdmin():', isAdmin());
-  console.log('loadEngineerOptions: isGiamDoc():', isGiamDoc());
-  console.log('loadEngineerOptions: isTruongPhong():', isTruongPhong());
-  console.log('loadEngineerOptions: isITStaff():', isITStaff());
-  
+
   // Check if user is eligible to see engineer list
   const isEligibleRole = isAdmin() || isGiamDoc() || isTruongPhong() || isITStaff();
   if (!isEligibleRole) {
-    console.log('loadEngineerOptions: Not eligible role');
     return;
   }
   
   try {
     const response = await request('/api/users/engineers');
-    console.log('loadEngineerOptions: Raw response', response);
-    const parsed = response.map(u => typeof u === 'string' ? u : u.username);
-    console.log('loadEngineerOptions: Parsed engineers', parsed);
+    // Lưu engineer options và cập nhật userAvatarMap
+    const parsed = response.map(u => {
+      // Cập nhật userAvatarMap với displayName của engineer
+      if (u.username && u.displayName) {
+        const entry = userAvatarMap.get(u.username.toLowerCase()) || {};
+        userAvatarMap.set(u.username.toLowerCase(), {
+          ...entry,
+          displayName: u.displayName,
+          avatarUrl: u.avatarUrl || entry.avatarUrl,
+          departmentCode: u.departmentCode || entry.departmentCode
+        });
+      }
+      return u.username;
+    });
     
     // Update both local and global engineerOptions
     engineerOptions = parsed;
     globalEngineerOptions.length = 0;
     globalEngineerOptions.push(...parsed);
-    console.log('loadEngineerOptions: Updated globalEngineerOptions', globalEngineerOptions.length);
     
     const filterAssignee = document.getElementById('filter-assignee');
     const assigneeInput = document.getElementById('assignee-input');
@@ -192,7 +196,6 @@ export const loadAdminUsers = async () => {
   
   // Prevent race conditions - ignore if already loading
   if (adminUsersLoading) {
-    console.log('[loadAdminUsers] Already loading, skipping...');
     return;
   }
   adminUsersLoading = true;
@@ -488,7 +491,6 @@ export const loadDeleteRequests = async () => {
 };
 
 export const selectUser = async (user) => {
-  console.log('[DEBUG] selectUser called with:', user);
   selectedUser = user;
   window.selectedUser = user;
   
@@ -653,7 +655,7 @@ export const canManageTargetUser = (user) => {
   if (isGiamDoc()) return user.role !== 'ADMIN';
   if (isTruongPhong()) {
     if (user.role !== 'NHAN_VIEN') return false;
-    return user.departmentId === currentUser?.departmentId;
+    return user.departmentId === getCurrentUser()?.departmentId;
   }
   return false;
 };
@@ -678,7 +680,7 @@ export const applyUserDetailControls = () => {
       canDelete = true;
     }
     canEdit = true;
-    if (selectedUser.username !== currentUser?.username) {
+    if (selectedUser.username !== getCurrentUser()?.username) {
       canResetPassword = true;
     }
   } else if (isGiamDoc()) {
@@ -889,6 +891,10 @@ export const loadProfile = async () => {
   };
   localStorage.setItem('ticketing.currentUser', JSON.stringify(currentUser));
   
+  // Sync with auth.js currentUser
+  const { setCurrentUser } = await import('../core/auth.js');
+  setCurrentUser(currentUser);
+  
   const { updateTokenStatus } = await import('../core/auth.js');
   updateTokenStatus();
 };
@@ -936,7 +942,8 @@ export const applyRoleControls = () => {
       updateAssigneeBtn.disabled = !canAssignTickets();
     }
     if (assignMeBtn) {
-      assignMeBtn.disabled = !currentUser?.username || selectedTicket.assigneeName === currentUser.username || !canAssignTickets();
+      const cu = getCurrentUser();
+      assignMeBtn.disabled = !cu?.username || selectedTicket.assigneeName === cu.username || !canAssignTickets();
     }
   };
   

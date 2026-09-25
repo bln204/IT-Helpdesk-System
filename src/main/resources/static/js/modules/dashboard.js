@@ -229,13 +229,13 @@ const DashboardModule = (() => {
                             </div>
                         </div>
                         
-                        <!-- Team Workload -->
+                        <!-- IT Department Workload -->
                         <div class="dashboard-section">
                             <header>
-                                <h3>Team Workload</h3>
+                                <h3>IT Department Workload</h3>
                             </header>
                             <div class="section-content">
-                                <ul class="team-workload-list" id="team-workload-list">
+                                <ul class="team-workload-list" id="it-workload-list">
                                     <li class="dashboard-loading">Đang tải...</li>
                                 </ul>
                             </div>
@@ -267,7 +267,7 @@ const DashboardModule = (() => {
                 loadMyTickets(),
                 loadUrgentTickets(),
                 loadSlaSummary(),
-                loadTeamWorkload(),
+                loadITWorkload(),
                 loadRecentActivity()
             ]);
         } catch (error) {
@@ -282,7 +282,6 @@ const DashboardModule = (() => {
             if (!response.ok) throw new Error('Failed to load overview: ' + response.status);
             
             const data = await response.json();
-            console.log('Dashboard overview:', data);
             
             const myTicketsEl = document.getElementById('stat-my-tickets');
             const statOpenEl = document.getElementById('stat-open');
@@ -377,70 +376,54 @@ const DashboardModule = (() => {
         }
     }
     
-    async function loadTeamWorkload() {
+    async function loadITWorkload() {
         try {
-            // Get user's teams first
-            const teamsResponse = await authFetch('/api/teams/user/me');
-            if (!teamsResponse.ok) {
-                document.getElementById('team-workload-list').innerHTML = 
-                    '<li class="dashboard-empty"><p>Không có team</p></li>';
-                return;
-            }
-            
-            const teams = await teamsResponse.json();
-            if (!teams || teams.length === 0) {
-                document.getElementById('team-workload-list').innerHTML = 
-                    '<li class="dashboard-empty"><p>Không có team</p></li>';
-                return;
-            }
-            
-            // Get first team ID from response
-            let teamId;
-            if (teams[0].teamId) {
-                teamId = teams[0].teamId;
-            } else if (teams[0].id) {
-                teamId = teams[0].id;
-            } else if (teams[0].team?.id) {
-                teamId = teams[0].team.id;
-            }
-            
-            if (!teamId) {
-                document.getElementById('team-workload-list').innerHTML = 
-                    '<li class="dashboard-empty"><p>Không tìm thấy team</p></li>';
-                return;
-            }
-            
-            const response = await authFetch(`/api/dashboard/team-workload/${teamId}`);
-            if (!response.ok) throw new Error('Failed to load team workload');
+            const response = await authFetch('/api/dashboard/it-workload');
+            if (!response.ok) throw new Error('Failed to load IT workload');
             
             const workload = await response.json();
-            const listEl = document.getElementById('team-workload-list');
+            const listEl = document.getElementById('it-workload-list');
             
-            if (workload.length === 0) {
-                listEl.innerHTML = '<li class="dashboard-empty"><p>Không có thành viên</p></li>';
+            if (!workload || workload.length === 0) {
+                listEl.innerHTML = '<li class="dashboard-empty"><p>Không có IT Staff</p></li>';
                 return;
             }
             
-            listEl.innerHTML = workload.map(member => `
+            listEl.innerHTML = workload.map(staff => `
                 <li class="team-member-item">
-                    <div class="member-avatar">${getInitials(member.displayName || member.username)}</div>
+                    <div class="member-avatar">${getInitials(staff.displayName || staff.username)}</div>
                     <div class="member-info">
-                        <div class="member-name">${member.displayName || member.username}</div>
-                        <div class="member-role">${member.role || 'Member'}</div>
+                        <div class="member-name">${staff.displayName || staff.username}</div>
+                        <div class="member-role">${getRoleLabel(staff.role)}</div>
                     </div>
                     <div class="member-workload">
-                        <div class="member-ticket-count">${member.activeTickets}</div>
+                        <div class="member-ticket-count">${staff.ticketCount}</div>
                         <div class="member-ticket-label">tickets</div>
                         <div class="workload-bar">
-                            <div class="workload-bar-fill ${getWorkloadLevel(member.activeTickets)}" 
-                                 style="width: ${Math.min(100, member.activeTickets * 10)}%"></div>
+                            <div class="workload-bar-fill ${getWorkloadLevel(staff.ticketCount)}" 
+                                 style="width: ${Math.min(100, staff.ticketCount * 10)}%"></div>
                         </div>
                     </div>
                 </li>
             `).join('');
         } catch (error) {
-            console.error('Team workload load error:', error);
+            console.error('IT workload load error:', error);
+            document.getElementById('it-workload-list').innerHTML = 
+                '<li class="dashboard-empty"><p>Lỗi khi tải dữ liệu</p></li>';
         }
+    }
+    
+    /**
+     * Chuyển role code sang label tiếng Việt
+     */
+    function getRoleLabel(role) {
+        const roleLabels = {
+            'TRUONG_PHONG': 'Trưởng phòng IT',
+            'NHAN_VIEN': 'IT Staff',
+            'ADMIN': 'Quản trị viên',
+            'GIAM_DOC': 'Giám đốc'
+        };
+        return roleLabels[role] || role;
     }
     
     async function loadRecentActivity() {

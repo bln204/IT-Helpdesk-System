@@ -25,7 +25,8 @@ import {
   loadProfile, 
   loadUserAvatarMap, 
   loadEngineerOptions,
-  canManageUsers 
+  canManageUsers,
+  isITStaff 
 } from './services/userService.js';
 import { loadDepartments } from './services/departmentService.js';
 
@@ -52,8 +53,6 @@ let currentUser = null;
 
 // Initialize application
 const init = async () => {
-  console.log('[APP] Initializing application...');
-  
   // Initialize elements
   initElements();
   
@@ -99,14 +98,14 @@ const init = async () => {
     // Load profile first
     await loadProfile()
       .then(() => {
-        // Then load engineer options
-        return loadEngineerOptions();
-      })
-      .then(() => {
-        // Load user avatar map if can manage users
-        if (canManageUsers()) {
+        // Load user avatar map first (needed for getDisplayName in engineer options)
+        if (canManageUsers() || isITStaff()) {
           return loadUserAvatarMap();
         }
+      })
+      .then(() => {
+        // Then load engineer options
+        return loadEngineerOptions();
       })
       .then(() => {
         // Load saved filter values

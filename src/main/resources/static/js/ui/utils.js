@@ -228,13 +228,14 @@ export const normalizeAssigneeInput = (value) => {
   return value;
 };
 
-export const ensureAssigneeOption = (select, value) => {
+export const ensureAssigneeOption = async (select, value) => {
   if (!select || !value) return;
   const exists = Array.from(select.options).some((option) => option.value === value);
   if (!exists) {
+    const { getDisplayName } = await import('../services/userService.js');
     const option = document.createElement('option');
     option.value = value;
-    option.textContent = formatName(value);
+    option.textContent = getDisplayName(value);
     select.appendChild(option);
   }
 };
@@ -261,12 +262,16 @@ export const populateAssigneeSelect = async (
   }
   // Get global engineerOptions from constants
   const { engineerOptions } = await import('../config/constants.js');
-  console.log('populateAssigneeSelect: Using global engineerOptions:', engineerOptions.length);
+  const { getDisplayName } = await import('../services/userService.js');
   engineerOptions.forEach((username) => {
+    const displayName = getDisplayName(username);
     const option = document.createElement('option');
     option.value = username;
-    option.textContent = formatName(username);
+    option.textContent = displayName;
     option.dataset.username = username;
+    if (displayName) {
+      option.dataset.displayName = displayName;
+    }
     select.appendChild(option);
   });
   if (current) {

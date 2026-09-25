@@ -751,12 +751,7 @@ public class TicketController {
     private void requireAssignPermission(UserAccount user) {
         boolean canAssign = switch (user.getRole()) {
             case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> {
-                if (user.getDepartment() == null) {
-                    yield false;
-                }
-                yield "IT".equals(user.getDepartment().getCode());
-            }
+            case TRUONG_PHONG -> user.isTruongPhongIT();
             case NHAN_VIEN -> false;
         };
 

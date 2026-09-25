@@ -1,7 +1,7 @@
 // ==================== Event Handlers Module ====================
 import { request } from '../core/api.js';
-import { login, updateTokenStatus, updateNavVisibility, DEMO_CREDENTIALS, setToken } from '../core/auth.js';
-import { routeGuard, setRoute } from '../core/router.js';
+import { login, updateTokenStatus, updateNavVisibility, DEMO_CREDENTIALS, setToken, clearAuthState } from '../core/auth.js';
+import { routeGuard, setRoute, showView } from '../core/router.js';
 import {
   loadNotifications,
   startNotificationPolling,
@@ -115,7 +115,6 @@ export const attachEventHandlers = () => {
         }
         await loadProfile();
       } catch (error) {
-        console.log('[DEBUG] Login error:', error);
         const errorCode = error.errorCode;
         
         if (errorCode === 'AUTH_USER_NOT_APPROVED') {
@@ -186,17 +185,14 @@ export const attachEventHandlers = () => {
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
       setToken(null);
+      clearAuthState();
       window.currentUser = null;
       localStorage.removeItem('ticketing.currentUser');
-      stopNotificationPolling();
-      window.notifications = [];
       // Import and call updateNotificationBadge
       import('../services/notificationService.js').then(module => {
         module.updateNotificationBadge(0);
       });
-      import('../core/auth.js').then(module => {
-        module.showView('login');
-      });
+      showView('login');
       if (loginError) {
         loginError.classList.add('hidden');
         loginError.textContent = '';
@@ -483,9 +479,7 @@ export const attachEventHandlers = () => {
   
   if (userSaveProfile) {
     userSaveProfile.addEventListener('click', async () => {
-      console.log('[DEBUG] userSaveProfile clicked');
       if (!window.selectedUser) {
-        console.log('[DEBUG] No selectedUser');
         return;
       }
       const userDisplayName = document.getElementById('user-display-name');
@@ -499,7 +493,6 @@ export const attachEventHandlers = () => {
         { label: 'Chức danh', input: userTitle },
         { label: 'Email', input: userEmail },
       ])) {
-        console.log('[DEBUG] validateProfileFields failed');
         return;
       }
       
@@ -509,11 +502,7 @@ export const attachEventHandlers = () => {
         userTitle.value !== window.selectedUser.title ||
         userEmail.value !== window.selectedUser.email;
       
-      console.log('[DEBUG] hasPasswordChange:', hasPasswordChange);
-      console.log('[DEBUG] hasProfileChange:', hasProfileChange);
-      
       if (hasPasswordChange && hasProfileChange) {
-        console.log('[DEBUG] Case: password + profile change');
         const payload = {
           displayName: userDisplayName.value,
           title: userTitle.value,
@@ -528,7 +517,6 @@ export const attachEventHandlers = () => {
           addNotification('success', 'Cập nhật thành công', 'Thông tin và mật khẩu đã được cập nhật. Email thông báo đã được gửi.');
           userPasswordInput.value = '';
           loadAdminUsers();
-          console.log('[DEBUG] profile-and-password success');
         } catch (error) {
           alert('Lỗi: ' + error.message);
         }
@@ -538,7 +526,6 @@ export const attachEventHandlers = () => {
       const updates = [];
       
       if (hasPasswordChange) {
-        console.log('[DEBUG] Adding password update');
         updates.push(
           request(`/api/users/${window.selectedUser.id}/password`, {
             method: 'PATCH',
@@ -548,7 +535,6 @@ export const attachEventHandlers = () => {
       }
       
       if (hasProfileChange) {
-        console.log('[DEBUG] Adding profile update');
         updates.push(
           request(`/api/users/${window.selectedUser.id}/profile`, {
             method: 'PATCH',
@@ -562,17 +548,14 @@ export const attachEventHandlers = () => {
       }
       
       if (!updates.length) {
-        console.log('[DEBUG] No updates needed');
         return;
       }
       
-      console.log('[DEBUG] Sending updates:', updates.length);
       try {
         await Promise.all(updates);
         addNotification('success', 'Cập nhật thành công', 'Thông tin người dùng đã được cập nhật.');
         if (userPasswordInput) userPasswordInput.value = '';
         await loadAdminUsers();
-        console.log('[DEBUG] Updates complete');
       } catch (error) {
         alert('Lỗi: ' + error.message);
       }
@@ -581,29 +564,22 @@ export const attachEventHandlers = () => {
   
   if (userDelete) {
     userDelete.addEventListener('click', async () => {
-      console.log('[DEBUG] userDelete clicked');
       if (!window.selectedUser) {
-        console.log('[DEBUG] No selectedUser for delete');
         return;
       }
       
       const { isAdmin, isTruongPhong } = await import('../core/auth.js');
-      console.log('[DEBUG] isAdmin:', isAdmin(), 'isTruongPhong:', isTruongPhong());
       
       if (isAdmin()) {
         const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${window.selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
         if (!confirm(confirmMsg)) {
-          console.log('[DEBUG] Delete cancelled by user');
           return;
         }
         try {
-          console.log('[DEBUG] Deleting user:', window.selectedUser.id);
           await request(`/api/users/${window.selectedUser.id}`, { method: 'DELETE' });
           addNotification('delete', 'Xóa tài khoản', `Tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" đã được xóa.`);
           alert('Đã xóa tài khoản thành công!');
-          console.log('[DEBUG] Delete success');
         } catch (error) {
-          console.log('[DEBUG] Delete error:', error);
           alert('Lỗi: ' + error.message);
           return;
         }

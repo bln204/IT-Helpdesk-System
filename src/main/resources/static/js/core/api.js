@@ -18,8 +18,6 @@ export const request = async (path, options = {}) => {
   };
 
   setApiStatus('working');
-  console.log('[DEBUG] Request:', options.method || 'GET', path);
-  console.log('[DEBUG] Token available:', !!localStorage.getItem('ticketing.jwt'));
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -28,9 +26,8 @@ export const request = async (path, options = {}) => {
       ...authHeaders(),
     },
   });
-  console.log('[DEBUG] Response status:', response.status);
   setApiStatus(response.ok ? 'ok' : `error ${response.status}`);
-  
+
   if (!response.ok) {
     // Parse error response in our format
     let errorData = null;
@@ -45,20 +42,20 @@ export const request = async (path, options = {}) => {
     } catch (e) {
       errorData = { message: await response.text() };
     }
-    
+
     // Build error message from our format
     let errorMessage = errorData.message || `Yêu cầu thất bại: ${response.status}`;
-    
+
     // Add suggestion if available
     if (errorData.details && errorData.details.suggestion) {
       errorMessage += '\n' + errorData.details.suggestion;
     }
-    
+
     // Add rejection reason if available
     if (errorData.details && errorData.details.rejectionReason) {
       errorMessage += '\nLý do: ' + errorData.details.rejectionReason;
     }
-    
+
     // Only logout on 401 (token invalid/expired), not on 403 (permission denied)
     if (response.status === 401 && localStorage.getItem('ticketing.jwt')) {
       const errorCode = errorData.errorCode;
@@ -75,17 +72,19 @@ export const request = async (path, options = {}) => {
       import('../core/auth.js').then(module => {
         module.setToken(null);
         module.setCurrentUser(null);
+      });
+      import('../core/router.js').then(module => {
         module.showView('login');
       });
     }
-    
+
     const error = new Error(errorMessage);
     error.errorCode = errorData.errorCode;
     error.status = response.status;
     error.details = errorData.details;
     throw error;
   }
-  
+
   if (response.status === 204) {
     return null;
   }
