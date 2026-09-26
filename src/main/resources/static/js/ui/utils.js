@@ -132,7 +132,7 @@ export const formatHours = (value) => Number.isFinite(value) ? value.toFixed(2) 
 // ==================== Permission Checks ====================
 export const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG');
 export const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
-export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || (hasRole('ROLE_TRUONG_PHONG') && isInITDepartment());
+export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
 export const canViewInternalComments = () => !isNhanVien() || isITStaff();
 export const canAddInternalComments = () => isInITDepartment() || isAdmin() || isGiamDoc();
 export const isStaff = () => !isNhanVien() || isITStaff();

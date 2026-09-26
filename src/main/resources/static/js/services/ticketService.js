@@ -305,7 +305,7 @@ export const selectTicket = async (ticket) => {
       <p>${full.description}</p>
       <div class="ticket-detail-grid">
         <div class="ticket-detail-field">
-          <span>Người được phân công</span>
+          <span>Người phụ trách</span>
           <strong>${assignee}</strong>
         </div>
         <div class="ticket-detail-field">
@@ -654,7 +654,7 @@ export const updateAssignee = async () => {
   const { canAssignTickets } = await import('./userService.js');
   
   if (!canAssignTickets()) {
-    alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
+    alert('Bạn không có quyền phân công phiếu. Chỉ IT Staff hoặc Trưởng phòng IT mới có quyền này.');
     return;
   }
   
@@ -687,7 +687,7 @@ export const assignToMe = async () => {
   const { canAssignTickets } = await import('./userService.js');
   
   if (!canAssignTickets()) {
-    alert('Bạn không có quyền phân công phiếu. Chỉ Trưởng phòng IT mới có quyền này.');
+    alert('Bạn không có quyền phân công phiếu. Chỉ IT Staff hoặc Trưởng phòng IT mới có quyền này.');
     return;
   }
   

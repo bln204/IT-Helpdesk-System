@@ -752,12 +752,12 @@ public class TicketController {
         boolean canAssign = switch (user.getRole()) {
             case ADMIN, GIAM_DOC -> true;
             case TRUONG_PHONG -> user.isTruongPhongIT();
-            case NHAN_VIEN -> false;
+            case NHAN_VIEN -> user.isInITDepartment();
         };
 
         if (!canAssign) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "You don't have permission to assign tickets. Only IT Manager can assign tickets.");
+                "You don't have permission to assign tickets. Only IT Staff or IT Manager can assign tickets.");
         }
     }
 

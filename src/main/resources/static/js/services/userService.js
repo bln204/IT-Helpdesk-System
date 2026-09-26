@@ -25,7 +25,7 @@ let pendingUsersCache = [];
 // Permission checks
 export const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG');
 export const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
-export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || (hasRole('ROLE_TRUONG_PHONG') && getCurrentUser()?.departmentCode === 'IT');
+export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
 export const canViewInternalComments = () => !isNhanVien() || isITStaff();
 export const canAddInternalComments = () => isInITDepartment() || isAdmin() || isGiamDoc();
 export const isStaff = () => !isNhanVien() || isITStaff();
@@ -927,6 +927,12 @@ export const applyRoleControls = () => {
   const assignMeBtn = document.getElementById('assign-me-btn');
   const commentVisibility = document.getElementById('comment-visibility');
   
+  // Debug logging
+  console.log('[applyRoleControls] currentUser:', currentUser);
+  console.log('[applyRoleControls] isITStaff:', isITStaff());
+  console.log('[applyRoleControls] canProcessTickets:', canProcessTickets());
+  console.log('[applyRoleControls] canAssignTickets:', canAssignTickets());
+  
   const updateActionButtons = () => {
     const selectedTicket = window.selectedTicket;
     if (!selectedTicket) return;
@@ -950,6 +956,8 @@ export const applyRoleControls = () => {
   const isITStaffUser = isITStaff();
   const isNhanVienUser = isNhanVien() && !isITStaffUser;
   
+  console.log('[applyRoleControls] isITStaffUser:', isITStaffUser, 'isNhanVienUser:', isNhanVienUser);
+  
   if (statusSelect) {
     statusSelect.disabled = !canProcessTickets() && isNhanVienUser;
   }
@@ -961,7 +969,9 @@ export const applyRoleControls = () => {
   }
   
   if (updateStatusBtn) {
-    updateStatusBtn.classList.toggle('hidden', !canProcessTickets() && isNhanVienUser);
+    const shouldHideStatus = !canProcessTickets() && isNhanVienUser;
+    updateStatusBtn.classList.toggle('hidden', shouldHideStatus);
+    console.log('[applyRoleControls] updateStatusBtn hidden:', shouldHideStatus);
   }
   if (updatePriorityBtn) {
     updatePriorityBtn.classList.toggle('hidden', !canProcessTickets());

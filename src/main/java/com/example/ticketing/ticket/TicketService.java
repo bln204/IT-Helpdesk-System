@@ -96,11 +96,22 @@ public class TicketService {
         // Auto-assign team dựa trên category (nếu có category)
         autoAssignTeam(ticket);
 
-        // NHAN_VIEN không thể tự assign, để null
-        if (actorRole == UserRole.Role.NHAN_VIEN) {
-            ticket.setAssigneeName(null);
+        // Auto-assign logic:
+        // - IT Staff (NHAN_VIEN in IT): auto-assign for themselves
+        // - TRUONG_PHONG in IT: auto-assign (they handle tickets too)
+        // - Others (ADMIN, GIAM_DOC, NHAN_VIEN not in IT, TRUONG_PHONG not in IT): don't auto-assign
+        boolean shouldAutoAssign = 
+            (actorRole == UserRole.Role.NHAN_VIEN && requester.isInITDepartment()) ||
+            (actorRole == UserRole.Role.TRUONG_PHONG && requester.isInITDepartment());
+        
+        if (shouldAutoAssign) {
+            // IT Staff hoặc Trưởng phòng IT: tự assign cho mình nếu chưa có assignee
+            if (ticket.getAssigneeName() == null || ticket.getAssigneeName().isBlank()) {
+                ticket.setAssigneeName(actorUsername);
+            }
         } else {
-            ticket.setAssigneeName(normalizeAssignee(ticket.getAssigneeName()));
+            // Người dùng khác: không auto-assign (ADMIN, GIAM_DOC, NHAN_VIEN thường, TRUONG_PHONG không thuộc IT)
+            ticket.setAssigneeName(null);
         }
 
         Ticket created = ticketRepository.save(ticket);
@@ -385,14 +396,8 @@ public class TicketService {
     private boolean canAssignTickets(UserRole.Role actorRole, Long actorDepartmentId) {
         return switch (actorRole) {
             case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> {
-                if (actorDepartmentId == null) {
-                    yield false;
-                }
-                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
-                yield dept != null && "IT".equals(dept.getCode());
-            }
-            case NHAN_VIEN -> false;
+            case TRUONG_PHONG -> isITDepartment(actorDepartmentId);
+            case NHAN_VIEN -> isITDepartment(actorDepartmentId);
         };
     }
 
@@ -415,8 +420,11 @@ public class TicketService {
         Ticket ticket = getTicket(id);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
 
-        // NHAN_VIEN chỉ có thể đóng hoặc reopen ticket của mình
-        if (actorRole == UserRole.Role.NHAN_VIEN) {
+        // Kiểm tra xem có phải IT Staff không (NHAN_VIEN trong IT department)
+        boolean isITStaffUser = actorRole == UserRole.Role.NHAN_VIEN && isITDepartment(actorDepartmentId);
+        
+        // NHAN_VIEN thường (không phải IT Staff) chỉ có thể đóng hoặc reopen ticket của mình
+        if (actorRole == UserRole.Role.NHAN_VIEN && !isITStaffUser) {
             if (!actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
                 throw new TicketRuleViolationException("You can only modify your own tickets.");
             }
@@ -816,17 +824,26 @@ public class TicketService {
                 if (actorDepartmentId == null) {
                     yield false;
                 }
-                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
-                yield dept != null && "IT".equals(dept.getCode());
+                yield isITDepartment(actorDepartmentId);
             }
             case NHAN_VIEN -> {
                 if (actorDepartmentId == null) {
                     yield false;
                 }
-                Department dept = departmentRepository.findById(actorDepartmentId).orElse(null);
-                yield dept != null && "IT".equals(dept.getCode());
+                yield isITDepartment(actorDepartmentId);
             }
         };
+    }
+    
+    /**
+     * Kiểm tra user có thuộc IT department không.
+     */
+    private boolean isITDepartment(Long departmentId) {
+        if (departmentId == null) {
+            return false;
+        }
+        Department dept = departmentRepository.findById(departmentId).orElse(null);
+        return dept != null && "IT".equals(dept.getCode());
     }
 
     // ============================================================
@@ -840,7 +857,8 @@ public class TicketService {
         Long actorDepartmentId,
         String actorName
     ) {
-        if (actorRole == UserRole.Role.NHAN_VIEN) {
+        // NHAN_VIEN ngoài IT không được phép đổi priority
+        if (actorRole == UserRole.Role.NHAN_VIEN && !isITDepartment(actorDepartmentId)) {
             throw new TicketRuleViolationException("You cannot change ticket priority.");
         }
 
