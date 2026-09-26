@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/pages/dashboard.css">
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
@@ -48,6 +49,7 @@
         </div>
       </div>
       <nav class="nav-links">
+        <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Dashboard</a>
         <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
         <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
         <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">
@@ -81,6 +83,10 @@
         </p>
         <button type="submit">Đăng nhập</button>
       </form>
+    </section>
+
+    <section class="panel view" id="dashboard-panel" data-view="dashboard">
+      <div id="dashboard-content"></div>
     </section>
 
     <section class="panel view" id="tickets-panel" data-view="tickets">
@@ -117,7 +123,7 @@
             <option value="priority,desc">Độ ưu tiên (cao → thấp)</option>
             <option value="priority,asc">Độ ưu tiên (thấp → cao)</option>
             <option value="status,asc">Trạng thái</option>
-            <option value="assigneeDisplay,asc">Người được phân công (A → Z)</option>
+            <option value="assigneeDisplay,asc">Chuyển phụ trách (A → Z)</option>
           </select>
         </div>
         <button id="refresh-btn" class="secondary" type="button">Làm mới</button>
@@ -167,7 +173,7 @@
               </div>
               <div class="split">
                 <label class="full-span">
-                  Người được phân công
+                  Chuyển phụ trách
                   <div class="custom-select">
                     <select id="assignee-input">
                       <option value="UNASSIGNED">Chưa phân công</option>
@@ -178,7 +184,7 @@
               <div class="button-row">
                 <button id="update-status-btn" type="button">Cập nhật trạng thái</button>
                 <button id="update-priority-btn" class="secondary" type="button">Cập nhật độ ưu tiên</button>
-                <button id="update-assignee-btn" class="secondary" type="button">Cập nhật người phân công</button>
+                <button id="update-assignee-btn" class="secondary" type="button">Chuyển phụ trách</button>
                 <button id="assign-me-btn" class="ghost" type="button">Giao cho tôi</button>
               </div>
             </div>

@@ -12,10 +12,14 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.example.ticketing.ticket.SlaSchedulerService;
+import com.example.ticketing.ticket.SlaSchedulerService.SlaStatus;
 
 // #region agent debug log
 import org.springframework.beans.factory.annotation.Value;
@@ -70,28 +74,29 @@ public class NotificationController {
     // #endregion
 
     private final NotificationService notificationService;
+    private final NotificationPreferencesRepository preferencesRepository;
+    private final com.example.ticketing.ticket.SlaSchedulerService slaSchedulerService;
 
-    public NotificationController(NotificationService notificationService) {
+    public NotificationController(
+            NotificationService notificationService,
+            NotificationPreferencesRepository preferencesRepository,
+            com.example.ticketing.ticket.SlaSchedulerService slaSchedulerService) {
         this.notificationService = notificationService;
+        this.preferencesRepository = preferencesRepository;
+        this.slaSchedulerService = slaSchedulerService;
     }
 
+    // ============================================================
+    // NOTIFICATION ENDPOINTS
+    // ============================================================
+    
     /**
      * Get all notifications for the current user.
      */
     @GetMapping
     public ResponseEntity<List<Notification.NotificationResponse>> getNotifications(Authentication authentication) {
         String username = authentication.getName();
-        // #region agent debug log
-        debugLog("E", "initial", "NotificationController.java:getNotifications",
-            String.format("GET /api/notifications - user=%s", username),
-            java.util.Map.of("username", username));
-        // #endregion
         List<Notification.NotificationResponse> notifications = notificationService.getNotifications(username);
-        // #region agent debug log
-        debugLog("E", "initial", "NotificationController.java:getNotifications_RESPONSE",
-            String.format("Returning %d notifications for user=%s", notifications.size(), username),
-            java.util.Map.of("username", username, "count", notifications.size()));
-        // #endregion
         return ResponseEntity.ok(notifications);
     }
 
@@ -107,7 +112,7 @@ public class NotificationController {
         Page<Notification.NotificationResponse> notifications = notificationService.getNotifications(username, page, size);
         return ResponseEntity.ok(notifications);
     }
-
+    
     /**
      * Get unread notification count for the current user.
      */
@@ -116,6 +121,24 @@ public class NotificationController {
         String username = authentication.getName();
         long count = notificationService.getUnreadCount(username);
         return ResponseEntity.ok(Map.of("count", count));
+    }
+    
+    /**
+     * Get unread count by type.
+     */
+    @GetMapping("/unread-by-type")
+    public ResponseEntity<Map<String, Long>> getUnreadCountByType(Authentication authentication) {
+        String username = authentication.getName();
+        List<Notification.NotificationResponse> notifications = notificationService.getNotifications(username);
+        
+        Map<String, Long> counts = notifications.stream()
+            .filter(n -> !n.isRead())
+            .collect(java.util.stream.Collectors.groupingBy(
+                Notification.NotificationResponse::getType,
+                java.util.stream.Collectors.counting()
+            ));
+        
+        return ResponseEntity.ok(counts);
     }
 
     /**
@@ -141,6 +164,15 @@ public class NotificationController {
     }
     
     /**
+     * Delete a single notification.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteNotification(@PathVariable Long id) {
+        notificationService.deleteNotification(id);
+        return ResponseEntity.noContent().build();
+    }
+    
+    /**
      * Delete all notifications for the current user.
      */
     @DeleteMapping
@@ -150,9 +182,76 @@ public class NotificationController {
         return ResponseEntity.ok(Map.of("message", "Đã xóa tất cả thông báo"));
     }
 
+    // ============================================================
+    // NOTIFICATION PREFERENCES ENDPOINTS
+    // ============================================================
+    
+    /**
+     * Get notification preferences for current user.
+     */
+    @GetMapping("/preferences")
+    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> getPreferences(Authentication authentication) {
+        String username = authentication.getName();
+        return preferencesRepository.findByUserUsername(username)
+            .map(prefs -> ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs)))
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
+    /**
+     * Update notification preferences.
+     */
+    @PutMapping("/preferences")
+    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> updatePreferences(
+            Authentication authentication,
+            @RequestBody NotificationPreferences.NotificationPreferencesRequest request) {
+        String username = authentication.getName();
+        NotificationPreferences prefs = notificationService.updatePreferences(username, request);
+        return ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs));
+    }
+    
+    /**
+     * Enable/disable email notifications.
+     */
+    @PutMapping("/preferences/email")
+    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> setEmailEnabled(
+            Authentication authentication,
+            @RequestParam boolean enabled) {
+        String username = authentication.getName();
+        NotificationPreferences prefs = notificationService.setEmailEnabled(username, enabled);
+        return ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs));
+    }
+    
+    /**
+     * Enable/disable in-app notifications.
+     */
+    @PutMapping("/preferences/in-app")
+    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> setInAppEnabled(
+            Authentication authentication,
+            @RequestParam boolean enabled) {
+        String username = authentication.getName();
+        NotificationPreferences prefs = notificationService.setInAppEnabled(username, enabled);
+        return ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs));
+    }
+
+    // ============================================================
+    // SLA ENDPOINTS
+    // ============================================================
+    
+    /**
+     * Get SLA status for a ticket.
+     */
+    @GetMapping("/sla/{ticketId}")
+    public ResponseEntity<SlaSchedulerService.SlaStatus> getTicketSlaStatus(@PathVariable Long ticketId) {
+        SlaSchedulerService.SlaStatus status = slaSchedulerService.checkTicketSla(ticketId);
+        return ResponseEntity.ok(status);
+    }
+
+    // ============================================================
+    // LEGACY ENDPOINTS (for frontend compatibility)
+    // ============================================================
+    
     /**
      * Create a new notification (for frontend to save to backend).
-     * POST /api/notifications
      */
     @PostMapping
     public ResponseEntity<Notification.NotificationResponse> createNotification(
@@ -160,7 +259,6 @@ public class NotificationController {
             @RequestBody CreateNotificationRequest request) {
         String username = authentication.getName();
         
-        // Determine notification type
         Notification.NotificationType type;
         switch (request.type) {
             case "approve":
@@ -189,9 +287,6 @@ public class NotificationController {
         return ResponseEntity.ok(new Notification.NotificationResponse(notification));
     }
 
-    /**
-     * Request body for creating a notification.
-     */
     public static class CreateNotificationRequest {
         public String type;
         public String title;

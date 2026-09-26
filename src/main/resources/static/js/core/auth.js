@@ -204,7 +204,7 @@ export const updateNavVisibility = () => {
 };
 
 const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
-const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || isTruongPhongIT();
+const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
 
 const applyRoleControls = () => {
   const statusSelect = document.getElementById('status-select');
@@ -369,6 +369,18 @@ export const initElements = () => {
   logoMarkImg = document.getElementById('logo-mark-img');
   userDisplay = document.getElementById('user-display');
   tokenStatus = document.getElementById('token-status');
+};
+
+/**
+ * Clear auth state for logout
+ */
+export const clearAuthState = () => {
+  currentUser = null;
+  notifications = [];
+  if (notificationPollingTimer) {
+    clearInterval(notificationPollingTimer);
+    notificationPollingTimer = null;
+  }
 };
 
 export { DEMO_CREDENTIALS, currentUser, notifications, notificationPollingTimer };

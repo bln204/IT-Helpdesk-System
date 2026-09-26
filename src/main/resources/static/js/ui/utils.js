@@ -132,7 +132,7 @@ export const formatHours = (value) => Number.isFinite(value) ? value.toFixed(2) 
 // ==================== Permission Checks ====================
 export const canManageUsers = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG');
 export const canProcessTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
-export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || (hasRole('ROLE_TRUONG_PHONG') && isInITDepartment());
+export const canAssignTickets = () => hasRole('ROLE_ADMIN') || hasRole('ROLE_GIAM_DOC') || hasRole('ROLE_TRUONG_PHONG') || isITStaff();
 export const canViewInternalComments = () => !isNhanVien() || isITStaff();
 export const canAddInternalComments = () => isInITDepartment() || isAdmin() || isGiamDoc();
 export const isStaff = () => !isNhanVien() || isITStaff();
@@ -228,13 +228,14 @@ export const normalizeAssigneeInput = (value) => {
   return value;
 };
 
-export const ensureAssigneeOption = (select, value) => {
+export const ensureAssigneeOption = async (select, value) => {
   if (!select || !value) return;
   const exists = Array.from(select.options).some((option) => option.value === value);
   if (!exists) {
+    const { getDisplayName } = await import('../services/userService.js');
     const option = document.createElement('option');
     option.value = value;
-    option.textContent = formatName(value);
+    option.textContent = getDisplayName(value);
     select.appendChild(option);
   }
 };
@@ -261,12 +262,16 @@ export const populateAssigneeSelect = async (
   }
   // Get global engineerOptions from constants
   const { engineerOptions } = await import('../config/constants.js');
-  console.log('populateAssigneeSelect: Using global engineerOptions:', engineerOptions.length);
+  const { getDisplayName } = await import('../services/userService.js');
   engineerOptions.forEach((username) => {
+    const displayName = getDisplayName(username);
     const option = document.createElement('option');
     option.value = username;
-    option.textContent = formatName(username);
+    option.textContent = displayName;
     option.dataset.username = username;
+    if (displayName) {
+      option.dataset.displayName = displayName;
+    }
     select.appendChild(option);
   });
   if (current) {
