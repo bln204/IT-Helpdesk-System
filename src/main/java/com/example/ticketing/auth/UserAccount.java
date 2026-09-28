@@ -262,6 +262,7 @@ public class UserAccount implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
+        // Add ROLE_ prefix - Spring Security's hasRole() expects this format
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 

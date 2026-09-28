@@ -20,7 +20,7 @@ CREATE TABLE notification_preferences (
     CONSTRAINT uk_user_preferences UNIQUE (user_id)
 );
 
-CREATE INDEX idx_notification_prefs_user ON notification_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_prefs_user ON notification_preferences(user_id);
 
 COMMENT ON TABLE notification_preferences IS 'User notification preferences';
 COMMENT ON COLUMN notification_preferences.notify_ticket_created IS 'Thông báo khi có ticket mới được tạo';

@@ -26,10 +26,10 @@ CREATE TABLE ticket_timeline (
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_timeline_ticket ON ticket_timeline(ticket_id);
-CREATE INDEX idx_timeline_type ON ticket_timeline(event_type);
-CREATE INDEX idx_timeline_category ON ticket_timeline(event_category);
-CREATE INDEX idx_timeline_created ON ticket_timeline(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_timeline_ticket ON ticket_timeline(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_timeline_type ON ticket_timeline(event_type);
+CREATE INDEX IF NOT EXISTS idx_timeline_category ON ticket_timeline(event_category);
+CREATE INDEX IF NOT EXISTS idx_timeline_created ON ticket_timeline(created_at DESC);
 
 COMMENT ON TABLE ticket_timeline IS 'Lịch sử các sự kiện của ticket';
 COMMENT ON COLUMN ticket_timeline.event_category IS 'Phân loại: STATUS, ASSIGNMENT, COMMENT, SYSTEM, SLA, CATEGORY, PRIORITY';

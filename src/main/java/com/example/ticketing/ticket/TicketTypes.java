@@ -5,6 +5,14 @@ public final class TicketTypes {
     }
 
     // ============================================================
+    // TYPE
+    // ============================================================
+    public enum TicketType {
+        INCIDENT,          // Sự cố/Incident
+        SERVICE_REQUEST    // Yêu cầu dịch vụ/Service Request
+    }
+
+    // ============================================================
     // CATEGORY
     // ============================================================
     // Giữ lại enum cho tương thích ngược, nhưng sẽ dùng Category entity

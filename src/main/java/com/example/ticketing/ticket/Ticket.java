@@ -133,6 +133,14 @@ public class Ticket {
     @Column(name = "reopen_count")
     private Integer reopenCount = 0;
 
+    // ============ NEW: Incident Link ============
+
+    /**
+     * Incident ID nếu ticket này được link đến một incident.
+     */
+    @Column(name = "incident_id")
+    private Long incidentId;
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -483,5 +491,15 @@ public class Ticket {
     
     public void setReopenCount(Integer reopenCount) {
         this.reopenCount = reopenCount;
+    }
+
+    // ============ Incident Link ============
+
+    public Long getIncidentId() {
+        return incidentId;
+    }
+
+    public void setIncidentId(Long incidentId) {
+        this.incidentId = incidentId;
     }
 }

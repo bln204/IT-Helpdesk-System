@@ -57,12 +57,6 @@ public class TicketExceptionHandler {
     }
 }
 
-class TicketNotFoundException extends RuntimeException {
-    TicketNotFoundException(Long id) {
-        super("Ticket not found: " + id);
-    }
-}
-
 class TicketRuleViolationException extends RuntimeException {
     TicketRuleViolationException(String message) {
         super(message);

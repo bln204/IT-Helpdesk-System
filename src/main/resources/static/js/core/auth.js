@@ -383,4 +383,74 @@ export const clearAuthState = () => {
   }
 };
 
+// ==================== Expose Auth to Global Scope ====================
+// This allows other modules to check for Auth module availability
+const Auth = {
+  // Core auth functions
+  isTokenValid,
+  getToken,
+  setToken,
+  clearToken,
+  login,
+  logout: clearAuthState,
+  
+  // User info
+  getCurrentUser,
+  setCurrentUser,
+  getCurrentUsername,
+  getCurrentUserDepartment,
+  
+  // Notifications
+  getNotifications,
+  setNotifications,
+  loadNotifications,
+  
+  // Role checks
+  hasRole,
+  isAdmin,
+  isGiamDoc,
+  isTruongPhong,
+  isNhanVien,
+  isTruongPhongIT,
+  isInITDepartment,
+  isITStaff,
+  canManageUsers,
+  
+  // Navigation & UI
+  updateTokenStatus,
+  updateNavVisibility,
+  
+  // Routing
+  setRoute,
+  
+  // Auth ready callback (for modules that need to wait for auth)
+  onAuthReady: (callback) => {
+    if (isTokenValid()) {
+      callback();
+    } else {
+      // Wait for token to be valid
+      const checkToken = setInterval(() => {
+        if (isTokenValid()) {
+          clearInterval(checkToken);
+          callback();
+        }
+      }, 100);
+    }
+  },
+  
+    // Get auth headers for API calls
+  getAuthHeaders: () => {
+    const token = getToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    };
+  }
+};
+
+// Expose to global scope
+window.Auth = Auth;
+window.onAuthReady = Auth.onAuthReady; // Also expose onAuthReady globally
+
+export { Auth };
 export { DEMO_CREDENTIALS, currentUser, notifications, notificationPollingTimer };

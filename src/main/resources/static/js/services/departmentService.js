@@ -6,10 +6,20 @@ let selectedDepartment = null;
 let selectedDepartmentForDelete = null;
 let managersCache = [];
 
+// Attach to window for event handlers
+window.selectedDepartment = null;
+window.selectedDepartmentForDelete = null;
+
 export const getSelectedDepartment = () => selectedDepartment;
-export const setSelectedDepartment = (dept) => { selectedDepartment = dept; };
+export const setSelectedDepartment = (dept) => { 
+  selectedDepartment = dept; 
+  window.selectedDepartment = dept;
+};
 export const getSelectedDepartmentForDelete = () => selectedDepartmentForDelete;
-export const setSelectedDepartmentForDelete = (dept) => { selectedDepartmentForDelete = dept; };
+export const setSelectedDepartmentForDelete = (dept) => { 
+  selectedDepartmentForDelete = dept; 
+  window.selectedDepartmentForDelete = dept;
+};
 export const getManagersCache = () => managersCache;
 export const setManagersCache = (cache) => { managersCache = cache; };
 
@@ -103,7 +113,7 @@ export const loadDepartmentsTable = async () => {
 };
 
 export const openCreateDeptModal = () => {
-  selectedDepartment = null;
+  setSelectedDepartment(null);  // This sets both selectedDepartment and window.selectedDepartment to null
   const deptModal = document.getElementById('dept-modal');
   const deptModalTitle = document.getElementById('dept-modal-title');
   const deptModalDesc = document.getElementById('dept-modal-desc');
@@ -133,7 +143,7 @@ export const openCreateDeptModal = () => {
 };
 
 export const openEditDeptModal = (dept) => {
-  selectedDepartment = dept;
+  setSelectedDepartment(dept);  // This sets both selectedDepartment and window.selectedDepartment
   const deptModal = document.getElementById('dept-modal');
   const deptModalTitle = document.getElementById('dept-modal-title');
   const deptModalDesc = document.getElementById('dept-modal-desc');
@@ -197,7 +207,7 @@ export const loadManagersForDepartment = async (selectedId = null) => {
 };
 
 export const openDeleteDeptModal = (dept) => {
-  selectedDepartmentForDelete = dept;
+  setSelectedDepartmentForDelete(dept);  // This sets both selectedDepartmentForDelete and window.selectedDepartmentForDelete
   const userCount = dept.userCount || 0;
   
   const deptDeleteWarning = document.getElementById('dept-delete-warning');

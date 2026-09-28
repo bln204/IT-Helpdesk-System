@@ -334,3 +334,99 @@ body.dark .attachment-item {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================== SLA Compact Display in Ticket Row ==================== */
+.ticket-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 2fr) auto minmax(100px, 1fr) minmax(80px, 0.5fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ticket-row-sla {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.7rem;
+}
+
+.sla-compact-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sla-compact-label {
+  color: var(--muted);
+  font-size: 0.65rem;
+  min-width: 24px;
+}
+
+.sla-compact-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.sla-compact-value.ok {
+  color: var(--success);
+}
+
+.sla-compact-value.warning {
+  color: #f59e0b;
+}
+
+.sla-compact-value.critical {
+  color: var(--danger);
+}
+
+.sla-compact-value.breached {
+  color: var(--danger);
+  animation: pulse-breach 2s infinite;
+}
+
+.sla-compact-value.completed {
+  color: var(--success);
+}
+
+.ticket-sla-empty {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.ticket-row-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Hide SLA column on smaller screens */
+@media (max-width: 1200px) {
+  .ticket-row {
+    grid-template-columns: 52px minmax(0, 2fr) auto minmax(80px, 1fr);
+  }
+  
+  .ticket-row-sla {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ticket-row {
+    grid-template-columns: 44px 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  
+  .ticket-row-tags {
+    grid-column: 1 / -1;
+  }
+  
+  .ticket-row-side {
+    grid-column: 1 / -1;
+    justify-items: start;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+}

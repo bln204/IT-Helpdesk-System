@@ -5,6 +5,14 @@ import { formatStatus, formatName, getDisplayName, formatHours, formatSlaBucket 
 import { userAvatarMap, selectedTicket, engineerOptions } from '../config/constants.js';
 import { setActiveReportButton, renderReportTable, setCurrentReport } from '../modules/reports.js';
 
+// SLA Timer module
+let SlaTimer = null;
+const initSlaTimer = async () => {
+    if (!SlaTimer && window.SlaTimer) {
+        SlaTimer = window.SlaTimer;
+    }
+};
+
 let ticketsList, ticketDetails, ticketActions, commentPanel, ticketDetailsPanel, ticketBoard;
 let ticketsSentinel, refreshStatus, commentsList, auditList, assignmentsList, attachmentsList;
 let statusSelect, prioritySelect, assigneeInput;
@@ -127,6 +135,9 @@ export const renderTickets = (rows, { append = false } = {}) => {
   ticketsList = document.getElementById('tickets-list');
   if (!ticketsList) return;
   
+  // Initialize SLA Timer
+  initSlaTimer();
+  
   if (!append) {
     ticketsList.innerHTML = '';
   }
@@ -149,6 +160,10 @@ export const renderTickets = (rows, { append = false } = {}) => {
     const deptLabel = ticket.departmentName || ticket.departmentCode || '';
     const deptBadge = deptLabel ? `<span class="dept-badge">${deptLabel}</span>` : '';
     
+    // SLA Info
+    const slaHtml = renderTicketRowSla(ticket);
+    const slaBadgeHtml = renderTicketRowSlaBadge(ticket);
+    
     row.innerHTML = `
       <div class="assignee-avatar" aria-hidden="true">
         ${avatarImage || avatarLetter}
@@ -160,6 +175,10 @@ export const renderTickets = (rows, { append = false } = {}) => {
       <div class="ticket-row-tags">
         <span class="status ${statusClass}">${formatStatus(ticket.status)}</span>
         <span class="priority ${priorityClass}">${formatStatus(ticket.priority)}</span>
+        ${slaBadgeHtml}
+      </div>
+      <div class="ticket-row-sla">
+        ${slaHtml}
       </div>
       <div class="ticket-row-side">
         <strong>${assigneeLabel}</strong>
@@ -170,6 +189,238 @@ export const renderTickets = (rows, { append = false } = {}) => {
     ticketsList.appendChild(row);
   });
 };
+
+// Render SLA info for ticket row (compact)
+function renderTicketRowSla(ticket) {
+  if (!ticket.slaResponseAt && !ticket.slaResolutionAt) {
+    return '<div class="ticket-sla-empty">—</div>';
+  }
+  
+  const responseAt = ticket.slaResponseAt ? new Date(ticket.slaResponseAt) : null;
+  const resolutionAt = ticket.slaResolutionAt ? new Date(ticket.slaResolutionAt) : null;
+  const firstResponseAt = ticket.firstResponseAt ? new Date(ticket.firstResponseAt) : null;
+  const now = new Date();
+  
+  let responseStatus = 'ok';
+  let responseText = '—';
+  
+  if (firstResponseAt) {
+    responseStatus = 'completed';
+    responseText = '✓';
+  } else if (responseAt) {
+    if (now > responseAt) {
+      responseStatus = 'breached';
+      responseText = '✗ PR';
+    } else {
+      const remaining = responseAt - now;
+      responseText = formatTimeCompact(remaining);
+      if (remaining < 15 * 60 * 1000) responseStatus = 'critical';
+      else if (remaining < 60 * 60 * 1000) responseStatus = 'warning';
+    }
+  }
+  
+  let resolutionStatus = 'ok';
+  let resolutionText = '—';
+  
+  if (ticket.resolvedAt) {
+    resolutionStatus = 'completed';
+    resolutionText = '✓';
+  } else if (resolutionAt) {
+    if (now > resolutionAt) {
+      resolutionStatus = 'breached';
+      resolutionText = '✗ RS';
+    } else {
+      const remaining = resolutionAt - now;
+      resolutionText = formatTimeCompact(remaining);
+      if (remaining < 15 * 60 * 1000) resolutionStatus = 'critical';
+      else if (remaining < 60 * 60 * 1000) resolutionStatus = 'warning';
+    }
+  }
+  
+  return `
+    <div class="sla-compact-row">
+      <span class="sla-compact-label">PR:</span>
+      <span class="sla-compact-value ${responseStatus}">${responseText}</span>
+    </div>
+    <div class="sla-compact-row">
+      <span class="sla-compact-label">RS:</span>
+      <span class="sla-compact-value ${resolutionStatus}">${resolutionText}</span>
+    </div>
+  `;
+}
+
+// Render SLA badge for ticket row
+function renderTicketRowSlaBadge(ticket) {
+  if (ticket.resolvedAt || ticket.closedAt) {
+    return '<span class="sla-badge sla-resolved" title="Đã giải quyết">✓</span>';
+  }
+  
+  const now = new Date();
+  const resolutionAt = ticket.slaResolutionAt ? new Date(ticket.slaResolutionAt) : null;
+  const responseAt = ticket.slaResponseAt ? new Date(ticket.slaResponseAt) : null;
+  const firstResponseAt = ticket.firstResponseAt ? new Date(ticket.firstResponseAt) : null;
+  
+  // Check resolution breach
+  if (resolutionAt && now > resolutionAt) {
+    return '<span class="sla-badge sla-breached" title="SLA giải quyết đã vi phạm">✗</span>';
+  }
+  
+  // Check response breach
+  if (responseAt && !firstResponseAt && now > responseAt) {
+    return '<span class="sla-badge sla-breached" title="SLA phản hồi đã vi phạm">✗</span>';
+  }
+  
+  // Check warning
+  if (resolutionAt) {
+    const remaining = resolutionAt - now;
+    const total = resolutionAt - (ticket.createdAt ? new Date(ticket.createdAt) : now);
+    const percent = (remaining / total) * 100;
+    
+    if (percent <= 25) {
+      return '<span class="sla-badge sla-critical" title="SLA sắp hết hạn">!</span>';
+    } else if (percent <= 50) {
+      return '<span class="sla-badge sla-warning" title="SLA còn 50%">⚠</span>';
+    }
+  }
+  
+  return '';
+}
+
+// Format time compact (e.g., "2h", "15p", "3d")
+function formatTimeCompact(ms) {
+  if (ms < 0) ms = -ms;
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  return `${minutes}p`;
+}
+
+// Render SLA info for ticket detail panel
+function renderTicketDetailSla(ticket) {
+  const now = new Date();
+  const responseAt = ticket.slaResponseAt ? new Date(ticket.slaResponseAt) : null;
+  const resolutionAt = ticket.slaResolutionAt ? new Date(ticket.slaResolutionAt) : null;
+  const firstResponseAt = ticket.firstResponseAt ? new Date(ticket.firstResponseAt) : null;
+  const resolvedAt = ticket.resolvedAt ? new Date(ticket.resolvedAt) : null;
+  const createdAt = ticket.createdAt ? new Date(ticket.createdAt) : now;
+
+  // Calculate status
+  const isResponseBreached = responseAt && !firstResponseAt && now > responseAt;
+  const isResolutionBreached = resolutionAt && !resolvedAt && now > resolutionAt;
+  
+  let overallStatus = 'ok';
+  if (isResolutionBreached) {
+    overallStatus = 'breached';
+  } else if (isResponseBreached) {
+    overallStatus = 'breached-response';
+  } else if (resolutionAt) {
+    const remaining = resolutionAt - now;
+    const total = resolutionAt - createdAt;
+    const percent = total > 0 ? (remaining / total) * 100 : 0;
+    if (percent <= 25) overallStatus = 'critical';
+    else if (percent <= 50) overallStatus = 'warning';
+  }
+
+  const statusBadge = {
+    'ok': '<span class="sla-badge sla-ok">✓ OK</span>',
+    'warning': '<span class="sla-badge sla-warning">⚠ Sắp hết hạn</span>',
+    'critical': '<span class="sla-badge sla-critical">! Gần hết hạn</span>',
+    'breached': '<span class="sla-badge sla-breached">✗ Đã vi phạm</span>',
+    'breached-response': '<span class="sla-badge sla-breached">✗ Chưa phản hồi</span>'
+  };
+
+  return `
+    <div class="sla-info-card">
+      <div class="sla-info-header">
+        <span class="sla-info-title">⏱️ SLA</span>
+        ${statusBadge[overallStatus] || statusBadge['ok']}
+      </div>
+      
+      <div class="sla-info-body">
+        ${renderSlaDetailRow(
+          'Phản hồi',
+          responseAt,
+          firstResponseAt,
+          ticket.firstResponseAt ? 'Đã phản hồi' : null
+        )}
+        
+        ${renderSlaDetailRow(
+          'Giải quyết',
+          resolutionAt,
+          resolvedAt,
+          ticket.resolvedAt ? 'Đã giải quyết' : null
+        )}
+      </div>
+      
+      ${resolutionAt && !resolvedAt ? renderSlaProgressBar(createdAt, resolutionAt, now) : ''}
+      
+      <div class="sla-info-footer">
+        <span class="sla-policy-name">${ticket.priority || 'MEDIUM'} SLA</span>
+      </div>
+    </div>
+  `;
+}
+
+// Render individual SLA detail row
+function renderSlaDetailRow(label, deadline, actualTime, completedText) {
+  const now = new Date();
+  const deadlineStr = deadline ? deadline.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : '—';
+  
+  let statusClass = 'sla-time-pending';
+  let timeDisplay = deadlineStr;
+  
+  if (actualTime) {
+    statusClass = 'sla-time-completed';
+    timeDisplay = completedText || 'Hoàn thành';
+  } else if (deadline && now > deadline) {
+    statusClass = 'sla-time-breached';
+    const overdue = now - deadline;
+    timeDisplay = `Quá hạn ${formatTimeCompact(overdue)}`;
+  } else if (deadline) {
+    const remaining = deadline - now;
+    timeDisplay = `Còn ${formatTimeCompact(remaining)}`;
+  }
+
+  return `
+    <div class="sla-time-row ${statusClass}">
+      <span class="sla-time-label">${label}</span>
+      <span class="sla-time-value">${timeDisplay}</span>
+    </div>
+  `;
+}
+
+// Render SLA progress bar
+function renderSlaProgressBar(createdAt, resolutionAt, now) {
+  const totalMs = resolutionAt - createdAt;
+  const elapsedMs = now - createdAt;
+  const percentage = Math.min((elapsedMs / totalMs) * 100, 100);
+
+  let barClass = 'sla-progress-bar ok';
+  if (percentage >= 100) {
+    barClass = 'sla-progress-bar breached';
+  } else if (percentage >= 75) {
+    barClass = 'sla-progress-bar warning';
+  } else if (percentage >= 50) {
+    barClass = 'sla-progress-bar caution';
+  }
+
+  return `
+    <div class="sla-progress-container">
+      <div class="${barClass}">
+        <div class="sla-progress-fill" style="width: ${percentage}%"></div>
+      </div>
+      <span class="sla-progress-label">${Math.round(percentage)}%</span>
+    </div>
+  `;
+}
 
 export const loadTickets = async ({ reset = false } = {}) => {
   if (ticketLoading) {
@@ -273,6 +524,9 @@ export const selectTicket = async (ticket) => {
   const full = await request(`/api/tickets/${ticket.id}`);
   window.selectedTicket = full;
   
+  // Initialize SLA Timer
+  initSlaTimer();
+  
   ticketDetails = document.getElementById('ticket-details');
   ticketActions = document.getElementById('ticket-actions');
   commentPanel = document.getElementById('comment-panel');
@@ -291,6 +545,9 @@ export const selectTicket = async (ticket) => {
   const assignee = full.assigneeName ? formatName(full.assigneeName) : 'Chưa phân công';
   const deptInfo = full.departmentName ? `${full.departmentName} (${full.departmentCode})` : '';
   
+  // SLA Info HTML
+  const slaInfoHtml = renderTicketDetailSla(full);
+  
   ticketDetails.innerHTML = `
     <div class="ticket-detail-card">
       <div class="ticket-detail-header">
@@ -303,6 +560,10 @@ export const selectTicket = async (ticket) => {
         </div>
       </div>
       <p>${full.description}</p>
+      
+      <!-- SLA Info Card -->
+      ${slaInfoHtml}
+      
       <div class="ticket-detail-grid">
         <div class="ticket-detail-field">
           <span>Người phụ trách</span>

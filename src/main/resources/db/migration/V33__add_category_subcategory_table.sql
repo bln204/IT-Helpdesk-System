@@ -19,8 +19,8 @@ CREATE TABLE categories (
 );
 
 -- Indexes cho performance
-CREATE INDEX idx_categories_parent ON categories(parent_id);
-CREATE INDEX idx_categories_enabled ON categories(enabled);
+CREATE INDEX IF NOT EXISTS idx_categories_parent ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_enabled ON categories(enabled);
 
 COMMENT ON TABLE categories IS 'Phân loại ticket: Category và Subcategory';
 COMMENT ON COLUMN categories.parent_id IS 'Parent category (NULL = top-level category)';

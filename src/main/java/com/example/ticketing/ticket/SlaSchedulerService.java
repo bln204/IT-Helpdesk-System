@@ -12,10 +12,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.ticketing.auth.Notification;
-import com.example.ticketing.auth.NotificationPreferences;
 import com.example.ticketing.auth.NotificationPreferencesRepository;
-import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.escalation.EscalationService;
+import com.example.ticketing.sla.SlaPolicy;
+import com.example.ticketing.sla.SlaPolicyService;
 
 /**
  * Scheduler kiểm tra và gửi SLA alerts.
@@ -26,23 +26,26 @@ public class SlaSchedulerService {
     
     private static final Logger log = LoggerFactory.getLogger(SlaSchedulerService.class);
     
-    // Warning threshold: gửi warning khi còn 25% thời gian SLA
-    private static final double WARNING_THRESHOLD = 0.75; // 75% of time used
-    
     private final TicketRepository ticketRepository;
     private final SlaAlertLogRepository slaAlertLogRepository;
     private final NotificationPreferencesRepository preferencesRepository;
     private final TicketNotificationService notificationService;
+    private final SlaPolicyService slaPolicyService;
+    private final EscalationService escalationService;
     
     public SlaSchedulerService(
             TicketRepository ticketRepository,
             SlaAlertLogRepository slaAlertLogRepository,
             NotificationPreferencesRepository preferencesRepository,
-            TicketNotificationService notificationService) {
+            TicketNotificationService notificationService,
+            SlaPolicyService slaPolicyService,
+            EscalationService escalationService) {
         this.ticketRepository = ticketRepository;
         this.slaAlertLogRepository = slaAlertLogRepository;
         this.preferencesRepository = preferencesRepository;
         this.notificationService = notificationService;
+        this.slaPolicyService = slaPolicyService;
+        this.escalationService = escalationService;
     }
     
     /**
@@ -71,6 +74,13 @@ public class SlaSchedulerService {
             boolean resolutionBreach = checkResolutionSlaBreach(ticket);
             if (resolutionWarning) warningCount++;
             if (resolutionBreach) breachCount++;
+            
+            // Trigger escalation check
+            try {
+                escalationService.checkAndEscalate(ticket);
+            } catch (Exception e) {
+                log.error("Error checking escalation for ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
+            }
         }
         
         log.info("SLA check completed. Warnings: {}, Breaches: {}", warningCount, breachCount);
@@ -83,20 +93,31 @@ public class SlaSchedulerService {
         if (ticket.getSlaResponseAt() == null) return false;
         if (ticket.getFirstResponseAt() != null) return false; // Đã response
         
+        // Lấy warning threshold từ SlaPolicy
+        double warningThreshold = getWarningThreshold(ticket) / 100.0;
+        
         LocalDateTime now = LocalDateTime.now();
-        long totalHours = Duration.between(ticket.getCreatedAt(), ticket.getSlaResponseAt()).toHours();
-        long elapsedHours = Duration.between(ticket.getCreatedAt(), now).toHours();
+        long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResponseAt()).toMinutes();
+        long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
         
         // Kiểm tra đã qua threshold chưa
-        if (elapsedHours >= totalHours * WARNING_THRESHOLD) {
+        if (totalMinutes > 0 && elapsedMinutes >= totalMinutes * warningThreshold) {
             // Kiểm tra đã gửi warning chưa
             if (!slaAlertLogRepository.existsByTicketIdAndSlaTypeAndAlertType(
                     ticket.getId(), "RESPONSE", "WARNING")) {
-                sendSlaWarning(ticket, "RESPONSE", totalHours, elapsedHours);
+                sendSlaWarning(ticket, "RESPONSE", totalMinutes, elapsedMinutes);
                 return true;
             }
         }
         return false;
+    }
+    
+    /**
+     * Lấy warning threshold từ SlaPolicy.
+     */
+    private double getWarningThreshold(Ticket ticket) {
+        SlaPolicy policy = slaPolicyService.getEffectivePolicyForPriority(ticket.getPriority());
+        return policy.getWarningThreshold() != null ? policy.getWarningThreshold() : 75;
     }
     
     /**
@@ -125,14 +146,17 @@ public class SlaSchedulerService {
         if (ticket.getSlaResolutionAt() == null) return false;
         if (ticket.isResolutionSLABreached()) return false; // Đã breach
         
-        LocalDateTime now = LocalDateTime.now();
-        long totalHours = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionAt()).toHours();
-        long elapsedHours = Duration.between(ticket.getCreatedAt(), now).toHours();
+        // Lấy warning threshold từ SlaPolicy
+        double warningThreshold = getWarningThreshold(ticket) / 100.0;
         
-        if (elapsedHours >= totalHours * WARNING_THRESHOLD) {
+        LocalDateTime now = LocalDateTime.now();
+        long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionAt()).toMinutes();
+        long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
+        
+        if (totalMinutes > 0 && elapsedMinutes >= totalMinutes * warningThreshold) {
             if (!slaAlertLogRepository.existsByTicketIdAndSlaTypeAndAlertType(
                     ticket.getId(), "RESOLUTION", "WARNING")) {
-                sendSlaWarning(ticket, "RESOLUTION", totalHours, elapsedHours);
+                sendSlaWarning(ticket, "RESOLUTION", totalMinutes, elapsedMinutes);
                 return true;
             }
         }
@@ -217,12 +241,15 @@ public class SlaSchedulerService {
         status.setTicketId(ticket.getId());
         status.setTicketNumber(ticket.getTicketNumber());
         
+        // Lấy SLA policy để hiển thị target hours
+        SlaPolicy policy = slaPolicyService.getEffectivePolicyForPriority(ticket.getPriority());
+        
         LocalDateTime now = LocalDateTime.now();
         
         // Response SLA
         if (ticket.getSlaResponseAt() != null) {
             status.setResponseSlaTarget(ticket.getSlaResponseAt());
-            status.setResponseHours(TicketTypes.SLAPriority.fromTicketPriority(ticket.getPriority()).getResponseHours());
+            status.setResponseHours(policy.getResponseMinutes() / 60); // Convert minutes to hours
             
             if (ticket.getFirstResponseAt() != null) {
                 status.setFirstResponseAt(ticket.getFirstResponseAt());
@@ -239,7 +266,7 @@ public class SlaSchedulerService {
         // Resolution SLA
         if (ticket.getSlaResolutionAt() != null) {
             status.setResolutionSlaTarget(ticket.getSlaResolutionAt());
-            status.setResolutionHours(TicketTypes.SLAPriority.fromTicketPriority(ticket.getPriority()).getResolutionHours());
+            status.setResolutionHours(policy.getResolutionMinutes() / 60); // Convert minutes to hours
             
             if (ticket.getResolvedAt() != null) {
                 status.setResolvedAt(ticket.getResolvedAt());

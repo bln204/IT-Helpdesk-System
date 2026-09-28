@@ -1063,4 +1063,40 @@ const renderTicketSelectedFiles = () => {
       renderTicketSelectedFiles();
     });
   });
+
+  // Problem Modal Close Handlers
+  const closeProblemModal = document.getElementById('close-problem-modal');
+  if (closeProblemModal) {
+    closeProblemModal.addEventListener('click', () => {
+      const modal = document.getElementById('problem-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Change Modal Close Handlers
+  const closeChangeModal = document.getElementById('close-change-modal');
+  if (closeChangeModal) {
+    closeChangeModal.addEventListener('click', () => {
+      const modal = document.getElementById('change-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Asset Modal Close Handlers
+  const closeAssetModal = document.getElementById('close-asset-modal');
+  if (closeAssetModal) {
+    closeAssetModal.addEventListener('click', () => {
+      const modal = document.getElementById('asset-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Modal backdrop click handlers (close on clicking outside modal content)
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+  });
 };

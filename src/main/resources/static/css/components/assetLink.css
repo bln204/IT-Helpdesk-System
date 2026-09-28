@@ -1,0 +1,473 @@
+/**
+ * Asset-Ticket Link - Connectivity Visualization Design
+ * 
+ * Design Language:
+ * - Indigo (#6366F1) primary for connectivity theme
+ * - Violet (#8B5CF6) secondary accents
+ * - Link role badges as visual anchors
+ * - Clean connection visualization
+ */
+
+/* ==================== Linked Assets List ==================== */
+
+.linked-assets-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.linked-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6366F1;
+}
+
+.linked-assets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ==================== Linked Asset Item ==================== */
+
+.linked-asset-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.linked-asset-item:hover {
+  border-color: #6366F1;
+}
+
+.linked-asset-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.linked-asset-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--bg);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.linked-asset-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linked-asset-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.linked-asset-number {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: #6366F1;
+}
+
+.linked-asset-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.linked-health-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--health-color) 15%, transparent);
+  color: var(--health-color);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.linked-role-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--role-color) 15%, transparent);
+  color: var(--role-color);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.linked-asset-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.link-unlink-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.link-unlink-btn:hover {
+  border-color: #F43F5E;
+  color: #F43F5E;
+}
+
+/* ==================== Empty State ==================== */
+
+.link-empty-state {
+  text-align: center;
+  padding: 32px 24px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.link-empty-state.small {
+  padding: 16px;
+}
+
+.link-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.link-empty-state p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.link-add-btn {
+  padding: 8px 16px;
+  background: #6366F1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.link-add-btn:hover {
+  filter: brightness(1.1);
+}
+
+.link-add-btn.small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* ==================== Link Modal ==================== */
+
+.link-modal-content {
+  max-width: 560px;
+}
+
+.link-search-section {
+  margin-bottom: 16px;
+}
+
+.link-search-section input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  transition: border-color 0.15s ease;
+}
+
+.link-search-section input:focus {
+  outline: none;
+  border-color: #6366F1;
+}
+
+.asset-search-results {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 24px;
+}
+
+/* ==================== Asset Search Item ==================== */
+
+.asset-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.asset-search-item:hover {
+  border-color: #6366F1;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.asset-search-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--bg);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.asset-search-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-search-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.asset-search-number {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  color: #6366F1;
+}
+
+.asset-search-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-badge-small {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--health-color) 15%, transparent);
+  color: var(--health-color);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.link-select-btn {
+  padding: 6px 12px;
+  background: #6366F1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.link-select-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* ==================== Role Selector ==================== */
+
+.link-role-selector {
+  padding: 8px 0;
+}
+
+.link-role-selector h4 {
+  font-size: 1rem;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.role-option-btn {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 4px 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.role-option-btn:hover {
+  border-color: #6366F1;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.role-option-btn .role-icon {
+  grid-row: span 2;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.role-option-btn .role-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.role-option-btn .role-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.back-to-search-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.back-to-search-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+/* ==================== Linked Incidents List ==================== */
+
+.linked-incidents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linked-incident-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.linked-incident-id {
+  font-family: 'IBM Plex Mono', monospace;
+  color: #6366F1;
+  font-weight: 500;
+}
+
+.linked-incident-role {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--role-color) 15%, transparent);
+  color: var(--role-color);
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* ==================== Connection Lines (Visual Accent) ==================== */
+
+.connection-line {
+  width: 2px;
+  height: 24px;
+  background: linear-gradient(to bottom, #6366F1, #8B5CF6);
+  margin: 0 auto;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6366F1;
+}
+
+/* ==================== Link Stats ==================== */
+
+.link-stats {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.link-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-stat-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.link-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #6366F1;
+}
+
+.link-stat-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* ==================== Responsive ==================== */
+
+@media (max-width: 480px) {
+  .linked-asset-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .linked-asset-meta {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .linked-asset-actions {
+    width: 100%;
+  }
+
+  .role-options {
+    gap: 8px;
+  }
+}

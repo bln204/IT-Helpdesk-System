@@ -7,9 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.example.ticketing.security.JwtBlacklistService;
@@ -20,7 +18,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private final JwtService jwtService;
@@ -39,20 +36,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtBlacklistService = jwtBlacklistService;
         this.userAccountRepository = userAccountRepository;
     }
-
+    
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
+        String uri = request.getRequestURI();
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        
         if (header == null || !header.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String token = header.substring(7);
+        
         try {
             Claims claims = jwtService.parseClaims(token);
             String jti = claims.getId();
@@ -89,16 +89,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                // Extract roles from JWT claims (with ROLE_ prefix)
+                @SuppressWarnings("unchecked")
+                java.util.List<String> roles = claims.get("roles", java.util.List.class);
+                
+                if (roles == null) {
+                    roles = java.util.List.of();
+                }
+                
+                // Convert roles to GrantedAuthority with ROLE_ prefix
+                java.util.Collection<org.springframework.security.core.GrantedAuthority> authorities = roles.stream()
+                    .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                    .<org.springframework.security.core.GrantedAuthority>map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                    .toList();
+                
+                // Create authentication using JWT authorities (not from database)
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    userDetails,
+                    username,
                     null,
-                    userDetails.getAuthorities()
+                    authorities
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ex) {
-            logger.warn("JWT validation failed: " + ex.getMessage());
+            logger.error("JWT validation failed: {}", ex.getMessage());
             SecurityContextHolder.clearContext();
         }
 

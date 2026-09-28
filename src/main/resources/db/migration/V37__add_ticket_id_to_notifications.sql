@@ -9,8 +9,8 @@ ALTER TABLE notifications ADD COLUMN ticket_id BIGINT REFERENCES tickets(id);
 ALTER TABLE notifications ADD COLUMN related_ticket_id BIGINT REFERENCES tickets(id);
 
 -- Index cho performance
-CREATE INDEX idx_notifications_ticket ON notifications(ticket_id);
-CREATE INDEX idx_notifications_related_ticket ON notifications(related_ticket_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_ticket ON notifications(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_related_ticket ON notifications(related_ticket_id);
 
 COMMENT ON COLUMN notifications.ticket_id IS 'Ticket liên quan đến notification (nếu có)';
 COMMENT ON COLUMN notifications.related_ticket_id IS 'Ticket phụ (VD: ticket được assign thay thế)';

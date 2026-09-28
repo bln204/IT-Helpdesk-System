@@ -218,8 +218,10 @@ export const updateNotificationBadge = (count) => {
   if (count > 0) {
     badge.textContent = count > 99 ? '99+' : count;
     badge.style.display = 'flex';
+    badge.classList.remove('hidden');
   } else {
     badge.style.display = 'none';
+    badge.classList.add('hidden');
   }
 };
 

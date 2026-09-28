@@ -1,0 +1,367 @@
+/* ==================== Service Request Styles ==================== */
+
+/* Service Catalog Section */
+.sr-catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sr-catalog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sr-category-section {
+  margin-bottom: 24px;
+}
+
+.sr-category-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Service Catalog Grid */
+.sr-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* Service Catalog Item */
+.sr-catalog-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sr-catalog-item:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.sr-item-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.sr-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sr-item-info h5 {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.sr-item-info p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.sr-item-sla {
+  font-size: 0.7rem;
+  color: var(--primary);
+  font-family: var(--font-mono);
+}
+
+/* Service Request List */
+.sr-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sr-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* Service Request Card */
+.sr-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  transition: box-shadow 0.2s ease;
+}
+
+.sr-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.sr-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.sr-number {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.sr-status {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.sr-status.submitted {
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+}
+
+.sr-status.pending {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e67e22;
+}
+
+.sr-status.approved {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+
+.sr-status.in-progress {
+  background: rgba(155, 89, 182, 0.15);
+  color: #9b59b6;
+}
+
+.sr-status.completed {
+  background: rgba(40, 167, 69, 0.15);
+  color: var(--success);
+}
+
+.sr-status.rejected {
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--danger);
+}
+
+.sr-status.cancelled {
+  background: rgba(128, 128, 128, 0.15);
+  color: var(--muted);
+}
+
+.sr-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.sr-service {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.sr-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.sr-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* Service Request Form */
+.sr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sr-form-service-info {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.sr-form-service-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.sr-form-service-details h4 {
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.sr-form-service-details p {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Service Request Modal */
+.sr-modal-content {
+  max-width: 600px;
+}
+
+/* Service Request Detail */
+.sr-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.sr-detail-info {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sr-detail-item {
+  padding: 10px;
+  background: var(--bg);
+  border-radius: 6px;
+}
+
+.sr-detail-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.sr-detail-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Service Request Tabs */
+.sr-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.sr-tab-btn {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.sr-tab-btn:hover {
+  color: var(--text);
+}
+
+.sr-tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Service Request Comments */
+.sr-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sr-comment {
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.sr-comment-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sr-comment-author {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.sr-comment-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.sr-comment-body {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sr-comment.internal {
+  background: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid #e67e22;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sr-catalog-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sr-list-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sr-detail-info {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Service Request Badge */
+.sr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+}

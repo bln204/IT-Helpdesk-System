@@ -30,13 +30,13 @@ ALTER TABLE tickets ADD COLUMN subcategory_id BIGINT REFERENCES categories(id);
 -- 8. First response timestamp
 ALTER TABLE tickets ADD COLUMN first_response_at TIMESTAMP;
 
--- Indexes cho các cột mới
-CREATE INDEX idx_tickets_assignee ON tickets(assignee_id);
-CREATE INDEX idx_tickets_team ON tickets(team_id);
-CREATE INDEX idx_tickets_category ON tickets(category_id);
-CREATE INDEX idx_tickets_subcategory ON tickets(subcategory_id);
-CREATE INDEX idx_tickets_sla_response ON tickets(sla_response_at);
-CREATE INDEX idx_tickets_sla_resolution ON tickets(sla_resolution_at);
+-- Indexes cho các cột mới (dùng IF NOT EXISTS để tránh lỗi khi đã tồn tại)
+CREATE INDEX IF NOT EXISTS idx_tickets_assignee_id ON tickets(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_team ON tickets(team_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_subcategory ON tickets(subcategory_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_sla_response ON tickets(sla_response_at);
+CREATE INDEX IF NOT EXISTS idx_tickets_sla_resolution ON tickets(sla_resolution_at);
 
 -- Constraints để đảm bảo data integrity
 -- Subcategory phải thuộc về parent category

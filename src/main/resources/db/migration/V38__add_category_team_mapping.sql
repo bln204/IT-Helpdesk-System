@@ -14,9 +14,9 @@ CREATE TABLE category_team_mapping (
     CONSTRAINT uk_category_team UNIQUE (category_id, team_id)
 );
 
-CREATE INDEX idx_category_team_category ON category_team_mapping(category_id);
-CREATE INDEX idx_category_team_team ON category_team_mapping(team_id);
-CREATE INDEX idx_category_team_priority ON category_team_mapping(priority);
+CREATE INDEX IF NOT EXISTS idx_category_team_category ON category_team_mapping(category_id);
+CREATE INDEX IF NOT EXISTS idx_category_team_team ON category_team_mapping(team_id);
+CREATE INDEX IF NOT EXISTS idx_category_team_priority ON category_team_mapping(priority);
 
 COMMENT ON TABLE category_team_mapping IS 'Map category với team để auto-assign ticket';
 COMMENT ON COLUMN category_team_mapping.priority IS 'Độ ưu tiên (số cao hơn = ưu tiên hơn)';
