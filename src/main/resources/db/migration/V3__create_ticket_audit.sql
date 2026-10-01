@@ -13,5 +13,5 @@ CREATE TABLE ticket_audit (
     ON DELETE CASCADE
 );
 
-CREATE INDEX idx_ticket_audit_ticket_id ON ticket_audit (ticket_id);
-CREATE INDEX idx_ticket_audit_created_at ON ticket_audit (created_at);
+CREATE INDEX IF NOT EXISTS idx_ticket_audit_ticket_id ON ticket_audit (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_audit_created_at ON ticket_audit (created_at);

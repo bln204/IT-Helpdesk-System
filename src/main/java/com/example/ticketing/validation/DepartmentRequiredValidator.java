@@ -30,7 +30,14 @@ public class DepartmentRequiredValidator
             return true;
         }
 
-        // For all other roles, departmentId is required
+        // TRUONG_PHONG tạo user: departmentId sẽ được auto-assign từ department của họ
+        // Controller sẽ override departmentId = actor.getDepartmentId()
+        // Nên validation cho phép TRUONG_PHONG gửi null departmentId
+        if (request.getRole() == UserRole.Role.TRUONG_PHONG) {
+            return true; // departmentId will be auto-assigned by controller
+        }
+
+        // For GIAM_DOC and NHAN_VIEN, departmentId is required
         boolean isValid = request.getDepartmentId() != null;
         
         if (!isValid) {

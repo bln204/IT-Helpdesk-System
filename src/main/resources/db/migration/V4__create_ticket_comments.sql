@@ -11,5 +11,5 @@ CREATE TABLE ticket_comments (
     ON DELETE CASCADE
 );
 
-CREATE INDEX idx_ticket_comments_ticket_id ON ticket_comments (ticket_id);
-CREATE INDEX idx_ticket_comments_visibility ON ticket_comments (visibility);
+CREATE INDEX IF NOT EXISTS idx_ticket_comments_ticket_id ON ticket_comments (ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_comments_visibility ON ticket_comments (visibility);

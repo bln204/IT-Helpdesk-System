@@ -529,6 +529,9 @@ export const initTabs = () => {
           module.loadDepartmentsTable();
         });
       }
+      
+      // Dispatch event for all tabs to notify modules
+      document.dispatchEvent(new CustomEvent('tabChanged', { detail: { tab } }));
     });
   });
 };

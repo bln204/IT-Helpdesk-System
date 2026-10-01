@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"department"})
     Optional<UserAccount> findByUsername(String username);
 
     List<UserAccount> findByRoleAndEnabledTrueOrderByUsernameAsc(UserRole.Role role);

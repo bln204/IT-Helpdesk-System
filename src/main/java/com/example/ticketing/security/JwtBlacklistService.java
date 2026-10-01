@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -17,6 +18,10 @@ public class JwtBlacklistService {
     
     // Map of JTI (JWT ID) -> expiration timestamp
     private final Map<String, Long> blacklistedTokens = new ConcurrentHashMap<>();
+    
+    // Set of usernames whose all tokens should be rejected
+    // When a user is deactivated, all their tokens are invalid
+    private final Set<String> revokedUsernames = ConcurrentHashMap.newKeySet();
     
     // Cleanup interval: run cleanup every 5 minutes
     private static final long CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
@@ -39,6 +44,45 @@ public class JwtBlacklistService {
             return;
         }
         blacklistedTokens.put(jti, expiresAtSeconds);
+    }
+    
+    /**
+     * Revoke all tokens for a specific user.
+     * Call this when a user is deactivated or needs to be logged out everywhere.
+     * 
+     * @param username The username whose tokens should be revoked
+     */
+    public void revokeAllUserTokens(String username) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        revokedUsernames.add(username);
+    }
+    
+    /**
+     * Check if a username has been revoked (all their tokens are invalid).
+     * 
+     * @param username The username to check
+     * @return true if the user's tokens should be rejected
+     */
+    public boolean isUserRevoked(String username) {
+        if (username == null || username.isBlank()) {
+            return false;
+        }
+        return revokedUsernames.contains(username);
+    }
+    
+    /**
+     * Restore a user's tokens (remove from revoked list).
+     * Call this when a user is reactivated.
+     * 
+     * @param username The username to restore
+     */
+    public void restoreUserTokens(String username) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        revokedUsernames.remove(username);
     }
     
     /**
@@ -72,6 +116,13 @@ public class JwtBlacklistService {
     public int getBlacklistedCount() {
         cleanup(); // Clean up expired entries first
         return blacklistedTokens.size();
+    }
+    
+    /**
+     * Get count of revoked users (for monitoring).
+     */
+    public int getRevokedUsersCount() {
+        return revokedUsernames.size();
     }
     
     /**

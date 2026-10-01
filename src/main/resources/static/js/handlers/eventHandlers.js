@@ -74,8 +74,19 @@ import {
 import {
   downloadReportCsv,
   renderReportTable,
-  setActiveReportButton
+  setActiveReportButton,
+  showNewReportDialog
 } from '../modules/reports.js';
+import {
+  saveDraft,
+  loadDraft,
+  deleteDraft,
+  generateDraftKey,
+  trackForm,
+  markFormSubmitted,
+  hasUnsavedChanges,
+  untrackForm
+} from '../services/draftService.js';
 
 const UNASSIGNED_VALUE = 'UNASSIGNED';
 let selectedFiles = [];
@@ -207,17 +218,69 @@ export const attachEventHandlers = () => {
   selectedFiles = [];
   
   if (createForm) {
+    // Track form for unsaved changes detection
+    trackForm('ticket-create', createForm);
+    
+    // Initialize character counter for description
+    const descriptionInput = createForm.querySelector('[name="description"]');
+    const charCounter = document.getElementById('description-char-count');
+    if (descriptionInput && charCounter) {
+      const updateCharCount = () => {
+        charCounter.textContent = descriptionInput.value.length;
+      };
+      descriptionInput.addEventListener('input', updateCharCount);
+      updateCharCount(); // Initial count
+    }
+    
+    // Auto-save draft every 10 seconds
+    let draftSaveTimer = null;
+    const startDraftAutoSave = () => {
+      draftSaveTimer = setInterval(() => {
+        const draftKey = generateDraftKey('ticket-create');
+        const formData = {};
+        createForm.querySelectorAll('input, select, textarea').forEach(input => {
+          if (input.name) {
+            formData[input.name] = input.value;
+          }
+        });
+        saveDraft(draftKey, formData, { formType: 'ticket-create' });
+      }, 10000); // Every 10 seconds
+    };
+    startDraftAutoSave();
+    
     createForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!validateForm(createForm)) return;
+      
+      // Check for duplicate submission
+      const submitBtn = createForm.querySelector('[type="submit"]');
+      if (submitBtn?.disabled) {
+        alert('Yêu cầu đang được xử lý. Vui lòng đợi...');
+        return;
+      }
+      
+      // Disable submit button to prevent double-click
+      if (submitBtn) submitBtn.disabled = true;
+      
+      // Mark form as submitted (prevents beforeunload warning)
+      markFormSubmitted('ticket-create');
+      
       const formData = new FormData(createForm);
       const payload = Object.fromEntries(formData.entries());
       payload.assigneeName = payload.assigneeName === UNASSIGNED_VALUE ? null : payload.assigneeName;
+      
+      // Clear draft on successful submission
+      const draftKey = generateDraftKey('ticket-create');
+      
       try {
         const result = await request('/api/tickets', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
+        
+        // Delete draft on success
+        deleteDraft(draftKey);
+        
         const filesToUpload = [...selectedFiles];
         createForm.reset();
         selectedFiles = [];
@@ -227,8 +290,21 @@ export const attachEventHandlers = () => {
         }
         await loadTickets({ reset: true });
         if (createModal) createModal.classList.add('hidden');
+        
+        // Show success message
+        if (window.Toast) {
+          window.Toast.show('Phiếu hỗ trợ đã được tạo thành công!', 'success');
+        }
       } catch (error) {
-        alert(error.message);
+        // Re-enable submit button on error
+        if (submitBtn) submitBtn.disabled = false;
+        
+        // Handle concurrent modification
+        if (error.errorCode === 'CONCURRENT_MODIFICATION') {
+          alert('Phiếu đang được chỉnh sửa bởi người khác. Vui lòng tải lại trang và thử lại.');
+        } else {
+          alert(error.message);
+        }
       }
     });
   }
@@ -340,19 +416,11 @@ export const attachEventHandlers = () => {
     });
   }
   
-  // Ticket Tabs
-  const ticketTabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+  // Ticket Tabs - NOTE: Tab click handlers are registered in utils.js initTabs()
+  // This handler is for tab panel visibility only (handled by initTabs)
+  // The tabChanged event is dispatched by initTabs() in utils.js
   const ticketTabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
-  
-  ticketTabButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.tab;
-      ticketTabButtons.forEach((item) => item.classList.toggle('active', item === btn));
-      ticketTabPanels.forEach((panel) => {
-        panel.classList.toggle('active', panel.dataset.tabPanel === target);
-      });
-    });
-  });
+  // Tab buttons and panel visibility are handled by initTabs() in utils.js
   
   // Ticket Actions - handled by initTicketEvents() in ticketService.js
   // updateStatusBtn, updatePriorityBtn, updateAssigneeBtn, assignMeBtn listeners removed to avoid duplication
@@ -369,12 +437,14 @@ export const attachEventHandlers = () => {
   const backlogReportBtn = document.getElementById('backlog-report-btn');
   const slaReportBtn = document.getElementById('sla-report-btn');
   const reportDownloadBtn = document.getElementById('report-download-btn');
-  
+  const newReportBtn = document.getElementById('new-report-btn');
+
   if (engineerReportBtn) engineerReportBtn.addEventListener('click', () => loadEngineerReport().catch((err) => alert(err.message)));
   if (requesterReportBtn) requesterReportBtn.addEventListener('click', () => loadRequesterReport().catch((err) => alert(err.message)));
   if (backlogReportBtn) backlogReportBtn.addEventListener('click', () => loadBacklogReport().catch((err) => alert(err.message)));
   if (slaReportBtn) slaReportBtn.addEventListener('click', () => loadSlaReport().catch((err) => alert(err.message)));
   if (reportDownloadBtn) reportDownloadBtn.addEventListener('click', downloadReportCsv);
+  if (newReportBtn) newReportBtn.addEventListener('click', showNewReportDialog);
   
   // Admin User Management
   const userSearch = document.getElementById('user-search');
@@ -684,11 +754,11 @@ export const attachEventHandlers = () => {
       ])) {
         return;
       }
+      // Note: avatarUrl is NOT sent - avatar changes are disabled by backend
       const payload = {
         displayName: profileDisplayName.value,
         title: profileTitle.value,
         email: profileEmail.value,
-        avatarUrl: profileAvatarPreview ? profileAvatarPreview.src : null,
       };
       await request('/api/users/me/profile', {
         method: 'PATCH',
@@ -1061,6 +1131,42 @@ const renderTicketSelectedFiles = () => {
       const index = parseInt(e.target.dataset.ticketIndex, 10);
       ticketSelectedFilesList.splice(index, 1);
       renderTicketSelectedFiles();
+    });
+  });
+
+  // Problem Modal Close Handlers
+  const closeProblemModal = document.getElementById('close-problem-modal');
+  if (closeProblemModal) {
+    closeProblemModal.addEventListener('click', () => {
+      const modal = document.getElementById('problem-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Change Modal Close Handlers
+  const closeChangeModal = document.getElementById('close-change-modal');
+  if (closeChangeModal) {
+    closeChangeModal.addEventListener('click', () => {
+      const modal = document.getElementById('change-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Asset Modal Close Handlers
+  const closeAssetModal = document.getElementById('close-asset-modal');
+  if (closeAssetModal) {
+    closeAssetModal.addEventListener('click', () => {
+      const modal = document.getElementById('asset-modal');
+      if (modal) modal.classList.add('hidden');
+    });
+  }
+
+  // Modal backdrop click handlers (close on clicking outside modal content)
+  document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
     });
   });
 };

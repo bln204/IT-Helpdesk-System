@@ -35,7 +35,31 @@ public class UserSelfService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        user.markPasswordChanged(); // Invalidate all existing tokens
+        user.markPasswordChangedAndClearFlag(); // Invalidate all existing tokens and clear passwordMustChange flag
+        userAuditService.log(
+            UserAuditAction.PASSWORD_CHANGED,
+            user.getUsername(),
+            user.getRole().name(),
+            user.getUsername()
+        );
+    }
+    
+    /**
+     * Force password change for first login (without current password).
+     * This is called when passwordMustChange = true.
+     */
+    public void forcePasswordChange(String username, String newPassword) {
+        UserAccount user = getByUsername(username);
+        
+        // Check if user is required to change password
+        if (!user.isPasswordMustChange()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
+                "Password change is not required. Use the regular password change endpoint.");
+        }
+        
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.markPasswordChangedAndClearFlag(); // Invalidate all existing tokens and clear passwordMustChange flag
+        
         userAuditService.log(
             UserAuditAction.PASSWORD_CHANGED,
             user.getUsername(),
@@ -52,7 +76,14 @@ public class UserSelfService {
         String email
     ) {
         UserAccount user = getByUsername(username);
-        rejectAvatarChange(user.getAvatarUrl(), avatarUrl);
+        // Avatar changes are disabled - ignore any avatar URL in the request
+        // Just validate that user is not trying to change it
+        // If avatarUrl is null/empty, it means no change requested (keep existing)
+        // If avatarUrl has value, reject the change
+        if (avatarUrl != null && !avatarUrl.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar changes are disabled.");
+        }
+        
         user.setDisplayName(displayName);
         user.setTitle(title);
         user.setEmail(email);
@@ -63,13 +94,5 @@ public class UserSelfService {
             user.getUsername()
         );
         return user;
-    }
-
-    private void rejectAvatarChange(String currentAvatarUrl, String requestedAvatarUrl) {
-        String current = currentAvatarUrl == null ? "" : currentAvatarUrl.trim();
-        String requested = requestedAvatarUrl == null ? "" : requestedAvatarUrl.trim();
-        if (!current.equals(requested)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar changes are disabled.");
-        }
     }
 }

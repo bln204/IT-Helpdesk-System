@@ -16,5 +16,5 @@ COMMENT ON COLUMN ticket_assignments.team_id IS 'Team được giao (nếu assig
 COMMENT ON COLUMN ticket_assignments.assignment_type IS 'Loại assignment: INDIVIDUAL hoặc TEAM';
 
 -- Index cho các cột mới
-CREATE INDEX idx_ticket_assignments_assignee ON ticket_assignments(assignee_id);
-CREATE INDEX idx_ticket_assignments_team ON ticket_assignments(team_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_assignments_assignee ON ticket_assignments(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_assignments_team ON ticket_assignments(team_id);

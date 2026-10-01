@@ -59,6 +59,18 @@ public class UserAdminController {
                 "Giám đốc không có quyền tạo tài khoản người dùng.");
         }
         
+        // TRUONG_PHONG: tự động gán department của họ cho user mới
+        // Bỏ qua hoàn toàn departmentId từ request để đảm bảo tính toàn vẹn dữ liệu
+        // User mới phải thuộc cùng phòng ban với TRUONG_PHONG tạo họ
+        Long departmentId;
+        if ("TRUONG_PHONG".equals(actor.getRole().name())) {
+            // TRUONG_PHONG chỉ được tạo NHAN_VIEN trong phòng ban của họ
+            // Force override departmentId - không cho phép chọn phòng ban khác
+            departmentId = actor.getDepartmentId();
+        } else {
+            departmentId = request.getDepartmentId();
+        }
+        
         UserAccount user = userAdminService.createUser(
             request.getUsername(),
             request.getPassword(),
@@ -68,7 +80,7 @@ public class UserAdminController {
             request.getTitle(),
             request.getAvatarUrl(),
             request.getEmail(),
-            request.getDepartmentId(),
+            departmentId,
             actor.getUsername(),
             actor.getRole().name()
         );

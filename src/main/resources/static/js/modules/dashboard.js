@@ -261,6 +261,10 @@ const DashboardModule = (() => {
     // ============ Data Loading ============
     
     async function loadDashboardData() {
+        // Check if user is logged in before making API calls
+        const token = localStorage.getItem('ticketing.jwt');
+        if (!token) return;
+        
         try {
             await Promise.all([
                 loadOverview(),

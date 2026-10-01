@@ -23,6 +23,7 @@ import com.example.ticketing.category.CategoryTeamMapping;
 import com.example.ticketing.category.CategoryTeamMappingRepository;
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.sla.SlaPolicyService;
 import com.example.ticketing.team.Team;
 import com.example.ticketing.team.TeamRepository;
 
@@ -42,6 +43,7 @@ public class TicketService {
     private final CategoryTeamMappingRepository categoryTeamMappingRepository;
     private final TeamRepository teamRepository;
     private final TicketNotificationService ticketNotificationService;
+    private final SlaPolicyService slaPolicyService;
 
     public TicketService(
         TicketRepository ticketRepository,
@@ -54,7 +56,8 @@ public class TicketService {
         CategoryRepository categoryRepository,
         CategoryTeamMappingRepository categoryTeamMappingRepository,
         TeamRepository teamRepository,
-        TicketNotificationService ticketNotificationService
+        TicketNotificationService ticketNotificationService,
+        SlaPolicyService slaPolicyService
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketAssignmentRepository = ticketAssignmentRepository;
@@ -67,6 +70,7 @@ public class TicketService {
         this.categoryTeamMappingRepository = categoryTeamMappingRepository;
         this.teamRepository = teamRepository;
         this.ticketNotificationService = ticketNotificationService;
+        this.slaPolicyService = slaPolicyService;
     }
 
     // ============================================================
@@ -183,20 +187,18 @@ public class TicketService {
     }
     
     /**
-     * Set SLA times dựa trên priority.
-     * CRITICAL: 1h response, 4h resolution
-     * HIGH: 2h response, 8h resolution
-     * MEDIUM: 4h response, 24h resolution
-     * LOW: 8h response, 72h resolution
+     * Set SLA times dựa trên priority và SLA Policy từ database.
+     * Ưu tiên đọc từ SlaPolicy, fallback sang hardcoded values nếu không có.
      */
     private void setSLATimes(Ticket ticket) {
         TicketTypes.TicketPriority priority = ticket.getPriority();
         LocalDateTime now = LocalDateTime.now();
         
-        TicketTypes.SLAPriority slaPriority = TicketTypes.SLAPriority.fromTicketPriority(priority);
+        // Sử dụng SlaPolicyService để lấy SLA deadlines
+        SlaPolicyService.SlaDeadline deadline = slaPolicyService.calculateSlaDeadlines(priority, now);
         
-        ticket.setSlaResponseAt(now.plusHours(slaPriority.getResponseHours()));
-        ticket.setSlaResolutionAt(now.plusHours(slaPriority.getResolutionHours()));
+        ticket.setSlaResponseAt(deadline.getResponseDeadline());
+        ticket.setSlaResolutionAt(deadline.getResolutionDeadline());
     }
 
     // ============================================================

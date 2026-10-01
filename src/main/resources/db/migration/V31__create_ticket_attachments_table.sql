@@ -13,4 +13,4 @@ CREATE TABLE ticket_attachments (
 );
 
 -- Index for faster lookups
-CREATE INDEX idx_ticket_attachments_ticket_id ON ticket_attachments(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket_id ON ticket_attachments(ticket_id);

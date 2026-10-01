@@ -1,4 +1,4 @@
--- V40__extend_notification_types.sql
+-- V55__extend_notification_types.sql
 -- Purpose: Add ticket-related notification types to the check constraint
 --
 -- Current constraint only allows account and profile notification types.
@@ -11,7 +11,7 @@ ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 ALTER TABLE notifications ADD CONSTRAINT notifications_type_check 
     CHECK (type IN (
         'ACCOUNT_CREATED_PENDING',
-        'ACCOUNT_APPROVED', 
+        'ACCOUNT_APPROVED',
         'ACCOUNT_REJECTED',
         'PROFILE_CHANGED',
         'TICKET_CREATED',

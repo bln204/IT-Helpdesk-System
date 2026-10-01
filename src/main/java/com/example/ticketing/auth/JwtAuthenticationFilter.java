@@ -7,9 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.example.ticketing.security.JwtBlacklistService;
@@ -20,7 +18,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private final JwtService jwtService;
@@ -39,20 +36,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtBlacklistService = jwtBlacklistService;
         this.userAccountRepository = userAccountRepository;
     }
-
+    
     @Override
     protected void doFilterInternal(
         HttpServletRequest request,
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
+        String uri = request.getRequestURI();
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        
         if (header == null || !header.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String token = header.substring(7);
+        
         try {
             Claims claims = jwtService.parseClaims(token);
             String jti = claims.getId();
@@ -68,9 +68,35 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             
-            // Check if password was changed after token was issued
+            // Load user from database for real-time checks
             if (username != null) {
                 UserAccount user = userAccountRepository.findByUsername(username).orElse(null);
+                
+                // Check if user's all tokens have been revoked (e.g., user was deactivated)
+                if (user != null && jwtBlacklistService.isUserRevoked(username)) {
+                    logger.warn("Rejected token - user has been revoked: {}", username);
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Account disabled\",\"message\":\"Your account has been disabled. Please contact your administrator.\"}");
+                    return;
+                }
+                
+                // Check if user account is disabled
+                if (user != null && !user.isEnabled()) {
+                    logger.warn("Rejected token - user account is disabled: {}", username);
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Account disabled\",\"message\":\"Your account has been disabled. Please contact your administrator.\"}");
+                    return;
+                }
+                
+                // NOTE: passwordMustChange check is handled at the frontend level via login response
+                // The JWT is valid, user is authenticated. The frontend will show a modal
+                // prompting user to change their password. We don't block API access here.
+                
+                // Check if password was changed after token was issued
                 if (user != null && user.getPasswordChangedAt() != null) {
                     java.time.Instant tokenIssuedAt = claims.getIssuedAt().toInstant();
                     java.time.Instant passwordChangedAtInstant = user.getPasswordChangedAt()
@@ -89,17 +115,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                // Extract roles from JWT claims
+                @SuppressWarnings("unchecked")
+                java.util.List<String> roles = claims.get("roles", java.util.List.class);
+                
+                if (roles == null) {
+                    roles = java.util.List.of();
+                }
+                
+                // Convert roles to GrantedAuthority
+                // Note: roles in JWT already have ROLE_ prefix from getAuthorities()
+                @SuppressWarnings("unchecked")
+                java.util.List<org.springframework.security.core.GrantedAuthority> authorities = (java.util.List<org.springframework.security.core.GrantedAuthority>)(java.util.List<?>)roles.stream()
+                    .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                    .toList();
+                
+                logger.debug("JWT auth for {} with roles: {}", username, authorities);
+                
+                // Create authentication using JWT authorities (not from database)
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    userDetails,
+                    username,
                     null,
-                    userDetails.getAuthorities()
+                    authorities
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ex) {
-            logger.warn("JWT validation failed: " + ex.getMessage());
+            logger.error("JWT validation failed: {}", ex.getMessage());
             SecurityContextHolder.clearContext();
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Invalid or expired token\"}");
+            return; // Stop filter chain
         }
 
         filterChain.doFilter(request, response);

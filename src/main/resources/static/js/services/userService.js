@@ -2,6 +2,7 @@
 import { request } from '../core/api.js';
 import { hasRole, isAdmin, isGiamDoc, isTruongPhong, isNhanVien, isITStaff, isInITDepartment, getCurrentUser } from '../core/auth.js';
 import { formatRole, formatName, formatDateTime } from '../ui/utils.js';
+import { escapeHtml } from '../core/sanitize.js';
 import { engineerOptions as globalEngineerOptions } from '../config/constants.js';
 
 // Initialize window.userPage to avoid undefined issues
@@ -263,11 +264,11 @@ export const loadAdminUsers = async () => {
       }
 
       row.innerHTML = `
-        <td>${user.username}</td>
-        <td>${user.displayName || '—'}</td>
-        <td>${formatRole(user.role)}</td>
-        <td>${deptInfo}</td>
-        <td><span class="status-badge ${statusClass}">${statusBadge}</span></td>
+        <td>${escapeHtml(user.username)}</td>
+        <td>${escapeHtml(user.displayName || '—')}</td>
+        <td>${escapeHtml(formatRole(user.role))}</td>
+        <td>${escapeHtml(deptInfo)}</td>
+        <td><span class="status-badge ${statusClass}">${escapeHtml(statusBadge)}</span></td>
       `;
       row.addEventListener('click', () => selectUser(user));
       adminUsers.appendChild(row);
@@ -332,11 +333,11 @@ export const loadPendingUsers = async () => {
       }
 
       row.innerHTML = `
-        <td>${user.username}</td>
-        <td>${user.displayName || '—'}</td>
-        <td>${formatRole(user.role)}</td>
-        <td>${deptInfo}</td>
-        <td>${createdAt}</td>
+        <td>${escapeHtml(user.username)}</td>
+        <td>${escapeHtml(user.displayName || '—')}</td>
+        <td>${escapeHtml(formatRole(user.role))}</td>
+        <td>${escapeHtml(deptInfo)}</td>
+        <td>${escapeHtml(createdAt)}</td>
         <td>${actionHtml}</td>
       `;
 
@@ -437,11 +438,11 @@ export const loadDeleteRequests = async () => {
       }
 
       row.innerHTML = `
-        <td>${user.username}</td>
-        <td>${user.displayName || '—'}</td>
-        <td>${formatRole(user.role)}</td>
-        <td>${deptInfo}</td>
-        <td>${requestedBy}</td>
+        <td>${escapeHtml(user.username)}</td>
+        <td>${escapeHtml(user.displayName || '—')}</td>
+        <td>${escapeHtml(formatRole(user.role))}</td>
+        <td>${escapeHtml(deptInfo)}</td>
+        <td>${escapeHtml(requestedBy)}</td>
         <td>${actionHtml}</td>
       `;
       deleteRequestsTbody.appendChild(row);
@@ -862,19 +863,19 @@ export const loadProfile = async () => {
     profileAvatarPreview.classList.toggle('hidden', !profile.avatarUrl);
   }
   if (profileAvatarFallback) {
-    const initialSource = profileDisplayName || profile.username || 'U';
+    const initialSource = (profileDisplayName ? profileDisplayName.value : '') || profile.username || 'U';
     profileAvatarFallback.textContent = initialSource.trim().charAt(0).toUpperCase();
     profileAvatarFallback.classList.toggle('hidden', !!profile.avatarUrl);
   }
   if (sidebarUsername) {
-    sidebarUsername.textContent = formatName(profileDisplayName || profile.username);
+    sidebarUsername.textContent = formatName((profileDisplayName ? profileDisplayName.value : '') || profile.username);
   }
   if (logoMarkImg) {
     logoMarkImg.src = profile.avatarUrl || '';
     logoMarkImg.classList.toggle('hidden', !profile.avatarUrl);
   }
   if (logoMarkFallback) {
-    const initialSource = displayName || profile.username || 'T';
+    const initialSource = (profileDisplayName ? profileDisplayName.value : '') || profile.username || 'T';
     logoMarkFallback.textContent = initialSource.trim().charAt(0).toUpperCase();
     logoMarkFallback.classList.toggle('hidden', !!profile.avatarUrl);
   }

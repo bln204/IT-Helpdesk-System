@@ -19,9 +19,9 @@ CREATE TABLE teams (
 );
 
 -- Indexes cho performance
-CREATE INDEX idx_teams_department ON teams(department_id);
-CREATE INDEX idx_teams_lead ON teams(lead_id);
-CREATE INDEX idx_teams_enabled ON teams(enabled);
+CREATE INDEX IF NOT EXISTS idx_teams_department ON teams(department_id);
+CREATE INDEX IF NOT EXISTS idx_teams_lead ON teams(lead_id);
+CREATE INDEX IF NOT EXISTS idx_teams_enabled ON teams(enabled);
 
 COMMENT ON TABLE teams IS 'Nhóm IT theo chức năng (VD: Network, Hardware, Software)';
 COMMENT ON COLUMN teams.code IS 'Mã team (VD: NET, HW, SW)';

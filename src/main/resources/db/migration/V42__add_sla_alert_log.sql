@@ -16,8 +16,8 @@ CREATE TABLE sla_alert_log (
     CONSTRAINT uk_ticket_sla UNIQUE (ticket_id, sla_type, alert_type)
 );
 
-CREATE INDEX idx_sla_alert_ticket ON sla_alert_log(ticket_id);
-CREATE INDEX idx_sla_alert_type ON sla_alert_log(alert_type);
-CREATE INDEX idx_sla_alert_notified ON sla_alert_log(notified);
+CREATE INDEX IF NOT EXISTS idx_sla_alert_ticket ON sla_alert_log(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_sla_alert_type ON sla_alert_log(alert_type);
+CREATE INDEX IF NOT EXISTS idx_sla_alert_notified ON sla_alert_log(notified);
 
 COMMENT ON TABLE sla_alert_log IS 'Track SLA alerts đã được gửi';

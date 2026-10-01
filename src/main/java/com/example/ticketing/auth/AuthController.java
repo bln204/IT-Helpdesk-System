@@ -129,7 +129,13 @@ public class AuthController {
                 account.getEmail()
             );
 
-            return ResponseEntity.ok(new AuthDtos.LoginResponse(token, jwtService.getExpirationSeconds(), userInfo));
+            // Return passwordMustChange flag so frontend knows if user needs to change password
+            return ResponseEntity.ok(new AuthDtos.LoginResponse(
+                token, 
+                jwtService.getExpirationSeconds(), 
+                userInfo,
+                account.isPasswordMustChange()
+            ));
         } catch (UserNotApprovedException | UserDisabledException | UserRejectedException e) {
             // Re-throw approval-related exceptions to be handled by GlobalExceptionHandler
             throw e;

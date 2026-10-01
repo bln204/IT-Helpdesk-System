@@ -14,9 +14,9 @@ CREATE TABLE team_members (
     CONSTRAINT uk_team_user UNIQUE (team_id, user_id)
 );
 
-CREATE INDEX idx_team_members_team ON team_members(team_id);
-CREATE INDEX idx_team_members_user ON team_members(user_id);
-CREATE INDEX idx_team_members_enabled ON team_members(enabled);
+CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_enabled ON team_members(enabled);
 
 COMMENT ON TABLE team_members IS 'Thành viên của các team IT';
 COMMENT ON COLUMN team_members.role_in_team IS 'Vai trò trong team: MEMBER, LEAD, BACKUP';

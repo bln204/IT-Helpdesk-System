@@ -42,6 +42,10 @@ button.danger:hover {
   background: #cc4b43;
 }
 
+button.danger:hover {
+  background: #cc4b43;
+}
+
 button.ghost {
   background: transparent;
   color: var(--teal);

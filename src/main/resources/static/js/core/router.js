@@ -1,5 +1,5 @@
 // ==================== Router Module ====================
-import { isTokenValid, getToken, hasRole, isTruongPhong, isAdmin, getCurrentUser } from './auth.js';
+import { isTokenValid, getToken, hasRole, isTruongPhong, isAdmin, getCurrentUser, checkPasswordMustChange } from './auth.js';
 import { setToken, setCurrentUser } from './auth.js';
 import { canManageUsers } from '../services/userService.js';
 
@@ -150,6 +150,15 @@ export const routeGuard = () => {
     showView('tickets');
     return;
   }
+  
+  // Check if user needs to change password
+  // If passwordMustChange is true, show the modal and prevent navigation
+  if (token && checkPasswordMustChange()) {
+    // User must change password, stay on current view
+    // The modal is already shown by checkPasswordMustChange
+    return;
+  }
+  
   showView(viewName);
 };
 

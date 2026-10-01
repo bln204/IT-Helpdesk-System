@@ -316,4 +316,56 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
         ORDER BY t.updatedAt DESC
         """)
     Page<Ticket> findRecentTickets(Pageable pageable);
+    
+    // ============ Analytics Queries ============
+    
+    /**
+     * Count by category.
+     */
+    long countByCategory(String category);
+    
+    /**
+     * Get ticket count by day.
+     */
+    @Query(value = """
+        SELECT DATE(t.created_at) as date, COUNT(*) as count 
+        FROM tickets t 
+        WHERE t.created_at >= :startDate 
+        GROUP BY DATE(t.created_at) 
+        ORDER BY date ASC
+        """, nativeQuery = true)
+    List<Object[]> getTicketCountByDay(@Param("startDate") java.time.LocalDateTime startDate);
+    
+    /**
+     * Count by category group.
+     */
+    @Query("""
+        SELECT t.category as category, COUNT(t) as count 
+        FROM Ticket t 
+        GROUP BY t.category 
+        ORDER BY count DESC
+        """)
+    List<Object[]> countByCategory();
+    
+    /**
+     * Count by priority group.
+     */
+    @Query("""
+        SELECT t.priority as priority, COUNT(t) as count 
+        FROM Ticket t 
+        GROUP BY t.priority 
+        ORDER BY count DESC
+        """)
+    List<Object[]> countByPriority();
+    
+    /**
+     * Top requesters.
+     */
+    @Query("""
+        SELECT t.requesterName as name, COUNT(t) as count 
+        FROM Ticket t 
+        GROUP BY t.requesterName 
+        ORDER BY count DESC
+        """)
+    List<Object[]> getTopRequesters(org.springframework.data.domain.Pageable pageable);
 }
