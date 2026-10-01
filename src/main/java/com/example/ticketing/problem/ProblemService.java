@@ -245,6 +245,14 @@ public class ProblemService {
     }
 
     /**
+     * Xóa known error.
+     */
+    public void deleteKnownError(Long id) {
+        log.info("Deleting known error: {}", id);
+        knownErrorRepository.deleteById(id);
+    }
+
+    /**
      * Tăng occurrence count.
      */
     public void incrementOccurrence(Long knownErrorId) {
@@ -317,6 +325,85 @@ public class ProblemService {
                 Problem.ProblemStatus.IDENTIFIED,
                 Problem.ProblemStatus.SOLVING
         ));
+    }
+
+    /**
+     * Tìm kiếm known errors.
+     */
+    @Transactional(readOnly = true)
+    public List<KnownError> searchKnownErrors(String keyword) {
+        log.info("searchKnownErrors called with keyword: '{}'", keyword);
+        try {
+            List<KnownError> result = knownErrorRepository.findByKeyword(keyword);
+            log.info("findByKeyword returned {} results", result.size());
+            return result;
+        } catch (Exception e) {
+            log.error("Error in findByKeyword: {}", e.getMessage(), e);
+            // Fallback: return empty list instead of all records
+            return List.of();
+        }
+    }
+
+    /**
+     * Thêm workaround vào known error.
+     */
+    public KnownError addWorkaround(Long knownErrorId, String workaround, String authorName, String updatedBy) {
+        KnownError knownError = getKnownErrorById(knownErrorId);
+        knownError.setWorkaround(workaround);
+        knownError.setManagedBy(authorName);
+        knownError.setUpdatedBy(updatedBy);
+        return knownErrorRepository.save(knownError);
+    }
+
+    /**
+     * Tạo problem từ incident đã resolve.
+     */
+    public Problem createProblemFromIncident(Long incidentId, String title, String description, String createdBy) {
+        log.info("Creating problem from incident: {}", incidentId);
+        
+        com.example.ticketing.incident.Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new IllegalArgumentException("Incident not found: " + incidentId));
+        
+        log.info("Found incident: {}", incident.getIncidentNumber());
+        
+        Problem problem = new Problem();
+        problem.setProblemNumber(generateProblemNumber());
+        
+        // Auto-fill from incident if not provided
+        if (title != null && !title.isBlank()) {
+            problem.setTitle(title);
+        } else {
+            problem.setTitle("[Auto] Problem from " + incident.getIncidentNumber());
+        }
+        
+        if (description != null && !description.isBlank()) {
+            problem.setDescription(description);
+        } else {
+            StringBuilder desc = new StringBuilder();
+            desc.append("Created from Incident: ").append(incident.getIncidentNumber()).append("\n\n");
+            desc.append("Original Issue: ").append(incident.getTitle()).append("\n");
+            if (incident.getDescription() != null) {
+                desc.append("Description: ").append(incident.getDescription()).append("\n");
+            }
+            if (incident.getRootCause() != null) {
+                desc.append("Root Cause: ").append(incident.getRootCause()).append("\n");
+            }
+            if (incident.getResolution() != null) {
+                desc.append("Resolution: ").append(incident.getResolution());
+            }
+            problem.setDescription(desc.toString());
+        }
+        
+        problem.setStatus(Problem.ProblemStatus.NEW);
+        problem.setCreatedBy(createdBy);
+        
+        Problem saved = problemRepository.save(problem);
+        log.info("Problem saved with ID: {}", saved.getId());
+        
+        // Auto-link incident
+        linkIncident(saved.getId(), incidentId, createdBy);
+        
+        return saved;
     }
 
     // ==================== Helper Methods ====================

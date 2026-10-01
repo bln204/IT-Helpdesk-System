@@ -62,4 +62,11 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     // Statistics
     @Query("SELECT i.status, COUNT(i) FROM Incident i GROUP BY i.status")
     List<Object[]> countByStatusGrouped();
+
+    // SLA Check queries - tìm incidents active để check SLA
+    @Query("SELECT i FROM Incident i WHERE i.status NOT IN ('RESOLVED', 'CLOSED') AND i.responseDeadline IS NOT NULL ORDER BY i.responseDeadline ASC")
+    List<Incident> findActiveIncidentsForSlaCheck();
+
+    @Query("SELECT i FROM Incident i WHERE i.status NOT IN ('RESOLVED', 'CLOSED') AND i.resolutionDeadline IS NOT NULL ORDER BY i.resolutionDeadline ASC")
+    List<Incident> findActiveIncidentsForResolutionSlaCheck();
 }

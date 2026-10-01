@@ -579,7 +579,27 @@ const ChangeManagement = (() => {
         };
 
         if (!data.title) {
-            Toast.show('Please enter a title', 'error');
+            Toast.show('Vui lòng nhập tiêu đề (Title)', 'error');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Change Request';
+            }
+            isSubmitting = false;
+            return;
+        }
+        
+        if (data.title.length < 5) {
+            Toast.show('Tiêu đề phải có ít nhất 5 ký tự', 'error');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Change Request';
+            }
+            isSubmitting = false;
+            return;
+        }
+        
+        if (data.title.length > 300) {
+            Toast.show('Tiêu đề không được vượt quá 300 ký tự', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Create Change Request';

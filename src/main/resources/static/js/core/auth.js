@@ -6,6 +6,7 @@ import { request } from './api.js';
 let currentUser = null;
 let notifications = [];
 let notificationPollingTimer = null;
+let passwordMustChange = false;
 
 // Import elements that need to be updated
 let navCard, appShell, sidebarUsername, sidebarRole, sidebarDept, logoMarkFallback, logoMarkImg;
@@ -16,6 +17,12 @@ export const setCurrentUser = (user) => {
 };
 
 export const getCurrentUser = () => currentUser;
+
+export const setPasswordMustChange = (mustChange) => {
+  passwordMustChange = mustChange;
+};
+
+export const getPasswordMustChange = () => passwordMustChange;
 
 export const setNotifications = (notifs) => {
   notifications = notifs;
@@ -52,6 +59,8 @@ const parseJwt = (token) => {
     return null;
   }
 };
+
+export { parseJwt };
 
 export const isTokenValid = () => {
   const token = getToken();
@@ -333,11 +342,218 @@ export const login = async (payload) => {
     localStorage.setItem('ticketing.currentUser', JSON.stringify(data.user));
   }
   
+  // Store passwordMustChange flag
+  passwordMustChange = data.passwordMustChange === true;
+  localStorage.setItem('ticketing.passwordMustChange', passwordMustChange);
+  
+  // Check if user needs to change password
+  if (passwordMustChange) {
+    // Show password change modal and prevent navigation
+    showForcePasswordChangeModal();
+    return;
+  }
+  
   // Start notification polling after login
   startNotificationPolling();
   await loadNotifications();
   
   setRoute('#/tickets');
+};
+
+/**
+ * Show the force password change modal
+ */
+export function showForcePasswordChangeModal() {
+  // Check if modal already exists
+  let modal = document.getElementById('force-password-modal');
+  if (!modal) {
+    createForcePasswordChangeModal();
+    modal = document.getElementById('force-password-modal');
+  }
+  
+  // Show modal
+  modal.classList.remove('hidden');
+  
+  // Focus on new password input
+  setTimeout(() => {
+    const newPasswordInput = document.getElementById('force-new-password');
+    if (newPasswordInput) newPasswordInput.focus();
+  }, 100);
+}
+
+/**
+ * Create the force password change modal if it doesn't exist
+ */
+function createForcePasswordChangeModal() {
+  const modal = document.createElement('div');
+  modal.id = 'force-password-modal';
+  modal.className = 'modal hidden';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3>Đổi mật khẩu bắt buộc</h3>
+      </div>
+      <div class="modal-body">
+        <p style="color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+          <strong>Lưu ý:</strong> Bạn phải đổi mật khẩu trước khi sử dụng hệ thống.
+        </p>
+        <form id="force-password-form">
+          <div class="form-group">
+            <label for="force-new-password">Mật khẩu mới <span style="color: red;">*</span></label>
+            <input type="password" id="force-new-password" name="newPassword" required 
+                   minlength="7" placeholder="Nhập mật khẩu mới (tối thiểu 7 ký tự)">
+          </div>
+          <div class="form-group">
+            <label for="force-confirm-password">Xác nhận mật khẩu <span style="color: red;">*</span></label>
+            <input type="password" id="force-confirm-password" name="confirmPassword" required 
+                   minlength="7" placeholder="Nhập lại mật khẩu mới">
+          </div>
+          <div id="force-password-error" class="error-message hidden" style="color: #dc3545; margin-top: 8px;"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="force-password-submit" class="btn btn-primary">
+          Đổi mật khẩu
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  // Add event listener for form submission
+  const submitBtn = document.getElementById('force-password-submit');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', handleForcePasswordSubmit);
+  }
+}
+
+/**
+ * Handle force password change submission
+ */
+async function handleForcePasswordSubmit() {
+  const newPassword = document.getElementById('force-new-password')?.value;
+  const confirmPassword = document.getElementById('force-confirm-password')?.value;
+  const errorDiv = document.getElementById('force-password-error');
+  const submitBtn = document.getElementById('force-password-submit');
+  
+  // Validate
+  if (!newPassword || newPassword.length < 7) {
+    if (errorDiv) {
+      errorDiv.textContent = 'Mật khẩu mới phải có ít nhất 7 ký tự.';
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    if (errorDiv) {
+      errorDiv.textContent = 'Mật khẩu xác nhận không khớp.';
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+  
+  // Disable button to prevent double submission
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Đang xử lý...';
+  }
+  if (errorDiv) {
+    errorDiv.classList.add('hidden');
+  }
+  
+  try {
+    const data = await request('/api/users/me/force-password-change', {
+      method: 'POST',
+      headers: Auth.getAuthHeaders(),
+      body: JSON.stringify({
+        newPassword: newPassword,
+        confirmPassword: confirmPassword
+      }),
+    });
+    
+    if (data.success) {
+      // Clear password must change flag
+      passwordMustChange = false;
+      localStorage.setItem('ticketing.passwordMustChange', 'false');
+      
+      // Hide modal
+      const modal = document.getElementById('force-password-modal');
+      if (modal) modal.classList.add('hidden');
+      
+      // Clear auth state and redirect to login (don't call logout API since token is invalid after password change)
+      clearAuthState();
+      clearToken();
+      currentUser = null;
+      passwordMustChange = false;
+      localStorage.removeItem('ticketing.currentUser');
+      localStorage.removeItem('ticketing.passwordMustChange');
+      
+      // Stop notification polling
+      if (stopNotificationPolling) {
+        stopNotificationPolling();
+      }
+      
+      // Redirect to login
+      setRoute('#/login');
+      
+      // Show success message
+      alert('Mật khẩu đã được đổi thành công. Vui lòng đăng nhập lại với mật khẩu mới.');
+    }
+  } catch (error) {
+    console.error('Force password change failed:', error);
+    if (errorDiv) {
+      errorDiv.textContent = error.message || 'Không thể đổi mật khẩu. Vui lòng thử lại.';
+      errorDiv.classList.remove('hidden');
+    }
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Đổi mật khẩu';
+    }
+  }
+}
+
+/**
+ * Check if password must be changed and show modal if needed
+ */
+export const checkPasswordMustChange = () => {
+  const stored = localStorage.getItem('ticketing.passwordMustChange');
+  if (stored === 'true') {
+    passwordMustChange = true;
+    showForcePasswordChangeModal();
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Logout function
+ */
+export const logout = async () => {
+  try {
+    await request('/api/auth/logout', {
+      method: 'POST',
+      headers: Auth.getAuthHeaders(),
+    });
+  } catch (e) {
+    // Ignore logout errors
+  }
+  
+  // Clear auth state
+  clearAuthState();
+  clearToken();
+  currentUser = null;
+  passwordMustChange = false;
+  localStorage.removeItem('ticketing.currentUser');
+  localStorage.removeItem('ticketing.passwordMustChange');
+  
+  // Stop notification polling
+  if (stopNotificationPolling) {
+    stopNotificationPolling();
+  }
+  
+  // Redirect to login
+  setRoute('#/login');
 };
 
 // Notification functions need to be imported
@@ -392,13 +608,16 @@ const Auth = {
   setToken,
   clearToken,
   login,
-  logout: clearAuthState,
+  logout,
+  checkPasswordMustChange,
   
   // User info
   getCurrentUser,
   setCurrentUser,
   getCurrentUsername,
   getCurrentUserDepartment,
+  getPasswordMustChange,
+  setPasswordMustChange,
   
   // Notifications
   getNotifications,
@@ -438,14 +657,17 @@ const Auth = {
     }
   },
   
-    // Get auth headers for API calls
+  // Get auth headers for API calls
   getAuthHeaders: () => {
     const token = getToken();
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
     };
-  }
+  },
+  
+  // Parse JWT
+  parseJwt
 };
 
 // Expose to global scope

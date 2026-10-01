@@ -21,6 +21,7 @@ public final class TicketDtos {
         private String title;
 
         @NotBlank
+        @Size(max = 10000)
         private String description;
 
         @NotNull
@@ -336,6 +337,9 @@ public final class TicketDtos {
         // NEW: Counters
         private Integer escalationCount;
         private Integer reopenCount;
+        
+        // NEW: Version for optimistic locking (concurrent edit detection)
+        private Long version;
 
         public static TicketResponse from(Ticket ticket) {
             TicketResponse response = new TicketResponse();
@@ -409,6 +413,9 @@ public final class TicketDtos {
             // NEW: Counters
             response.escalationCount = ticket.getEscalationCount();
             response.reopenCount = ticket.getReopenCount();
+            
+            // NEW: Version for optimistic locking
+            response.version = ticket.getVersion();
             
             return response;
         }
@@ -499,6 +506,9 @@ public final class TicketDtos {
         public Integer getEscalationCount() { return escalationCount; }
         public Integer getReopenCount() { return reopenCount; }
         
+        // NEW: Version getter for optimistic locking
+        public Long getVersion() { return version; }
+        
         // Setters
         public void setId(Long id) { this.id = id; }
         public void setTicketNumber(String ticketNumber) { this.ticketNumber = ticketNumber; }
@@ -529,6 +539,9 @@ public final class TicketDtos {
         public void setResolutionSLABreached(boolean resolutionSLABreached) { this.resolutionSLABreached = resolutionSLABreached; }
         public void setEscalationCount(Integer escalationCount) { this.escalationCount = escalationCount; }
         public void setReopenCount(Integer reopenCount) { this.reopenCount = reopenCount; }
+        
+        // NEW: Version setter for optimistic locking
+        public void setVersion(Long version) { this.version = version; }
     }
 
     // ============================================================

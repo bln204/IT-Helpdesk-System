@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.ticketing.ticket.Ticket;
@@ -37,7 +38,7 @@ public class IncidentController {
      * GET /api/incidents
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<IncidentDto>> getAllIncidents(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
@@ -57,6 +58,7 @@ public class IncidentController {
             incidents = incidentService.getAllIncidents(pageable);
         }
 
+        log.info("Returning {} incidents", incidents.getTotalElements());
         return ResponseEntity.ok(incidents.map(IncidentDto::fromEntity));
     }
 
@@ -65,7 +67,7 @@ public class IncidentController {
      * GET /api/incidents/{id}
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> getIncidentById(@PathVariable Long id) {
         log.info("GET /api/incidents/{}", id);
         Incident incident = incidentService.getIncidentById(id);
@@ -77,7 +79,7 @@ public class IncidentController {
      * GET /api/incidents/number/{incidentNumber}
      */
     @GetMapping("/number/{incidentNumber}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> getIncidentByNumber(@PathVariable String incidentNumber) {
         log.info("GET /api/incidents/number/{}", incidentNumber);
         Incident incident = incidentService.getIncidentByNumber(incidentNumber);
@@ -89,12 +91,31 @@ public class IncidentController {
      * POST /api/incidents
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> createIncident(@RequestBody IncidentRequest request) {
         log.info("POST /api/incidents - Creating: {}", request.getTitle());
 
         Incident incident = mapRequestToEntity(request);
-        Incident created = incidentService.createIncident(incident, "admin");
+        Incident created = incidentService.createIncident(incident, request.getReportedByUsername());
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(IncidentDto.fromEntity(created));
+    }
+
+    /**
+     * End User tạo incident mới (tự động lấy thông tin user từ token).
+     * POST /api/incidents/my
+     */
+    @PostMapping("/my")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> createIncidentForCurrentUser(
+            @RequestBody IncidentRequest request,
+            @RequestHeader(value = "X-User-Username", required = false) String username) {
+        log.info("POST /api/incidents/my - by: {}", username);
+
+        Incident incident = mapRequestToEntity(request);
+        // End user không cần reportedByUsername, lấy từ header
+        Incident created = incidentService.createIncident(incident, username);
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(IncidentDto.fromEntity(created));
@@ -105,7 +126,7 @@ public class IncidentController {
      * PUT /api/incidents/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> updateIncident(
             @PathVariable Long id,
             @RequestBody IncidentRequest request) {
@@ -118,14 +139,45 @@ public class IncidentController {
     }
 
     /**
+     * Cập nhật priority của incident (với SLA recalculation).
+     * PATCH /api/incidents/{id}/priority
+     */
+    @PatchMapping("/{id}/priority")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> updatePriority(
+            @PathVariable Long id,
+            @RequestBody PriorityUpdateRequest request) {
+        log.info("PATCH /api/incidents/{}/priority - priority: {}", id, request.getPriority());
+
+        Incident updated = incidentService.updatePriority(id, 
+                TicketPriority.valueOf(request.getPriority()), "admin");
+
+        return ResponseEntity.ok(IncidentDto.fromEntity(updated));
+    }
+
+    /**
      * Xóa incident.
+     * Chỉ ADMIN, TRUONG_PHONG (cùng phòng), hoặc người tạo mới được xóa.
      * DELETE /api/incidents/{id}
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
     public ResponseEntity<Void> deleteIncident(@PathVariable Long id) {
         log.info("DELETE /api/incidents/{}", id);
-        incidentService.deleteIncident(id);
+        
+        // Get username and role from security context
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        String userRole = SecurityContextHolder.getContext().getAuthentication().getAuthorities()
+                .iterator().next().getAuthority();
+        
+        // Normalize role (remove ROLE_ prefix if present)
+        if (userRole != null && userRole.startsWith("ROLE_")) {
+            userRole = userRole.substring(5);
+        }
+        
+        log.info("Delete incident {} by user: {} with role: {}", id, username, userRole);
+        
+        incidentService.deleteIncident(id, username, userRole);
         return ResponseEntity.noContent().build();
     }
 
@@ -136,7 +188,7 @@ public class IncidentController {
      * PATCH /api/incidents/{id}/status
      */
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> updateStatus(
             @PathVariable Long id,
             @RequestBody StatusUpdateRequest request) {
@@ -149,17 +201,83 @@ public class IncidentController {
     }
 
     /**
-     * Assign incident cho user.
+     * IT Staff nhận incident (Take Ownership).
+     * Khi nhận, status chuyển từ INVESTIGATING → IN_PROGRESS.
+     * PATCH /api/incidents/{id}/take-ownership
+     */
+    @PatchMapping("/{id}/take-ownership")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> takeOwnership(@PathVariable Long id) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        log.info("PATCH /api/incidents/{}/take-ownership - by: {}", id, username);
+
+        Incident updated = incidentService.takeOwnership(id, username);
+
+        return ResponseEntity.ok(IncidentDto.fromEntity(updated));
+    }
+
+    /**
+     * Resolve incident (IT Staff).
+     * PATCH /api/incidents/{id}/resolve
+     */
+    @PatchMapping("/{id}/resolve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> resolveIncident(
+            @PathVariable Long id,
+            @RequestBody ResolveRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        log.info("PATCH /api/incidents/{}/resolve - by: {}", id, username);
+
+        Incident updated = incidentService.resolveIncident(id, request.getResolution(), username);
+
+        return ResponseEntity.ok(IncidentDto.fromEntity(updated));
+    }
+
+    /**
+     * User xác nhận resolution (Confirm).
+     * PATCH /api/incidents/{id}/confirm-resolution
+     */
+    @PatchMapping("/{id}/confirm-resolution")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> confirmResolution(@PathVariable Long id) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        log.info("PATCH /api/incidents/{}/confirm-resolution - by: {}", id, username);
+
+        Incident updated = incidentService.confirmResolution(id, username);
+
+        return ResponseEntity.ok(IncidentDto.fromEntity(updated));
+    }
+
+    /**
+     * User yêu cầu reopen incident.
+     * PATCH /api/incidents/{id}/reopen
+     */
+    @PatchMapping("/{id}/reopen")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<IncidentDto> reopenIncident(
+            @PathVariable Long id,
+            @RequestBody ReopenRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        log.info("PATCH /api/incidents/{}/reopen - by: {}", id, username);
+
+        Incident updated = incidentService.reopenIncident(id, request.getReason(), username);
+
+        return ResponseEntity.ok(IncidentDto.fromEntity(updated));
+    }
+
+    /**
+     * IT Staff nhận incident.
      * PATCH /api/incidents/{id}/assign
      */
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> assignIncident(
             @PathVariable Long id,
             @RequestBody AssignRequest request) {
-        log.info("PATCH /api/incidents/{}/assign - to: {}", id, request.getAssignee());
+        String actorName = SecurityContextHolder.getContext().getAuthentication().getName();
+        log.info("PATCH /api/incidents/{}/assign - to: {} - by: {}", id, request.getAssignee(), actorName);
 
-        Incident updated = incidentService.assignIncident(id, request.getAssignee(), "admin");
+        Incident updated = incidentService.assignIncident(id, request.getAssignee(), actorName);
 
         return ResponseEntity.ok(IncidentDto.fromEntity(updated));
     }
@@ -169,7 +287,7 @@ public class IncidentController {
      * PATCH /api/incidents/{id}/assign-team
      */
     @PatchMapping("/{id}/assign-team")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> assignTeam(
             @PathVariable Long id,
             @RequestBody AssignTeamRequest request) {
@@ -187,7 +305,7 @@ public class IncidentController {
      * POST /api/incidents/{id}/tickets
      */
     @PostMapping("/{id}/tickets")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<TicketIncidentLinkDto> linkTicket(
             @PathVariable Long id,
             @RequestBody LinkTicketRequest request) {
@@ -205,7 +323,7 @@ public class IncidentController {
      * DELETE /api/incidents/{id}/tickets/{ticketId}
      */
     @DeleteMapping("/{id}/tickets/{ticketId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Void> unlinkTicket(
             @PathVariable Long id,
             @PathVariable Long ticketId) {
@@ -219,7 +337,7 @@ public class IncidentController {
      * GET /api/incidents/{id}/tickets
      */
     @GetMapping("/{id}/tickets")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<TicketSummaryDto>> getLinkedTickets(@PathVariable Long id) {
         log.info("GET /api/incidents/{}/tickets", id);
         List<Ticket> tickets = incidentService.getLinkedTickets(id);
@@ -233,7 +351,7 @@ public class IncidentController {
      * GET /api/incidents/ticket/{ticketId}
      */
     @GetMapping("/ticket/{ticketId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<IncidentSummaryDto>> getTicketIncidents(@PathVariable Long ticketId) {
         log.info("GET /api/incidents/ticket/{}", ticketId);
         List<Incident> incidents = incidentService.getTicketIncidents(ticketId);
@@ -249,7 +367,7 @@ public class IncidentController {
      * GET /api/incidents/{id}/timeline
      */
     @GetMapping("/{id}/timeline")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<IncidentTimelineDto>> getTimeline(@PathVariable Long id) {
         log.info("GET /api/incidents/{}/timeline", id);
         List<IncidentTimeline> timeline = incidentService.getIncidentTimeline(id);
@@ -263,7 +381,7 @@ public class IncidentController {
      * POST /api/incidents/{id}/notes
      */
     @PostMapping("/{id}/notes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentTimelineDto> addNote(
             @PathVariable Long id,
             @RequestBody AddNoteRequest request) {
@@ -314,6 +432,22 @@ public class IncidentController {
                 .body(new ErrorResponse("CONFLICT", ex.getMessage()));
     }
 
+    @ExceptionHandler(NullPointerException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
+        log.error("NullPointerException: ", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
+        log.error("General error: ", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+    }
+
     // ==================== DTOs ====================
 
     public static class ErrorResponse {
@@ -338,6 +472,7 @@ public class IncidentController {
         private String rootCause;
         private String workaround;
         private String resolution;
+        private String reportedByUsername;
 
         public String getTitle() { return title; }
         public String getDescription() { return description; }
@@ -347,6 +482,37 @@ public class IncidentController {
         public String getRootCause() { return rootCause; }
         public String getWorkaround() { return workaround; }
         public String getResolution() { return resolution; }
+        public String getReportedByUsername() { return reportedByUsername; }
+        
+        public void setTitle(String title) { this.title = title; }
+        public void setDescription(String description) { this.description = description; }
+        public void setPriority(TicketPriority priority) { this.priority = priority; }
+        public void setImpactLevel(Incident.ImpactLevel impactLevel) { this.impactLevel = impactLevel; }
+        public void setAffectedUsers(Integer affectedUsers) { this.affectedUsers = affectedUsers; }
+        public void setRootCause(String rootCause) { this.rootCause = rootCause; }
+        public void setWorkaround(String workaround) { this.workaround = workaround; }
+        public void setResolution(String resolution) { this.resolution = resolution; }
+        public void setReportedByUsername(String reportedByUsername) { this.reportedByUsername = reportedByUsername; }
+    }
+
+    public static class ResolveRequest {
+        private String resolution;
+        private String resolutionType; // FIXED, WORKAROUND, DUPLICATE
+
+        public String getResolution() { return resolution; }
+        public String getResolutionType() { return resolutionType; }
+    }
+
+    public static class ReopenRequest {
+        private String reason;
+
+        public String getReason() { return reason; }
+    }
+
+    public static class PriorityUpdateRequest {
+        private String priority;
+
+        public String getPriority() { return priority; }
     }
 
     public static class StatusUpdateRequest {
@@ -402,6 +568,16 @@ public class IncidentController {
         private java.time.LocalDateTime closedAt;
         private java.time.LocalDateTime createdAt;
         private java.time.LocalDateTime updatedAt;
+        
+        // SLA fields
+        private java.time.LocalDateTime responseDeadline;
+        private java.time.LocalDateTime resolutionDeadline;
+        private Boolean responseSlaBreached;
+        private Boolean resolutionSlaBreached;
+        private String slaPolicyName;
+        private Integer slaResponseMinutes;
+        private Integer slaResolutionMinutes;
+        private String slaStatus; // NORMAL, WARNING, BREACHED
 
         public static IncidentDto fromEntity(Incident incident) {
             IncidentDto dto = new IncidentDto();
@@ -425,7 +601,36 @@ public class IncidentController {
             dto.setClosedAt(incident.getClosedAt());
             dto.setCreatedAt(incident.getCreatedAt());
             dto.setUpdatedAt(incident.getUpdatedAt());
+            
+            // SLA fields
+            dto.setResponseDeadline(incident.getResponseDeadline());
+            dto.setResolutionDeadline(incident.getResolutionDeadline());
+            dto.setResponseSlaBreached(incident.getResponseSlaBreached());
+            dto.setResolutionSlaBreached(incident.getResolutionSlaBreached());
+            dto.setSlaPolicyName(incident.getSlaPolicyName());
+            dto.setSlaResponseMinutes(incident.getSlaResponseMinutes());
+            dto.setSlaResolutionMinutes(incident.getSlaResolutionMinutes());
+            dto.setSlaStatus(calculateSlaStatus(incident));
+            
             return dto;
+        }
+        
+        private static String calculateSlaStatus(Incident incident) {
+            if (incident.getResponseSlaBreached() != null && incident.getResponseSlaBreached()) {
+                return "BREACHED";
+            }
+            if (incident.getResolutionSlaBreached() != null && incident.getResolutionSlaBreached()) {
+                return "BREACHED";
+            }
+            if (incident.getResponseDeadline() != null && java.time.LocalDateTime.now().isAfter(incident.getResponseDeadline())) {
+                return "BREACHED";
+            }
+            if (incident.getResolutionDeadline() != null && java.time.LocalDateTime.now().isAfter(incident.getResolutionDeadline())) {
+                return "BREACHED";
+            }
+            // Check warning threshold (75%)
+            // Could add warning logic here
+            return "NORMAL";
         }
 
         // Getters and Setters
@@ -469,6 +674,24 @@ public class IncidentController {
         public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
         public java.time.LocalDateTime getUpdatedAt() { return updatedAt; }
         public void setUpdatedAt(java.time.LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+        
+        // SLA getters and setters
+        public java.time.LocalDateTime getResponseDeadline() { return responseDeadline; }
+        public void setResponseDeadline(java.time.LocalDateTime responseDeadline) { this.responseDeadline = responseDeadline; }
+        public java.time.LocalDateTime getResolutionDeadline() { return resolutionDeadline; }
+        public void setResolutionDeadline(java.time.LocalDateTime resolutionDeadline) { this.resolutionDeadline = resolutionDeadline; }
+        public Boolean getResponseSlaBreached() { return responseSlaBreached; }
+        public void setResponseSlaBreached(Boolean responseSlaBreached) { this.responseSlaBreached = responseSlaBreached; }
+        public Boolean getResolutionSlaBreached() { return resolutionSlaBreached; }
+        public void setResolutionSlaBreached(Boolean resolutionSlaBreached) { this.resolutionSlaBreached = resolutionSlaBreached; }
+        public String getSlaPolicyName() { return slaPolicyName; }
+        public void setSlaPolicyName(String slaPolicyName) { this.slaPolicyName = slaPolicyName; }
+        public Integer getSlaResponseMinutes() { return slaResponseMinutes; }
+        public void setSlaResponseMinutes(Integer slaResponseMinutes) { this.slaResponseMinutes = slaResponseMinutes; }
+        public Integer getSlaResolutionMinutes() { return slaResolutionMinutes; }
+        public void setSlaResolutionMinutes(Integer slaResolutionMinutes) { this.slaResolutionMinutes = slaResolutionMinutes; }
+        public String getSlaStatus() { return slaStatus; }
+        public void setSlaStatus(String slaStatus) { this.slaStatus = slaStatus; }
     }
 
     public static class IncidentSummaryDto {

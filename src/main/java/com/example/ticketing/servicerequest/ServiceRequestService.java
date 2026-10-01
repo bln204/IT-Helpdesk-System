@@ -224,6 +224,53 @@ public class ServiceRequestService {
         return serviceRequestRepository.save(request);
     }
 
+    /**
+     * IT Staff nhận request (Take Ownership).
+     */
+    public ServiceRequest takeOwnership(Long id, String username) {
+        ServiceRequest request = getRequestById(id);
+        request.setAssignedTo(username);
+        request.setStatus(ServiceRequest.ServiceStatus.IN_PROGRESS);
+        request.setFirstResponseAt(LocalDateTime.now());
+        request.setUpdatedBy(username);
+        return serviceRequestRepository.save(request);
+    }
+
+    /**
+     * IT Staff hoàn thành request.
+     */
+    public ServiceRequest completeRequest(Long id, String resolution, String username) {
+        ServiceRequest request = getRequestById(id);
+        request.setStatus(ServiceRequest.ServiceStatus.COMPLETED);
+        request.setCompletedAt(LocalDateTime.now());
+        if (resolution != null) {
+            request.setResolution(resolution);
+        }
+        request.setUpdatedBy(username);
+        return serviceRequestRepository.save(request);
+    }
+
+    /**
+     * User xác nhận hoàn thành (đóng request).
+     */
+    public ServiceRequest confirmCompletion(Long id, String username) {
+        ServiceRequest request = getRequestById(id);
+        request.setStatus(ServiceRequest.ServiceStatus.CLOSED);
+        request.setUpdatedBy(username);
+        return serviceRequestRepository.save(request);
+    }
+
+    /**
+     * User yêu cầu mở lại.
+     */
+    public ServiceRequest reopenRequest(Long id, String reason, String username) {
+        ServiceRequest request = getRequestById(id);
+        request.setStatus(ServiceRequest.ServiceStatus.IN_PROGRESS);
+        request.setCompletedAt(null);
+        request.setUpdatedBy(username);
+        return serviceRequestRepository.save(request);
+    }
+
     // ==================== Comments ====================
 
     /**

@@ -1,6 +1,9 @@
 package com.example.ticketing.asset;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -28,22 +31,16 @@ public class AssetController {
         this.assetService = assetService;
     }
 
-    // ==================== Assets ====================
+    // ==================== Assets CRUD ====================
 
-    /**
-     * Lấy tất cả assets.
-     * GET /api/assets
-     */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<Page<AssetDto>> getAllAssets(
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<Page<AssetResponse>> getAllAssets(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String health,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        log.info("GET /api/assets - type: {}, health: {}, search: {}", type, health, search);
-
         Pageable pageable = Pageable.ofSize(size).withPage(page);
         Page<Asset> assets;
 
@@ -59,289 +56,237 @@ public class AssetController {
             assets = assetService.getAllAssets(pageable);
         }
 
-        return ResponseEntity.ok(assets.map(AssetDto::fromEntity));
+        return ResponseEntity.ok(assets.map(AssetResponse::fromEntity));
     }
 
-    /**
-     * Lấy asset theo ID.
-     * GET /api/assets/{id}
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<AssetDto> getAssetById(@PathVariable Long id) {
-        log.info("GET /api/assets/{}", id);
+    public ResponseEntity<AssetResponse> getAssetById(@PathVariable Long id) {
         Asset asset = assetService.getAssetById(id);
-        return ResponseEntity.ok(AssetDto.fromEntity(asset));
+        return ResponseEntity.ok(AssetResponse.fromEntity(asset));
     }
 
-    /**
-     * Tạo asset.
-     * POST /api/assets
-     */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<AssetDto> createAsset(@RequestBody AssetDto request) {
-        log.info("POST /api/assets - Creating: {}", request.getName());
-
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> createAsset(@RequestBody AssetRequest request) {
         Asset asset = new Asset();
-        asset.setAssetNumber(request.getAssetNumber());
-        asset.setName(request.getName());
-        asset.setDescription(request.getDescription());
-        asset.setAssetType(request.getAssetTypeEnum());
-        asset.setCategory(request.getCategory());
-        asset.setManufacturer(request.getManufacturer());
-        asset.setModel(request.getModel());
-        asset.setSerialNumber(request.getSerialNumber());
-        asset.setPartNumber(request.getPartNumber());
-        asset.setLocation(request.getLocation());
-        asset.setBuilding(request.getBuilding());
-        asset.setFloor(request.getFloor());
-        asset.setRoom(request.getRoom());
-        asset.setRackPosition(request.getRackPosition());
-        asset.setAssignedTo(request.getAssignedTo());
-        asset.setAssignedDepartment(request.getAssignedDepartment());
-        asset.setAssignedLocation(request.getAssignedLocation());
-        asset.setStatus(request.getStatusEnum());
-        asset.setHealthStatus(request.getHealthStatusEnum());
-        asset.setHealthNotes(request.getHealthNotes());
-        asset.setPurchaseDate(request.getPurchaseDate());
-        asset.setPurchaseCost(request.getPurchaseCost());
-        asset.setCurrentValue(request.getCurrentValue());
-        asset.setDepreciationRate(request.getDepreciationRate());
-        asset.setWarrantyExpiryDate(request.getWarrantyExpiryDate());
-        asset.setLeaseExpiryDate(request.getLeaseExpiryDate());
-        asset.setLastMaintenanceDate(request.getLastMaintenanceDate());
-        asset.setNextMaintenanceDate(request.getNextMaintenanceDate());
-        asset.setIpAddress(request.getIpAddress());
-        asset.setMacAddress(request.getMacAddress());
-        asset.setHostname(request.getHostname());
-        asset.setNetworkSegment(request.getNetworkSegment());
-        asset.setVlan(request.getVlan());
-        asset.setSoftwareName(request.getSoftwareName());
-        asset.setSoftwareVersion(request.getSoftwareVersion());
-        asset.setLicenseKey(request.getLicenseKey());
-        asset.setLicenseType(request.getLicenseType());
-        asset.setLicenseSeatsTotal(request.getLicenseSeatsTotal() != null ? request.getLicenseSeatsTotal() : 0);
-        asset.setLicenseSeatsUsed(request.getLicenseSeatsUsed() != null ? request.getLicenseSeatsUsed() : 0);
-        asset.setCloudProvider(request.getCloudProvider());
-        asset.setCloudRegion(request.getCloudRegion());
-        asset.setCloudResourceId(request.getCloudResourceId());
-        asset.setResourceType(request.getResourceType());
-        asset.setVendorName(request.getVendorName());
-        asset.setVendorContact(request.getVendorContact());
-        asset.setVendorContractNumber(request.getVendorContractNumber());
-        asset.setTags(request.getTags());
-        asset.setNotes(request.getNotes());
-        asset.setPhotoUrl(request.getPhotoUrl());
-        asset.setSpecifications(request.getSpecifications());
-        asset.setParentAssetId(request.getParentAssetId());
+        asset.setAssetNumber(request.assetNumber);
+        asset.setName(request.name);
+        asset.setDescription(request.description);
+        asset.setAssetType(request.getAssetType());
+        asset.setCategory(request.category);
+        asset.setManufacturer(request.manufacturer);
+        asset.setModel(request.model);
+        asset.setSerialNumber(request.serialNumber);
+        asset.setPartNumber(request.partNumber);
+        asset.setLocation(request.location);
+        asset.setBuilding(request.building);
+        asset.setFloor(request.floor);
+        asset.setRoom(request.room);
+        asset.setRackPosition(request.rackPosition);
+        asset.setAssignedTo(request.assignedTo);
+        asset.setAssignedDepartment(request.assignedDepartment);
+        asset.setAssignedLocation(request.assignedLocation);
+        asset.setStatus(request.getStatus());
+        asset.setHealthStatus(request.getHealthStatus());
+        asset.setHealthNotes(request.healthNotes);
+        asset.setPurchaseDate(request.purchaseDate);
+        asset.setPurchaseCost(request.purchaseCost);
+        asset.setCurrentValue(request.currentValue);
+        asset.setDepreciationRate(request.depreciationRate);
+        asset.setWarrantyExpiryDate(request.warrantyExpiryDate);
+        asset.setLeaseExpiryDate(request.leaseExpiryDate);
+        asset.setLastMaintenanceDate(request.lastMaintenanceDate);
+        asset.setNextMaintenanceDate(request.nextMaintenanceDate);
+        asset.setIpAddress(request.ipAddress);
+        asset.setMacAddress(request.macAddress);
+        asset.setHostname(request.hostname);
+        asset.setNetworkSegment(request.networkSegment);
+        asset.setVlan(request.vlan);
+        asset.setSoftwareName(request.softwareName);
+        asset.setSoftwareVersion(request.softwareVersion);
+        asset.setLicenseKey(request.licenseKey);
+        asset.setLicenseType(request.licenseType);
+        asset.setLicenseSeatsTotal(request.licenseSeatsTotal != null ? request.licenseSeatsTotal : 0);
+        asset.setLicenseSeatsUsed(request.licenseSeatsUsed != null ? request.licenseSeatsUsed : 0);
+        asset.setCloudProvider(request.cloudProvider);
+        asset.setCloudRegion(request.cloudRegion);
+        asset.setCloudResourceId(request.cloudResourceId);
+        asset.setResourceType(request.resourceType);
+        asset.setVendorName(request.vendorName);
+        asset.setVendorContact(request.vendorContact);
+        asset.setVendorContractNumber(request.vendorContractNumber);
+        asset.setTags(request.tags);
+        asset.setNotes(request.notes);
+        asset.setPhotoUrl(request.photoUrl);
+        asset.setSpecifications(request.specifications);
+        asset.setParentAssetId(request.parentAssetId);
 
         Asset created = assetService.createAsset(asset, "admin");
-        return ResponseEntity.status(HttpStatus.CREATED).body(AssetDto.fromEntity(created));
+        return ResponseEntity.status(HttpStatus.CREATED).body(AssetResponse.fromEntity(created));
     }
 
-    /**
-     * Cập nhật asset.
-     * PUT /api/assets/{id}
-     */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<AssetDto> updateAsset(
-            @PathVariable Long id,
-            @RequestBody AssetDto request) {
-        log.info("PUT /api/assets/{}", id);
-
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> updateAsset(@PathVariable Long id, @RequestBody AssetRequest request) {
+        log.info("=== UPDATE ASSET {} ===", id);
+        log.info("Request - assetNumber: {}, name: {}", request.assetNumber, request.name);
+        log.info("Request - purchaseCost: {}, currentValue: {}, depreciationRate: {}", 
+                 request.purchaseCost, request.currentValue, request.depreciationRate);
+        log.info("Request - purchaseDate: {}, warrantyExpiry: {}, leaseExpiry: {}", 
+                 request.purchaseDate, request.warrantyExpiryDate, request.leaseExpiryDate);
+        
         Asset updates = new Asset();
-        updates.setAssetNumber(request.getAssetNumber());
-        updates.setName(request.getName());
-        updates.setDescription(request.getDescription());
-        updates.setAssetType(request.getAssetTypeEnum());
-        updates.setCategory(request.getCategory());
-        updates.setManufacturer(request.getManufacturer());
-        updates.setModel(request.getModel());
-        updates.setSerialNumber(request.getSerialNumber());
-        updates.setPartNumber(request.getPartNumber());
-        updates.setLocation(request.getLocation());
-        updates.setBuilding(request.getBuilding());
-        updates.setFloor(request.getFloor());
-        updates.setRoom(request.getRoom());
-        updates.setRackPosition(request.getRackPosition());
-        updates.setAssignedTo(request.getAssignedTo());
-        updates.setAssignedDepartment(request.getAssignedDepartment());
-        updates.setAssignedLocation(request.getAssignedLocation());
-        updates.setStatus(request.getStatusEnum());
-        updates.setHealthStatus(request.getHealthStatusEnum());
-        updates.setHealthNotes(request.getHealthNotes());
-        updates.setPurchaseDate(request.getPurchaseDate());
-        updates.setPurchaseCost(request.getPurchaseCost());
-        updates.setCurrentValue(request.getCurrentValue());
-        updates.setDepreciationRate(request.getDepreciationRate());
-        updates.setWarrantyExpiryDate(request.getWarrantyExpiryDate());
-        updates.setLeaseExpiryDate(request.getLeaseExpiryDate());
-        updates.setLastMaintenanceDate(request.getLastMaintenanceDate());
-        updates.setNextMaintenanceDate(request.getNextMaintenanceDate());
-        updates.setIpAddress(request.getIpAddress());
-        updates.setMacAddress(request.getMacAddress());
-        updates.setHostname(request.getHostname());
-        updates.setNetworkSegment(request.getNetworkSegment());
-        updates.setVlan(request.getVlan());
-        updates.setSoftwareName(request.getSoftwareName());
-        updates.setSoftwareVersion(request.getSoftwareVersion());
-        updates.setLicenseKey(request.getLicenseKey());
-        updates.setLicenseType(request.getLicenseType());
-        updates.setLicenseSeatsTotal(request.getLicenseSeatsTotal() != null ? request.getLicenseSeatsTotal() : 0);
-        updates.setLicenseSeatsUsed(request.getLicenseSeatsUsed() != null ? request.getLicenseSeatsUsed() : 0);
-        updates.setCloudProvider(request.getCloudProvider());
-        updates.setCloudRegion(request.getCloudRegion());
-        updates.setCloudResourceId(request.getCloudResourceId());
-        updates.setResourceType(request.getResourceType());
-        updates.setVendorName(request.getVendorName());
-        updates.setVendorContact(request.getVendorContact());
-        updates.setVendorContractNumber(request.getVendorContractNumber());
-        updates.setTags(request.getTags());
-        updates.setNotes(request.getNotes());
-        updates.setPhotoUrl(request.getPhotoUrl());
-        updates.setSpecifications(request.getSpecifications());
-        updates.setParentAssetId(request.getParentAssetId());
+        updates.setAssetNumber(request.assetNumber);
+        updates.setName(request.name);
+        updates.setDescription(request.description);
+        updates.setAssetType(request.getAssetType());
+        updates.setCategory(request.category);
+        updates.setManufacturer(request.manufacturer);
+        updates.setModel(request.model);
+        updates.setSerialNumber(request.serialNumber);
+        updates.setPartNumber(request.partNumber);
+        updates.setLocation(request.location);
+        updates.setBuilding(request.building);
+        updates.setFloor(request.floor);
+        updates.setRoom(request.room);
+        updates.setRackPosition(request.rackPosition);
+        updates.setAssignedTo(request.assignedTo);
+        updates.setAssignedDepartment(request.assignedDepartment);
+        updates.setAssignedLocation(request.assignedLocation);
+        updates.setStatus(request.getStatus());
+        updates.setHealthStatus(request.getHealthStatus());
+        updates.setHealthNotes(request.healthNotes);
+        updates.setPurchaseDate(request.purchaseDate);
+        updates.setPurchaseCost(request.purchaseCost);
+        updates.setCurrentValue(request.currentValue);
+        updates.setDepreciationRate(request.depreciationRate);
+        updates.setWarrantyExpiryDate(request.warrantyExpiryDate);
+        updates.setLeaseExpiryDate(request.leaseExpiryDate);
+        updates.setLastMaintenanceDate(request.lastMaintenanceDate);
+        updates.setNextMaintenanceDate(request.nextMaintenanceDate);
+        updates.setIpAddress(request.ipAddress);
+        updates.setMacAddress(request.macAddress);
+        updates.setHostname(request.hostname);
+        updates.setNetworkSegment(request.networkSegment);
+        updates.setVlan(request.vlan);
+        updates.setLicenseKey(request.licenseKey);
+        updates.setLicenseType(request.licenseType);
+        updates.setLicenseSeatsTotal(request.licenseSeatsTotal);
+        updates.setLicenseSeatsUsed(request.licenseSeatsUsed);
+        updates.setCloudProvider(request.cloudProvider);
+        updates.setCloudRegion(request.cloudRegion);
+        updates.setCloudResourceId(request.cloudResourceId);
+        updates.setResourceType(request.resourceType);
+        updates.setVendorName(request.vendorName);
+        updates.setVendorContact(request.vendorContact);
+        updates.setVendorContractNumber(request.vendorContractNumber);
+        updates.setPhotoUrl(request.photoUrl);
+        updates.setTags(request.tags);
+        updates.setNotes(request.notes);
+        updates.setSpecifications(request.specifications);
+        updates.setParentAssetId(request.parentAssetId);
 
         Asset updated = assetService.updateAsset(id, updates, "admin");
-        return ResponseEntity.ok(AssetDto.fromEntity(updated));
+        log.info("=== UPDATED ASSET {} ===", id);
+        log.info("Result - name: {}, purchaseCost: {}, currentValue: {}", 
+                 updated.getName(), updated.getPurchaseCost(), updated.getCurrentValue());
+        return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
-    /**
-     * Xóa asset.
-     * DELETE /api/assets/{id}
-     */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAsset(@PathVariable Long id) {
-        log.info("DELETE /api/assets/{}", id);
         assetService.deleteAsset(id);
         return ResponseEntity.noContent().build();
     }
 
-    // ==================== Health Status ====================
-
-    /**
-     * Cập nhật health status.
-     * PATCH /api/assets/{id}/health
-     */
-    @PatchMapping("/{id}/health")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<AssetDto> updateHealthStatus(
-            @PathVariable Long id,
-            @RequestBody HealthUpdateRequest request) {
-        log.info("PATCH /api/assets/{}/health - status: {}", id, request.getHealthStatus());
-
-        Asset updated = assetService.updateHealthStatus(
-                id,
-                Asset.HealthStatus.valueOf(request.getHealthStatus()),
-                request.getHealthNotes(),
-                "admin"
-        );
-
-        return ResponseEntity.ok(AssetDto.fromEntity(updated));
-    }
-
     // ==================== Assignment ====================
 
-    /**
-     * Assign asset.
-     * PATCH /api/assets/{id}/assign
-     */
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<AssetDto> assignAsset(
-            @PathVariable Long id,
-            @RequestBody AssignRequest request) {
-        log.info("PATCH /api/assets/{}/assign - to: {}", id, request.getAssignedTo());
-
-        Asset updated = assetService.assignAsset(
-                id,
-                request.getAssignedTo(),
-                request.getAssignedToName(),
-                request.getDepartment(),
-                "admin"
-        );
-
-        return ResponseEntity.ok(AssetDto.fromEntity(updated));
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> assignAsset(@PathVariable Long id, @RequestBody AssignRequest request) {
+        Asset updated = assetService.assignAsset(id, request.assignedTo, request.assignedToName, request.department, "admin");
+        return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
-    /**
-     * Unassign asset.
-     * PATCH /api/assets/{id}/unassign
-     */
     @PatchMapping("/{id}/unassign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<AssetDto> unassignAsset(@PathVariable Long id) {
-        log.info("PATCH /api/assets/{}/unassign", id);
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> unassignAsset(@PathVariable Long id) {
         Asset updated = assetService.unassignAsset(id, "admin");
-        return ResponseEntity.ok(AssetDto.fromEntity(updated));
+        return ResponseEntity.ok(AssetResponse.fromEntity(updated));
+    }
+
+    // ==================== Health Status ====================
+
+    @PatchMapping("/{id}/health")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> updateHealthStatus(@PathVariable Long id, @RequestBody HealthUpdateRequest request) {
+        Asset.HealthStatus healthStatus = Asset.HealthStatus.valueOf(request.healthStatus);
+        Asset updated = assetService.updateHealthStatus(id, healthStatus, request.notes, "admin");
+        return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
     // ==================== Maintenance ====================
 
-    /**
-     * Lấy maintenance records.
-     * GET /api/assets/{id}/maintenance
-     */
     @GetMapping("/{id}/maintenance")
-    public ResponseEntity<List<MaintenanceRecordDto>> getMaintenanceRecords(@PathVariable Long id) {
-        log.info("GET /api/assets/{}/maintenance", id);
+    public ResponseEntity<List<MaintenanceResponse>> getMaintenanceRecords(@PathVariable Long id) {
         List<AssetMaintenanceRecord> records = assetService.getMaintenanceRecords(id);
-        return ResponseEntity.ok(records.stream()
-                .map(MaintenanceRecordDto::fromEntity)
-                .collect(Collectors.toList()));
+        return ResponseEntity.ok(records.stream().map(MaintenanceResponse::fromEntity).collect(Collectors.toList()));
     }
 
-    /**
-     * Thêm maintenance record.
-     * POST /api/assets/{id}/maintenance
-     */
     @PostMapping("/{id}/maintenance")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<MaintenanceRecordDto> addMaintenanceRecord(
-            @PathVariable Long id,
-            @RequestBody MaintenanceRequest request) {
-        log.info("POST /api/assets/{}/maintenance", id);
-
-        AssetMaintenanceRecord record = assetService.addMaintenanceRecord(
-                id,
-                request.getMaintenanceType(),
-                request.getDescription(),
-                request.getPerformedBy(),
-                request.getOutcome()
-        );
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(MaintenanceRecordDto.fromEntity(record));
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<MaintenanceResponse> addMaintenanceRecord(@PathVariable Long id, @RequestBody MaintenanceRequest request) {
+        AssetMaintenanceRecord record = assetService.addMaintenanceRecord(id, request.maintenanceType, request.description, request.performedBy, request.outcome);
+        return ResponseEntity.status(HttpStatus.CREATED).body(MaintenanceResponse.fromEntity(record));
     }
 
-    // ==================== Statistics ====================
+    @PostMapping("/{id}/schedule-maintenance")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<AssetResponse> scheduleMaintenance(@PathVariable Long id, @RequestBody ScheduleMaintenanceRequest request) {
+        Asset updated = assetService.scheduleMaintenance(id, request.nextMaintenanceDate, "admin");
+        return ResponseEntity.ok(AssetResponse.fromEntity(updated));
+    }
 
-    /**
-     * Lấy statistics.
-     * GET /api/assets/stats
-     */
+    // ==================== Statistics & Alerts ====================
+
     @GetMapping("/stats")
-    public ResponseEntity<AssetService.AssetStatistics> getStatistics() {
-        log.info("GET /api/assets/stats");
-        return ResponseEntity.ok(assetService.getStatistics());
+    public ResponseEntity<AssetStatisticsResponse> getStatistics() {
+        AssetService.AssetStatistics stats = assetService.getStatistics();
+        return ResponseEntity.ok(AssetStatisticsResponse.from(stats));
     }
 
-    // ==================== Warranty Alerts ====================
-
-    /**
-     * Lấy assets expiring warranty.
-     * GET /api/assets/expiring-warranties
-     */
     @GetMapping("/expiring-warranties")
-    public ResponseEntity<List<AssetDto>> getExpiringWarranties(
-            @RequestParam(defaultValue = "30") int days) {
-        log.info("GET /api/assets/expiring-warranties - days: {}", days);
+    public ResponseEntity<List<AssetResponse>> getExpiringWarranties(@RequestParam(defaultValue = "30") int days) {
         List<Asset> assets = assetService.getExpiringWarranties(days);
-        return ResponseEntity.ok(assets.stream()
-                .map(AssetDto::fromEntity)
-                .collect(Collectors.toList()));
+        return ResponseEntity.ok(assets.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/maintenance-schedule")
+    public ResponseEntity<List<AssetResponse>> getMaintenanceSchedule(@RequestParam(defaultValue = "30") int days) {
+        List<Asset> assets = assetService.getUpcomingMaintenance(days);
+        return ResponseEntity.ok(assets.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
+    }
+
+    // ==================== Linking ====================
+
+    @PostMapping("/{id}/link-incident")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<LinkResponse> linkIncident(@PathVariable Long id, @RequestBody LinkRequest request) {
+        AssetIncidentLink link = assetService.linkIncident(id, request.ticketId, request.linkedBy);
+        return ResponseEntity.status(HttpStatus.CREATED).body(LinkResponse.fromEntity(link));
+    }
+
+    @GetMapping("/{id}/incidents")
+    public ResponseEntity<List<LinkResponse>> getLinkedIncidents(@PathVariable Long id) {
+        List<AssetIncidentLink> links = assetService.getLinkedIncidents(id);
+        return ResponseEntity.ok(links.stream().map(LinkResponse::fromEntity).collect(Collectors.toList()));
+    }
+
+    @GetMapping("/{id}/children")
+    public ResponseEntity<List<AssetResponse>> getChildAssets(@PathVariable Long id) {
+        List<Asset> children = assetService.getChildAssets(id);
+        return ResponseEntity.ok(children.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
     }
 
     // ==================== Exception Handlers ====================
@@ -349,355 +294,309 @@ public class AssetController {
     @ExceptionHandler(AssetService.AssetNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ResponseEntity<ErrorResponse> handleNotFound(AssetService.AssetNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse("NOT_FOUND", ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("NOT_FOUND", ex.getMessage()));
     }
 
-    // ==================== DTOs ====================
+    // ==================== Request/Response Classes ====================
 
     public static class ErrorResponse {
         private String code;
         private String message;
-        public ErrorResponse(String code, String message) {
-            this.code = code;
-            this.message = message;
-        }
+        public ErrorResponse(String code, String message) { this.code = code; this.message = message; }
         public String getCode() { return code; }
         public String getMessage() { return message; }
     }
 
-    public static class AssetDto {
-        private Long id;
-        private String assetNumber;
-        private String name;
-        private String description;
-        private String assetType;
-        private String assetTypeLabel;
-        private String category;
-        private String manufacturer;
-        private String model;
-        private String serialNumber;
-        private String partNumber;
-        private String location;
-        private String building;
-        private String floor;
-        private String room;
-        private String rackPosition;
-        private String assignedTo;
-        private String assignedDepartment;
-        private String assignedLocation;
-        private String status;
-        private String statusLabel;
-        private String healthStatus;
-        private String healthStatusLabel;
-        private String healthNotes;
-        private java.time.LocalDate purchaseDate;
-        private java.time.LocalDate warrantyExpiryDate;
-        private java.time.LocalDate leaseExpiryDate;
-        private java.math.BigDecimal purchaseCost;
-        private java.math.BigDecimal currentValue;
-        private java.math.BigDecimal depreciationRate;
-        private Integer licenseSeatsTotal;
-        private Integer licenseSeatsUsed;
-        private String licenseKey;
-        private String licenseType;
-        private String ipAddress;
-        private String macAddress;
-        private String hostname;
-        private String networkSegment;
-        private String vlan;
-        private String softwareName;
-        private String softwareVersion;
-        private String cloudProvider;
-        private String cloudRegion;
-        private String cloudResourceId;
-        private String resourceType;
-        private Long parentAssetId;
-        private String vendorName;
-        private String vendorContact;
-        private String vendorContractNumber;
-        private java.time.LocalDate lastMaintenanceDate;
-        private java.time.LocalDate nextMaintenanceDate;
-        private String tags;
-        private String notes;
-        private String photoUrl;
-        private java.util.Map<String, Object> specifications;
-        private Boolean warrantyExpiringSoon;
-        private Boolean warrantyExpired;
-        private java.time.LocalDateTime createdAt;
-        private java.time.LocalDateTime updatedAt;
-        private String createdBy;
-        private String updatedBy;
+    public static class AssetRequest {
+        public String assetNumber;
+        public String name;
+        public String description;
+        public String assetType;
+        public String category;
+        public String manufacturer;
+        public String model;
+        public String serialNumber;
+        public String partNumber;
+        public String location;
+        public String building;
+        public String floor;
+        public String room;
+        public String rackPosition;
+        public String assignedTo;
+        public String assignedToName;
+        public String assignedDepartment;
+        public String assignedLocation;
+        public String status;
+        public String healthStatus;
+        public String healthNotes;
+        public LocalDate purchaseDate;
+        public java.math.BigDecimal purchaseCost;
+        public java.math.BigDecimal currentValue;
+        public java.math.BigDecimal depreciationRate;
+        public LocalDate warrantyExpiryDate;
+        public LocalDate leaseExpiryDate;
+        public LocalDate lastMaintenanceDate;
+        public LocalDate nextMaintenanceDate;
+        public String ipAddress;
+        public String macAddress;
+        public String hostname;
+        public String networkSegment;
+        public String vlan;
+        public String softwareName;
+        public String softwareVersion;
+        public String licenseKey;
+        public String licenseType;
+        public Integer licenseSeatsTotal;
+        public Integer licenseSeatsUsed;
+        public String cloudProvider;
+        public String cloudRegion;
+        public String cloudResourceId;
+        public String resourceType;
+        public String vendorName;
+        public String vendorContact;
+        public String vendorContractNumber;
+        public String tags;
+        public String notes;
+        public String photoUrl;
+        public Map<String, Object> specifications;
+        public Long parentAssetId;
 
-        public static AssetDto fromEntity(Asset a) {
-            AssetDto dto = new AssetDto();
-            dto.setId(a.getId());
-            dto.setAssetNumber(a.getAssetNumber());
-            dto.setName(a.getName());
-            dto.setDescription(a.getDescription());
-            dto.setAssetType(a.getAssetType() != null ? a.getAssetType().name() : null);
-            dto.setAssetTypeLabel(a.getAssetType() != null ? a.getAssetType().getLabel() : null);
-            dto.setCategory(a.getCategory());
-            dto.setManufacturer(a.getManufacturer());
-            dto.setModel(a.getModel());
-            dto.setSerialNumber(a.getSerialNumber());
-            dto.setPartNumber(a.getPartNumber());
-            dto.setLocation(a.getLocation());
-            dto.setBuilding(a.getBuilding());
-            dto.setFloor(a.getFloor());
-            dto.setRoom(a.getRoom());
-            dto.setRackPosition(a.getRackPosition());
-            dto.setAssignedTo(a.getAssignedTo());
-            dto.setAssignedDepartment(a.getAssignedDepartment());
-            dto.setAssignedLocation(a.getAssignedLocation());
-            dto.setStatus(a.getStatus() != null ? a.getStatus().name() : null);
-            dto.setStatusLabel(a.getStatus() != null ? a.getStatus().getLabel() : null);
-            dto.setHealthStatus(a.getHealthStatus() != null ? a.getHealthStatus().name() : null);
-            dto.setHealthStatusLabel(a.getHealthStatus() != null ? a.getHealthStatus().getLabel() : null);
-            dto.setHealthNotes(a.getHealthNotes());
-            dto.setPurchaseDate(a.getPurchaseDate());
-            dto.setWarrantyExpiryDate(a.getWarrantyExpiryDate());
-            dto.setLeaseExpiryDate(a.getLeaseExpiryDate());
-            dto.setPurchaseCost(a.getPurchaseCost());
-            dto.setCurrentValue(a.getCurrentValue());
-            dto.setDepreciationRate(a.getDepreciationRate());
-            dto.setLicenseSeatsTotal(a.getLicenseSeatsTotal());
-            dto.setLicenseSeatsUsed(a.getLicenseSeatsUsed());
-            dto.setLicenseKey(a.getLicenseKey());
-            dto.setLicenseType(a.getLicenseType());
-            dto.setIpAddress(a.getIpAddress());
-            dto.setMacAddress(a.getMacAddress());
-            dto.setHostname(a.getHostname());
-            dto.setNetworkSegment(a.getNetworkSegment());
-            dto.setVlan(a.getVlan());
-            dto.setSoftwareName(a.getSoftwareName());
-            dto.setSoftwareVersion(a.getSoftwareVersion());
-            dto.setCloudProvider(a.getCloudProvider());
-            dto.setCloudRegion(a.getCloudRegion());
-            dto.setCloudResourceId(a.getCloudResourceId());
-            dto.setResourceType(a.getResourceType());
-            dto.setParentAssetId(a.getParentAssetId());
-            dto.setVendorName(a.getVendorName());
-            dto.setVendorContact(a.getVendorContact());
-            dto.setVendorContractNumber(a.getVendorContractNumber());
-            dto.setLastMaintenanceDate(a.getLastMaintenanceDate());
-            dto.setNextMaintenanceDate(a.getNextMaintenanceDate());
-            dto.setTags(a.getTags());
-            dto.setNotes(a.getNotes());
-            dto.setPhotoUrl(a.getPhotoUrl());
-            dto.setSpecifications(a.getSpecifications());
-            dto.setWarrantyExpiringSoon(a.isWarrantyExpiringSoon());
-            dto.setWarrantyExpired(a.isWarrantyExpired());
-            dto.setCreatedAt(a.getCreatedAt());
-            dto.setUpdatedAt(a.getUpdatedAt());
-            dto.setCreatedBy(a.getCreatedBy());
-            dto.setUpdatedBy(a.getUpdatedBy());
-            return dto;
-        }
-
-        // Getters/Setters
-        public Long getId() { return id; }
-        public void setId(Long id) { this.id = id; }
-        public String getAssetNumber() { return assetNumber; }
-        public void setAssetNumber(String assetNumber) { this.assetNumber = assetNumber; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getAssetType() { return assetType; }
-        public void setAssetType(String assetType) { this.assetType = assetType; }
-        public String getAssetTypeLabel() { return assetTypeLabel; }
-        public void setAssetTypeLabel(String assetTypeLabel) { this.assetTypeLabel = assetTypeLabel; }
-        public String getCategory() { return category; }
-        public void setCategory(String category) { this.category = category; }
-        public String getManufacturer() { return manufacturer; }
-        public void setManufacturer(String manufacturer) { this.manufacturer = manufacturer; }
-        public String getModel() { return model; }
-        public void setModel(String model) { this.model = model; }
-        public String getSerialNumber() { return serialNumber; }
-        public void setSerialNumber(String serialNumber) { this.serialNumber = serialNumber; }
-        public String getPartNumber() { return partNumber; }
-        public void setPartNumber(String partNumber) { this.partNumber = partNumber; }
-        public String getLocation() { return location; }
-        public void setLocation(String location) { this.location = location; }
-        public String getBuilding() { return building; }
-        public void setBuilding(String building) { this.building = building; }
-        public String getFloor() { return floor; }
-        public void setFloor(String floor) { this.floor = floor; }
-        public String getRoom() { return room; }
-        public void setRoom(String room) { this.room = room; }
-        public String getRackPosition() { return rackPosition; }
-        public void setRackPosition(String rackPosition) { this.rackPosition = rackPosition; }
-        public String getAssignedTo() { return assignedTo; }
-        public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
-        public String getAssignedDepartment() { return assignedDepartment; }
-        public void setAssignedDepartment(String assignedDepartment) { this.assignedDepartment = assignedDepartment; }
-        public String getAssignedLocation() { return assignedLocation; }
-        public void setAssignedLocation(String assignedLocation) { this.assignedLocation = assignedLocation; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public String getStatusLabel() { return statusLabel; }
-        public void setStatusLabel(String statusLabel) { this.statusLabel = statusLabel; }
-        public String getHealthStatus() { return healthStatus; }
-        public void setHealthStatus(String healthStatus) { this.healthStatus = healthStatus; }
-        public String getHealthStatusLabel() { return healthStatusLabel; }
-        public void setHealthStatusLabel(String healthStatusLabel) { this.healthStatusLabel = healthStatusLabel; }
-        public String getHealthNotes() { return healthNotes; }
-        public void setHealthNotes(String healthNotes) { this.healthNotes = healthNotes; }
-        public java.time.LocalDate getPurchaseDate() { return purchaseDate; }
-        public void setPurchaseDate(java.time.LocalDate purchaseDate) { this.purchaseDate = purchaseDate; }
-        public java.time.LocalDate getWarrantyExpiryDate() { return warrantyExpiryDate; }
-        public void setWarrantyExpiryDate(java.time.LocalDate warrantyExpiryDate) { this.warrantyExpiryDate = warrantyExpiryDate; }
-        public java.time.LocalDate getLeaseExpiryDate() { return leaseExpiryDate; }
-        public void setLeaseExpiryDate(java.time.LocalDate leaseExpiryDate) { this.leaseExpiryDate = leaseExpiryDate; }
-        public java.math.BigDecimal getPurchaseCost() { return purchaseCost; }
-        public void setPurchaseCost(java.math.BigDecimal purchaseCost) { this.purchaseCost = purchaseCost; }
-        public java.math.BigDecimal getCurrentValue() { return currentValue; }
-        public void setCurrentValue(java.math.BigDecimal currentValue) { this.currentValue = currentValue; }
-        public java.math.BigDecimal getDepreciationRate() { return depreciationRate; }
-        public void setDepreciationRate(java.math.BigDecimal depreciationRate) { this.depreciationRate = depreciationRate; }
-        public Integer getLicenseSeatsTotal() { return licenseSeatsTotal; }
-        public void setLicenseSeatsTotal(Integer licenseSeatsTotal) { this.licenseSeatsTotal = licenseSeatsTotal; }
-        public Integer getLicenseSeatsUsed() { return licenseSeatsUsed; }
-        public void setLicenseSeatsUsed(Integer licenseSeatsUsed) { this.licenseSeatsUsed = licenseSeatsUsed; }
-        public String getLicenseKey() { return licenseKey; }
-        public void setLicenseKey(String licenseKey) { this.licenseKey = licenseKey; }
-        public String getLicenseType() { return licenseType; }
-        public void setLicenseType(String licenseType) { this.licenseType = licenseType; }
-        public String getIpAddress() { return ipAddress; }
-        public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
-        public String getMacAddress() { return macAddress; }
-        public void setMacAddress(String macAddress) { this.macAddress = macAddress; }
-        public String getHostname() { return hostname; }
-        public void setHostname(String hostname) { this.hostname = hostname; }
-        public String getNetworkSegment() { return networkSegment; }
-        public void setNetworkSegment(String networkSegment) { this.networkSegment = networkSegment; }
-        public String getVlan() { return vlan; }
-        public void setVlan(String vlan) { this.vlan = vlan; }
-        public String getSoftwareName() { return softwareName; }
-        public void setSoftwareName(String softwareName) { this.softwareName = softwareName; }
-        public String getSoftwareVersion() { return softwareVersion; }
-        public void setSoftwareVersion(String softwareVersion) { this.softwareVersion = softwareVersion; }
-        public String getCloudProvider() { return cloudProvider; }
-        public void setCloudProvider(String cloudProvider) { this.cloudProvider = cloudProvider; }
-        public String getCloudRegion() { return cloudRegion; }
-        public void setCloudRegion(String cloudRegion) { this.cloudRegion = cloudRegion; }
-        public String getCloudResourceId() { return cloudResourceId; }
-        public void setCloudResourceId(String cloudResourceId) { this.cloudResourceId = cloudResourceId; }
-        public String getResourceType() { return resourceType; }
-        public void setResourceType(String resourceType) { this.resourceType = resourceType; }
-        public Long getParentAssetId() { return parentAssetId; }
-        public void setParentAssetId(Long parentAssetId) { this.parentAssetId = parentAssetId; }
-        public String getVendorName() { return vendorName; }
-        public void setVendorName(String vendorName) { this.vendorName = vendorName; }
-        public String getVendorContact() { return vendorContact; }
-        public void setVendorContact(String vendorContact) { this.vendorContact = vendorContact; }
-        public String getVendorContractNumber() { return vendorContractNumber; }
-        public void setVendorContractNumber(String vendorContractNumber) { this.vendorContractNumber = vendorContractNumber; }
-        public java.time.LocalDate getLastMaintenanceDate() { return lastMaintenanceDate; }
-        public void setLastMaintenanceDate(java.time.LocalDate lastMaintenanceDate) { this.lastMaintenanceDate = lastMaintenanceDate; }
-        public java.time.LocalDate getNextMaintenanceDate() { return nextMaintenanceDate; }
-        public void setNextMaintenanceDate(java.time.LocalDate nextMaintenanceDate) { this.nextMaintenanceDate = nextMaintenanceDate; }
-        public String getTags() { return tags; }
-        public void setTags(String tags) { this.tags = tags; }
-        public String getNotes() { return notes; }
-        public void setNotes(String notes) { this.notes = notes; }
-        public String getPhotoUrl() { return photoUrl; }
-        public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
-        public java.util.Map<String, Object> getSpecifications() { return specifications; }
-        public void setSpecifications(java.util.Map<String, Object> specifications) { this.specifications = specifications; }
-        public Boolean getWarrantyExpiringSoon() { return warrantyExpiringSoon; }
-        public void setWarrantyExpiringSoon(Boolean warrantyExpiringSoon) { this.warrantyExpiringSoon = warrantyExpiringSoon; }
-        public Boolean getWarrantyExpired() { return warrantyExpired; }
-        public void setWarrantyExpired(Boolean warrantyExpired) { this.warrantyExpired = warrantyExpired; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
-        public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
-        public java.time.LocalDateTime getUpdatedAt() { return updatedAt; }
-        public void setUpdatedAt(java.time.LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
-        public String getCreatedBy() { return createdBy; }
-        public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-        public String getUpdatedBy() { return updatedBy; }
-        public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
-
-        // Enum converters for DTO -> Entity mapping
-        public Asset.AssetType getAssetTypeEnum() {
-            return assetType != null ? Asset.AssetType.valueOf(assetType) : null;
-        }
-        
-        public Asset.AssetStatus getStatusEnum() {
-            return status != null ? Asset.AssetStatus.valueOf(status) : null;
-        }
-        
-        public Asset.HealthStatus getHealthStatusEnum() {
-            return healthStatus != null ? Asset.HealthStatus.valueOf(healthStatus) : null;
-        }
-    }
-
-    public static class HealthUpdateRequest {
-        private String healthStatus;
-        private String healthNotes;
-        public String getHealthStatus() { return healthStatus; }
-        public String getHealthNotes() { return healthNotes; }
+        public Asset.AssetType getAssetType() { return assetType != null ? Asset.AssetType.valueOf(assetType) : null; }
+        public Asset.AssetStatus getStatus() { return status != null ? Asset.AssetStatus.valueOf(status) : null; }
+        public Asset.HealthStatus getHealthStatus() { return healthStatus != null ? Asset.HealthStatus.valueOf(healthStatus) : null; }
     }
 
     public static class AssignRequest {
-        private String assignedTo;
-        private String assignedToName;
-        private String department;
-        public String getAssignedTo() { return assignedTo; }
-        public String getAssignedToName() { return assignedToName; }
-        public String getDepartment() { return department; }
+        public String assignedTo;
+        public String assignedToName;
+        public String department;
+    }
+
+    public static class HealthUpdateRequest {
+        public String healthStatus;
+        public String notes;
     }
 
     public static class MaintenanceRequest {
-        private String maintenanceType;
-        private String description;
-        private String performedBy;
-        private String outcome;
-        public String getMaintenanceType() { return maintenanceType; }
-        public String getDescription() { return description; }
-        public String getPerformedBy() { return performedBy; }
-        public String getOutcome() { return outcome; }
+        public String maintenanceType;
+        public String description;
+        public String performedBy;
+        public String outcome;
     }
 
-    public static class MaintenanceRecordDto {
-        private Long id;
-        private Long assetId;
-        private String maintenanceType;
-        private String description;
-        private String performedBy;
-        private java.time.LocalDate performedAt;
-        private String outcome;
-        private java.time.LocalDateTime createdAt;
+    public static class ScheduleMaintenanceRequest {
+        public LocalDate nextMaintenanceDate;
+    }
 
-        public static MaintenanceRecordDto fromEntity(AssetMaintenanceRecord r) {
-            MaintenanceRecordDto dto = new MaintenanceRecordDto();
-            dto.setId(r.getId());
-            dto.setAssetId(r.getAsset() != null ? r.getAsset().getId() : null);
-            dto.setMaintenanceType(r.getMaintenanceType());
-            dto.setDescription(r.getDescription());
-            dto.setPerformedBy(r.getPerformedBy());
-            dto.setPerformedAt(r.getPerformedAt());
-            dto.setOutcome(r.getOutcome());
-            dto.setCreatedAt(r.getCreatedAt());
-            return dto;
+    public static class LinkRequest {
+        public String ticketId;
+        public String linkedBy;
+    }
+
+    public static class AssetResponse {
+        public Long id;
+        public String assetNumber;
+        public String name;
+        public String description;
+        public String assetType;
+        public String assetTypeLabel;
+        public String category;
+        public String manufacturer;
+        public String model;
+        public String serialNumber;
+        public String partNumber;
+        public String location;
+        public String building;
+        public String floor;
+        public String room;
+        public String rackPosition;
+        public String assignedTo;
+        public String assignedToName;
+        public String assignedDepartment;
+        public String assignedLocation;
+        public String status;
+        public String statusLabel;
+        public String healthStatus;
+        public String healthStatusLabel;
+        public String healthNotes;
+        public LocalDate purchaseDate;
+        public java.math.BigDecimal purchaseCost;
+        public java.math.BigDecimal currentValue;
+        public java.math.BigDecimal depreciationRate;
+        public LocalDate warrantyExpiryDate;
+        public LocalDate leaseExpiryDate;
+        public LocalDate lastMaintenanceDate;
+        public LocalDate nextMaintenanceDate;
+        public String ipAddress;
+        public String macAddress;
+        public String hostname;
+        public String networkSegment;
+        public String vlan;
+        public String softwareName;
+        public String softwareVersion;
+        public String licenseKey;
+        public String licenseType;
+        public Integer licenseSeatsTotal;
+        public Integer licenseSeatsUsed;
+        public String cloudProvider;
+        public String cloudRegion;
+        public String cloudResourceId;
+        public String resourceType;
+        public String vendorName;
+        public String vendorContact;
+        public String vendorContractNumber;
+        public String tags;
+        public String notes;
+        public String photoUrl;
+        public Map<String, Object> specifications;
+        public Long parentAssetId;
+        public LocalDateTime createdAt;
+        public LocalDateTime updatedAt;
+        public String createdBy;
+        public String updatedBy;
+        public boolean warrantyExpired;
+        public boolean warrantyExpiringSoon;
+
+        public static AssetResponse fromEntity(Asset a) {
+            AssetResponse r = new AssetResponse();
+            r.id = a.getId();
+            r.assetNumber = a.getAssetNumber();
+            r.name = a.getName();
+            r.description = a.getDescription();
+            r.assetType = a.getAssetType() != null ? a.getAssetType().name() : null;
+            r.assetTypeLabel = a.getAssetType() != null ? a.getAssetType().getLabel() : null;
+            r.category = a.getCategory();
+            r.manufacturer = a.getManufacturer();
+            r.model = a.getModel();
+            r.serialNumber = a.getSerialNumber();
+            r.partNumber = a.getPartNumber();
+            r.location = a.getLocation();
+            r.building = a.getBuilding();
+            r.floor = a.getFloor();
+            r.room = a.getRoom();
+            r.rackPosition = a.getRackPosition();
+            r.assignedTo = a.getAssignedTo();
+            r.assignedDepartment = a.getAssignedDepartment();
+            r.assignedLocation = a.getAssignedLocation();
+            r.status = a.getStatus() != null ? a.getStatus().name() : null;
+            r.statusLabel = a.getStatus() != null ? a.getStatus().getLabel() : null;
+            r.healthStatus = a.getHealthStatus() != null ? a.getHealthStatus().name() : null;
+            r.healthStatusLabel = a.getHealthStatus() != null ? a.getHealthStatus().getLabel() : null;
+            r.healthNotes = a.getHealthNotes();
+            r.purchaseDate = a.getPurchaseDate();
+            r.purchaseCost = a.getPurchaseCost();
+            r.currentValue = a.getCurrentValue();
+            r.depreciationRate = a.getDepreciationRate();
+            r.warrantyExpiryDate = a.getWarrantyExpiryDate();
+            r.leaseExpiryDate = a.getLeaseExpiryDate();
+            r.lastMaintenanceDate = a.getLastMaintenanceDate();
+            r.nextMaintenanceDate = a.getNextMaintenanceDate();
+            r.ipAddress = a.getIpAddress();
+            r.macAddress = a.getMacAddress();
+            r.hostname = a.getHostname();
+            r.networkSegment = a.getNetworkSegment();
+            r.vlan = a.getVlan();
+            r.softwareName = a.getSoftwareName();
+            r.softwareVersion = a.getSoftwareVersion();
+            r.licenseKey = a.getLicenseKey();
+            r.licenseType = a.getLicenseType();
+            r.licenseSeatsTotal = a.getLicenseSeatsTotal();
+            r.licenseSeatsUsed = a.getLicenseSeatsUsed();
+            r.cloudProvider = a.getCloudProvider();
+            r.cloudRegion = a.getCloudRegion();
+            r.cloudResourceId = a.getCloudResourceId();
+            r.resourceType = a.getResourceType();
+            r.vendorName = a.getVendorName();
+            r.vendorContact = a.getVendorContact();
+            r.vendorContractNumber = a.getVendorContractNumber();
+            r.tags = a.getTags();
+            r.notes = a.getNotes();
+            r.photoUrl = a.getPhotoUrl();
+            r.specifications = a.getSpecifications();
+            r.parentAssetId = a.getParentAssetId();
+            r.createdAt = a.getCreatedAt();
+            r.updatedAt = a.getUpdatedAt();
+            r.createdBy = a.getCreatedBy();
+            r.updatedBy = a.getUpdatedBy();
+            r.warrantyExpired = a.isWarrantyExpired();
+            r.warrantyExpiringSoon = a.isWarrantyExpiringSoon();
+            return r;
         }
 
         public Long getId() { return id; }
-        public void setId(Long id) { this.id = id; }
-        public Long getAssetId() { return assetId; }
-        public void setAssetId(Long assetId) { this.assetId = assetId; }
-        public String getMaintenanceType() { return maintenanceType; }
-        public void setMaintenanceType(String maintenanceType) { this.maintenanceType = maintenanceType; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getPerformedBy() { return performedBy; }
-        public void setPerformedBy(String performedBy) { this.performedBy = performedBy; }
-        public java.time.LocalDate getPerformedAt() { return performedAt; }
-        public void setPerformedAt(java.time.LocalDate performedAt) { this.performedAt = performedAt; }
-        public String getOutcome() { return outcome; }
-        public void setOutcome(String outcome) { this.outcome = outcome; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
-        public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
+        public String getAssetNumber() { return assetNumber; }
+        public String getName() { return name; }
+        public String getStatus() { return status; }
+        public String getHealthStatus() { return healthStatus; }
+    }
+
+    public static class LinkResponse {
+        public Long id;
+        public Long assetId;
+        public Long ticketId;
+        public String createdBy;
+        public LocalDateTime createdAt;
+
+        public static LinkResponse fromEntity(AssetIncidentLink link) {
+            LinkResponse lr = new LinkResponse();
+            lr.id = link.getId();
+            lr.assetId = link.getAsset() != null ? link.getAsset().getId() : null;
+            lr.ticketId = link.getIncidentId();
+            lr.createdBy = link.getCreatedBy();
+            lr.createdAt = link.getCreatedAt();
+            return lr;
+        }
+    }
+
+    public static class MaintenanceResponse {
+        public Long id;
+        public Long assetId;
+        public String maintenanceType;
+        public String description;
+        public String performedBy;
+        public String outcome;
+        public LocalDate performedAt;
+        public LocalDateTime createdAt;
+
+        public static MaintenanceResponse fromEntity(AssetMaintenanceRecord r) {
+            MaintenanceResponse mr = new MaintenanceResponse();
+            mr.id = r.getId();
+            mr.assetId = r.getAsset() != null ? r.getAsset().getId() : null;
+            mr.maintenanceType = r.getMaintenanceType();
+            mr.description = r.getDescription();
+            mr.performedBy = r.getPerformedBy();
+            mr.outcome = r.getOutcome();
+            mr.performedAt = r.getPerformedAt();
+            mr.createdAt = r.getCreatedAt();
+            return mr;
+        }
+    }
+
+    public static class AssetStatisticsResponse {
+        public long totalAssets;
+        public long activeAssets;
+        public long maintenanceAssets;
+        public long retiredAssets;
+        public long healthyAssets;
+        public long warningAssets;
+        public long criticalAssets;
+        public long expiringWarranties;
+        public long expiredWarranties;
+        public long overdueMaintenance;
+
+        public static AssetStatisticsResponse from(AssetService.AssetStatistics stats) {
+            AssetStatisticsResponse r = new AssetStatisticsResponse();
+            r.totalAssets = stats.totalAssets;
+            r.activeAssets = stats.activeAssets;
+            r.maintenanceAssets = stats.maintenanceAssets;
+            r.retiredAssets = stats.retiredAssets;
+            r.healthyAssets = stats.healthyAssets;
+            r.warningAssets = stats.warningAssets;
+            r.criticalAssets = stats.criticalAssets;
+            r.expiringWarranties = stats.expiringWarranties;
+            r.expiredWarranties = stats.expiredWarranties;
+            r.overdueMaintenance = stats.overdueMaintenance;
+            return r;
+        }
     }
 }

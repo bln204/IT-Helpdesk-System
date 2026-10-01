@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.category.Category;
@@ -140,6 +141,14 @@ public class Ticket {
      */
     @Column(name = "incident_id")
     private Long incidentId;
+
+    /**
+     * Version field for optimistic locking.
+     * Prevents concurrent modification conflicts.
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     @PrePersist
     void onCreate() {
@@ -501,5 +510,13 @@ public class Ticket {
 
     public void setIncidentId(Long incidentId) {
         this.incidentId = incidentId;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

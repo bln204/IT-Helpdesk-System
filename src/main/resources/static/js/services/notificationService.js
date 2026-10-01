@@ -3,6 +3,7 @@ import { API_BASE, tokenKey, NOTIFICATION_POLLING_MS } from '../config/constants
 import { request } from '../core/api.js';
 import { setRoute } from '../core/router.js';
 import { getToken, isTokenValid } from '../core/auth.js';
+import { escapeHtml } from '../core/sanitize.js';
 
 let notifications = [];
 let notificationPollingTimer = null;
@@ -131,24 +132,42 @@ export const deleteAllNotificationsAPI = async () => {
 // Convert backend notification to frontend format
 export const convertBackendNotification = (notif) => {
   const typeMap = {
-    'ACCOUNT_APPROVED': { type: 'approve', icon: '✓' },
-    'ACCOUNT_REJECTED': { type: 'reject', icon: '✗' },
-    'ACCOUNT_CREATED_PENDING': { type: 'pending', icon: '⏳' },
-    'INFO': { type: 'info', icon: 'ℹ' },
-    'TICKET_CREATED': { type: 'info', icon: '📋' },
-    'TICKET_UPDATED': { type: 'info', icon: '📝' },
-    'TICKET_ASSIGNED': { type: 'info', icon: '👤' },
-    'TICKET_CLOSED': { type: 'info', icon: '✅' },
+    'ACCOUNT_APPROVED': { type: 'approve', icon: '✓', category: 'account' },
+    'ACCOUNT_REJECTED': { type: 'reject', icon: '✗', category: 'account' },
+    'ACCOUNT_CREATED_PENDING': { type: 'pending', icon: '⏳', category: 'account' },
+    'INFO': { type: 'info', icon: 'ℹ', category: 'general' },
+    'PROFILE_CHANGED': { type: 'info', icon: '👤', category: 'profile' },
+    // Ticket/Incident notifications
+    'TICKET_CREATED': { type: 'info', icon: '📋', category: 'ticket' },
+    'TICKET_ASSIGNED': { type: 'info', icon: '👤', category: 'ticket' },
+    'TICKET_ASSIGNED_TO_TEAM': { type: 'info', icon: '👥', category: 'ticket' },
+    'TICKET_UNASSIGNED': { type: 'info', icon: '👤', category: 'ticket' },
+    'TICKET_REASSIGNED': { type: 'info', icon: '👤', category: 'ticket' },
+    'TICKET_STATUS_CHANGED': { type: 'info', icon: '🔄', category: 'ticket' },
+    'TICKET_IN_PROGRESS': { type: 'info', icon: '🔄', category: 'ticket' },
+    'TICKET_WAITING_FOR_INFO': { type: 'info', icon: '⏳', category: 'ticket' },
+    'TICKET_INFO_PROVIDED': { type: 'info', icon: '✅', category: 'ticket' },
+    'TICKET_RESOLVED': { type: 'info', icon: '✅', category: 'ticket' },
+    'TICKET_CLOSED': { type: 'info', icon: '🔒', category: 'ticket' },
+    'TICKET_REOPENED': { type: 'info', icon: '🔓', category: 'ticket' },
+    'TICKET_ESCALATED': { type: 'warning', icon: '⚠️', category: 'ticket' },
+    'TICKET_COMMENT_ADDED': { type: 'info', icon: '💬', category: 'ticket' },
+    'TICKET_SLA_WARNING': { type: 'warning', icon: '⏰', category: 'ticket' },
+    'TICKET_SLA_BREACHED': { type: 'error', icon: '🚨', category: 'ticket' },
   };
   
-  const mapping = typeMap[notif.type] || { type: 'info', icon: 'ℹ' };
+  const mapping = typeMap[notif.type] || { type: 'info', icon: 'ℹ', category: 'general' };
   
   return {
     id: notif.id,
-    type: mapping.type,
+    type: notif.type, // Lưu type gốc từ backend
+    category: mapping.category,
+    displayType: mapping.type,
     icon: mapping.icon,
     title: notif.title || notif.message,
     message: notif.message || notif.title,
+    ticketId: notif.ticketId, // ID của ticket/incident
+    ticketNumber: notif.ticketNumber, // Số ticket/incident để hiển thị
     userId: notif.relatedUserId,
     timestamp: notif.createdAt,
     read: notif.read || false,
@@ -255,30 +274,93 @@ export const renderNotifications = () => {
     item.className = `notification-item${notif.read ? '' : ' unread'}`;
 
     const timeAgo = getTimeAgo(notif.timestamp);
-    const icon = notif.icon || (notif.type === 'approve' ? '✓' : notif.type === 'reject' ? '✗' : 'ℹ');
+    const icon = notif.icon || 'ℹ';
+
+    // Hiển thị ticket number nếu có
+    const ticketInfo = notif.ticketNumber ? `<span class="notification-ticket-number">#${notif.ticketNumber}</span>` : '';
+    const ticketIdAttr = notif.ticketId ? `data-ticket-id="${notif.ticketId}"` : '';
+    const categoryAttr = `data-category="${notif.category || 'general'}"`;
 
     item.innerHTML = `
       <div class="notification-item-content">
-        <span class="notification-icon">${icon}</span>
+        <span class="notification-icon">${escapeHtml(icon)}</span>
         <div class="notification-text">
-          <div class="notification-item-title">${notif.title}</div>
-          <div class="notification-item-message">${notif.message}</div>
+          <div class="notification-item-title">${escapeHtml(notif.title || '')}${ticketInfo}</div>
+          <div class="notification-item-message">${escapeHtml(notif.message || '')}</div>
         </div>
       </div>
       <div class="notification-item-footer">
-        <span class="notification-item-time">${timeAgo}</span>
+        <span class="notification-item-time">${escapeHtml(timeAgo)}</span>
         ${!notif.read ? '<span class="notification-unread-dot"></span>' : ''}
       </div>
     `;
 
+    // Lưu thông tin vào dataset
+    item.dataset.ticketId = notif.ticketId || '';
+    item.dataset.ticketNumber = notif.ticketNumber || '';
+    item.dataset.category = notif.category || 'general';
+
     item.addEventListener('click', () => {
-      markNotificationRead(notif.id);
-      setRoute('#/admin');
-      closeNotificationDropdown();
+      handleNotificationClick(notif);
     });
 
     notificationList.appendChild(item);
   });
+};
+
+/**
+ * Xử lý click vào notification - chuyển đến trang phù hợp
+ */
+const handleNotificationClick = async (notif) => {
+  // Đánh dấu đã đọc
+  await markNotificationRead(notif.id);
+  closeNotificationDropdown();
+
+  // Xác định route dựa trên category
+  const category = notif.category || 'general';
+
+  if (category === 'ticket' && notif.ticketId) {
+    // Chuyển đến trang incidents với incident được chọn
+    window.location.hash = '#/incidents';
+
+    // Đợi một chút để view load xong
+    setTimeout(async () => {
+      try {
+        // Load incidents list trước
+        if (window.Incident) {
+          await window.Incident.loadIncidents();
+          // Tìm incident trong danh sách và mở detail
+          const incidents = window.Incident.getIncidents() || [];
+          const incident = incidents.find(i => i.id === notif.ticketId);
+          if (incident) {
+            window.Incident.viewIncident(notif.ticketId);
+          } else {
+            // Thử load trực tiếp incident bằng API
+            const response = await fetch(`/api/incidents/${notif.ticketId}`, {
+              headers: window.Auth.getAuthHeaders()
+            });
+            if (response.ok) {
+              window.Incident.viewIncident(notif.ticketId);
+            } else {
+              Toast.show('Không tìm thấy incident', 'error');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading incident from notification:', error);
+        Toast.show('Không thể mở incident', 'error');
+      }
+    }, 500);
+  } else if (category === 'account') {
+    // Chuyển đến trang admin để duyệt tài khoản
+    window.location.hash = '#/admin';
+  } else if (category === 'profile') {
+    // Chuyển đến trang profile
+    window.location.hash = '#/profile';
+  } else {
+    // Default - chuyển đến dashboard
+    window.location.hash = '#/dashboard';
+  }
 };
 
 export const markNotificationRead = async (id) => {

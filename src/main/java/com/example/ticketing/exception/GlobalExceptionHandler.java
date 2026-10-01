@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -388,6 +389,37 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
+            .body(error);
+    }
+    
+    // ==================== Optimistic Locking Exceptions ====================
+    
+    /**
+     * Handle OptimisticLockingFailureException - concurrent modification detected.
+     * This occurs when two users are editing the same ticket and one saves before the other.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(
+            OptimisticLockingFailureException ex, 
+            HttpServletRequest request) {
+        
+        log.warn("Optimistic locking conflict on path: {}: {}", 
+            request.getRequestURI(), ex.getMessage());
+        
+        Map<String, Object> details = new HashMap<>();
+        details.put("suggestion", "Dữ liệu đã được cập nhật bởi người khác. Vui lòng tải lại trang và thử lại.");
+        details.put("conflictType", "CONCURRENT_MODIFICATION");
+        details.put("canRetry", true);
+        
+        ErrorResponse error = new ErrorResponse(
+            "CONCURRENT_MODIFICATION",
+            "Phiếu đang được chỉnh sửa bởi người khác. Vui lòng tải lại trang để xem các thay đổi mới nhất.",
+            request.getRequestURI(),
+            details
+        );
+        
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
             .body(error);
     }
     

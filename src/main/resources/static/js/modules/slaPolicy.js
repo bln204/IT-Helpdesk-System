@@ -19,16 +19,16 @@ const SlaPolicy = (() => {
     // ==================== Initialization ====================
 
     function init() {
+        console.log('[SlaPolicy] init() called');
         if (typeof window.Auth === 'undefined') {
             console.error('[SlaPolicy] Auth module not found');
             return;
         }
 
-        // Wait for auth to be ready
-        window.Auth.onAuthReady(() => {
-            setupEventListeners();
-            loadPolicies();
-        });
+        // Directly setup and load (auth is already validated during login)
+        console.log('[SlaPolicy] Token valid:', window.Auth.isTokenValid());
+        setupEventListeners();
+        loadPolicies();
     }
 
     function setupEventListeners() {
@@ -85,15 +85,19 @@ const SlaPolicy = (() => {
     // ==================== API Calls ====================
 
     async function loadPolicies() {
+        console.log('[SlaPolicy] loadPolicies() called');
         try {
             const headers = window.Auth.getAuthHeaders();
+            console.log('[SlaPolicy] Headers:', headers);
             const response = await fetch(API_BASE, { headers: headers });
+            console.log('[SlaPolicy] Response status:', response.status);
             
             if (!response.ok) {
                 throw new Error('Failed to load SLA policies: ' + response.status);
             }
 
             const data = await response.json();
+            console.log('[SlaPolicy] Data received:', data);
             policies = data;
             renderPolicyList();
         } catch (error) {
@@ -215,7 +219,11 @@ const SlaPolicy = (() => {
 
     function renderPolicyList() {
         const container = document.getElementById('sla-policy-list');
-        if (!container) return;
+        console.log('[SlaPolicy] renderPolicyList() called, container:', !!container);
+        if (!container) {
+            console.error('[SlaPolicy] Container sla-policy-list not found!');
+            return;
+        }
 
         if (policies.length === 0) {
             container.innerHTML = `
@@ -244,6 +252,7 @@ const SlaPolicy = (() => {
             'LOW': { label: 'Thấp', class: 'priority-low' }
         };
 
+        console.log('[SlaPolicy] Rendering', policies.length, 'policies');
         container.innerHTML = priorityOrder
             .filter(p => grouped[p])
             .map(priority => `
@@ -258,6 +267,7 @@ const SlaPolicy = (() => {
                     </div>
                 </div>
             `).join('');
+        console.log('[SlaPolicy] innerHTML set, length:', container.innerHTML.length);
     }
 
     function renderPolicyCard(policy) {
@@ -521,10 +531,8 @@ const SlaPolicy = (() => {
     };
 })();
 
-// Auto-initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => SlaPolicy.init(), 100);
-});
+// No auto-initialize - let app.js control initialization after Auth is ready
+// This ensures Auth module is always available when Escalation.init() is called
 
 window.SlaPolicy = SlaPolicy;
 export { SlaPolicy };

@@ -313,6 +313,7 @@ public final class UserDtos {
         private String departmentName;
         private boolean enabled;
         private boolean approved;  // NEW
+        private boolean passwordMustChange;  // NEW
         private String displayName;
         private String title;
         private String avatarUrl;
@@ -332,6 +333,7 @@ public final class UserDtos {
             response.departmentName = user.getDepartmentName();
             response.enabled = user.isEnabled();
             response.approved = user.isApproved();  // NEW
+            response.passwordMustChange = user.isPasswordMustChange();  // NEW
             response.displayName = user.getDisplayName();
             response.title = user.getTitle();
             response.avatarUrl = user.getAvatarUrl();
@@ -374,6 +376,10 @@ public final class UserDtos {
         // NEW getters
         public boolean isApproved() {
             return approved;
+        }
+        
+        public boolean isPasswordMustChange() {
+            return passwordMustChange;
         }
         
         public String getDisplayName() {
@@ -653,6 +659,7 @@ public final class UserDtos {
         private String username;
         private boolean approved;
         private boolean enabled;
+        private boolean passwordMustChange;  // NEW: user must change password on next login
         private String status;  // PENDING, ACTIVE, DISABLED, REJECTED
         private String statusMessage;
         private java.time.LocalDateTime approvedAt;
@@ -665,6 +672,7 @@ public final class UserDtos {
             response.username = user.getUsername();
             response.approved = user.isApproved();
             response.enabled = user.isEnabled();
+            response.passwordMustChange = user.isPasswordMustChange();  // NEW
             
             // Calculate status
             if (!user.isApproved() && user.getRejectionReason() != null) {
@@ -702,6 +710,10 @@ public final class UserDtos {
 
         public boolean isEnabled() {
             return enabled;
+        }
+        
+        public boolean isPasswordMustChange() {
+            return passwordMustChange;
         }
 
         public String getStatus() {

@@ -8,6 +8,7 @@
  * - Clean grid layout for charts
  */
 import { tokenKey } from '../config/constants.js';
+import ReportService from '../services/reportService.js';
 
 const AnalyticsModule = (() => {
     'use strict';
@@ -40,6 +41,31 @@ const AnalyticsModule = (() => {
             if (e.target.closest('.analytics-tab-btn')) {
                 const tab = e.target.closest('.analytics-tab-btn').dataset.analyticsTab;
                 switchTab(tab);
+            }
+            // Report card actions
+            if (e.target.closest('.preview-report-btn')) {
+                const type = e.target.closest('.preview-report-btn').dataset.type;
+                previewReport(type);
+            }
+            if (e.target.closest('.export-report-btn')) {
+                const type = e.target.closest('.export-report-btn').dataset.type;
+                const format = e.target.closest('.export-report-btn').dataset.format;
+                exportReport(type, format);
+            }
+            // New report button
+            if (e.target.closest('#analytics-new-report-btn')) {
+                window.ReportModule.showNewReportDialog();
+            }
+            // Preview download buttons
+            if (e.target.closest('#preview-download-csv')) {
+                downloadPreviewReport('csv');
+            }
+            if (e.target.closest('#preview-download-excel')) {
+                downloadPreviewReport('excel');
+            }
+            // Close preview
+            if (e.target.closest('.preview-close-btn')) {
+                closeReportPreview();
             }
         });
     }
@@ -350,6 +376,310 @@ const AnalyticsModule = (() => {
                 }).join('')}
             </div>
         `;
+    }
+
+    // ==================== Report Functions ====================
+
+    // Store current preview report type
+    let currentPreviewReportType = null;
+
+    async function previewReport(type) {
+        const previewArea = document.getElementById('analytics-report-preview');
+        const previewContent = document.getElementById('preview-report-content');
+        const previewTitle = document.getElementById('preview-report-title');
+
+        if (!previewArea || !previewContent) return;
+
+        // Show loading
+        previewArea.classList.remove('hidden');
+        previewContent.innerHTML = '<div class="loading-spinner">Đang tải báo cáo...</div>';
+        previewTitle.textContent = getReportTitle(type);
+
+        try {
+            let report;
+            switch (type) {
+                case 'tickets':
+                    report = await ReportService.generateTicketReport({ days: 30 });
+                    previewContent.innerHTML = renderTicketReportPreview(report);
+                    break;
+                case 'sla':
+                    report = await ReportService.generateSlaReport({ days: 30 });
+                    previewContent.innerHTML = renderSlaReportPreview(report);
+                    break;
+                case 'assets':
+                    report = await ReportService.generateAssetReport({ days: 30 });
+                    previewContent.innerHTML = renderAssetReportPreview(report);
+                    break;
+                default:
+                    previewContent.innerHTML = '<p>Report type not available for preview.</p>';
+            }
+            currentPreviewReportType = type;
+        } catch (error) {
+            console.error('Error previewing report:', error);
+            previewContent.innerHTML = `<p class="error">Lỗi khi tải báo cáo: ${error.message}</p>`;
+        }
+    }
+
+    function renderTicketReportPreview(report) {
+        return `
+            <div class="report-summary-card">
+                <div class="summary-stat">
+                    <span class="stat-value">${report.stats.total}</span>
+                    <span class="stat-label">Total Tickets</span>
+                </div>
+                <div class="summary-stat">
+                    <span class="stat-value">${report.resolutionRate.toFixed(1)}%</span>
+                    <span class="stat-label">Resolution Rate</span>
+                </div>
+            </div>
+            <div class="report-breakdown">
+                <div class="breakdown-section">
+                    <h5>By Status</h5>
+                    <div class="breakdown-list">
+                        ${Object.entries(report.stats.byStatus).map(([k, v]) => 
+                            `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
+                        ).join('')}
+                    </div>
+                </div>
+                <div class="breakdown-section">
+                    <h5>By Priority</h5>
+                    <div class="breakdown-list">
+                        ${Object.entries(report.stats.byPriority).map(([k, v]) => 
+                            `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
+                        ).join('')}
+                    </div>
+                </div>
+            </div>
+            <div class="report-table-container">
+                <table class="data-table report-table">
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Title</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Assignee</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${report.tickets.slice(0, 20).map(t => `
+                            <tr>
+                                <td>${t.ticketNumber}</td>
+                                <td>${t.title}</td>
+                                <td><span class="priority-badge ${t.priority}">${t.priority}</span></td>
+                                <td>${t.status}</td>
+                                <td>${t.assigneeName || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ${report.tickets.length > 20 ? `<p class="table-note">Showing 20 of ${report.tickets.length} tickets</p>` : ''}
+            </div>
+        `;
+    }
+
+    function renderSlaReportPreview(report) {
+        const complianceColor = report.overallComplianceRate >= 80 ? '#10B981' : (report.overallComplianceRate >= 60 ? '#F59E0B' : '#F43F5E');
+        return `
+            <div class="report-summary-card sla-summary-card">
+                <div class="summary-stat large">
+                    <span class="stat-value" style="color: ${complianceColor}">${report.overallComplianceRate.toFixed(1)}%</span>
+                    <span class="stat-label">Overall SLA Compliance</span>
+                </div>
+                <div class="sla-breakdown">
+                    <div class="sla-item">
+                        <span class="sla-label">Response SLA</span>
+                        <div class="sla-bar-container">
+                            <div class="sla-bar" style="width: ${report.responseComplianceRate}%; background: ${report.responseComplianceRate >= 80 ? '#10B981' : '#F59E0B'}"></div>
+                        </div>
+                        <span class="sla-value">${report.responseComplianceRate.toFixed(1)}%</span>
+                    </div>
+                    <div class="sla-item">
+                        <span class="sla-label">Resolution SLA</span>
+                        <div class="sla-bar-container">
+                            <div class="sla-bar" style="width: ${report.resolutionComplianceRate}%; background: ${report.resolutionComplianceRate >= 80 ? '#10B981' : '#F59E0B'}"></div>
+                        </div>
+                        <span class="sla-value">${report.resolutionComplianceRate.toFixed(1)}%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="report-breakdown">
+                <div class="breakdown-section">
+                    <h5>Response SLA</h5>
+                    <div class="breakdown-list">
+                        <div class="breakdown-item"><span>Met</span><span class="badge success">${report.stats.responseMet}</span></div>
+                        <div class="breakdown-item"><span>Breached</span><span class="badge danger">${report.stats.responseBreached}</span></div>
+                        <div class="breakdown-item"><span>Pending</span><span class="badge">${report.stats.pendingResponse}</span></div>
+                    </div>
+                </div>
+                <div class="breakdown-section">
+                    <h5>Resolution SLA</h5>
+                    <div class="breakdown-list">
+                        <div class="breakdown-item"><span>Met</span><span class="badge success">${report.stats.resolutionMet}</span></div>
+                        <div class="breakdown-item"><span>Breached</span><span class="badge danger">${report.stats.resolutionBreached}</span></div>
+                        <div class="breakdown-item"><span>Pending</span><span class="badge">${report.stats.pendingResolution}</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="report-table-container">
+                <table class="data-table report-table">
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Priority</th>
+                            <th>Response SLA</th>
+                            <th>Resolution SLA</th>
+                            <th>Assignee</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${report.details.slice(0, 20).map(d => `
+                            <tr>
+                                <td>${d.ticketNumber}</td>
+                                <td><span class="priority-badge ${d.priority}">${d.priority}</span></td>
+                                <td>
+                                    ${d.responseSlaMet === true ? '<span class="sla-status met">✓ MET</span>' : ''}
+                                    ${d.responseSlaMet === false ? '<span class="sla-status breached">✗ BREACHED</span>' : ''}
+                                    ${d.responseSlaMet === null ? '<span class="sla-status pending">⏳ PENDING</span>' : ''}
+                                </td>
+                                <td>
+                                    ${d.resolutionSlaMet === true ? '<span class="sla-status met">✓ MET</span>' : ''}
+                                    ${d.resolutionSlaMet === false ? '<span class="sla-status breached">✗ BREACHED</span>' : ''}
+                                    ${d.resolutionSlaMet === null ? '<span class="sla-status pending">⏳ PENDING</span>' : ''}
+                                </td>
+                                <td>${d.assignee || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ${report.details.length > 20 ? `<p class="table-note">Showing 20 of ${report.details.length} tickets</p>` : ''}
+            </div>
+        `;
+    }
+
+    function renderAssetReportPreview(report) {
+        return `
+            <div class="report-summary-card">
+                <div class="summary-stat">
+                    <span class="stat-value">${report.stats.total}</span>
+                    <span class="stat-label">Total Assets</span>
+                </div>
+                <div class="summary-stat">
+                    <span class="stat-value" style="color: ${report.healthRate >= 80 ? '#10B981' : '#F59E0B'}">${report.healthRate.toFixed(1)}%</span>
+                    <span class="stat-label">Health Rate</span>
+                </div>
+                <div class="summary-stat">
+                    <span class="stat-value">${report.activeRate.toFixed(1)}%</span>
+                    <span class="stat-label">Active Rate</span>
+                </div>
+            </div>
+            <div class="report-breakdown">
+                <div class="breakdown-section">
+                    <h5>By Health Status</h5>
+                    <div class="breakdown-list">
+                        ${Object.entries(report.stats.byHealth).map(([k, v]) => 
+                            `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
+                        ).join('')}
+                    </div>
+                </div>
+                <div class="breakdown-section">
+                    <h5>By Type</h5>
+                    <div class="breakdown-list">
+                        ${Object.entries(report.stats.byType).map(([k, v]) => 
+                            `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
+                        ).join('')}
+                    </div>
+                </div>
+                <div class="breakdown-section">
+                    <h5>By Location</h5>
+                    <div class="breakdown-list">
+                        ${Object.entries(report.stats.byLocation).map(([k, v]) => 
+                            `<div class="breakdown-item"><span>${k || 'Unassigned'}</span><span class="badge">${v}</span></div>`
+                        ).join('')}
+                    </div>
+                </div>
+            </div>
+            <div class="report-table-container">
+                <table class="data-table report-table">
+                    <thead>
+                        <tr>
+                            <th>Asset Number</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Health</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${report.assets.slice(0, 20).map(a => `
+                            <tr>
+                                <td>${a.assetNumber}</td>
+                                <td>${a.name}</td>
+                                <td>${a.assetType}</td>
+                                <td><span class="status-badge ${a.status}">${a.status}</span></td>
+                                <td><span class="health-badge ${a.healthStatus}">${a.healthStatus}</span></td>
+                                <td>${a.location || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                ${report.assets.length > 20 ? `<p class="table-note">Showing 20 of ${report.assets.length} assets</p>` : ''}
+            </div>
+        `;
+    }
+
+    function getReportTitle(type) {
+        const titles = {
+            'tickets': 'Ticket Volume Report',
+            'sla': 'SLA Compliance Report',
+            'assets': 'Asset Inventory Report',
+            'agent': 'Agent Performance Report',
+            'changes': 'Change Success Rate Report'
+        };
+        return titles[type] || 'Report Preview';
+    }
+
+    async function exportReport(type, format) {
+        try {
+            switch (type) {
+                case 'tickets':
+                    await ReportService.exportTicketReport(format, { days: 30 });
+                    break;
+                case 'sla':
+                    await ReportService.exportSlaReport(format, { days: 30 });
+                    break;
+                case 'assets':
+                    await ReportService.exportAssetReport(format, { days: 30 });
+                    break;
+            }
+            if (window.Toast) {
+                window.Toast.show(`Báo cáo đã được tải xuống (${format.toUpperCase()})`, 'success');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            if (window.Toast) {
+                window.Toast.show('Lỗi khi xuất báo cáo: ' + error.message, 'error');
+            }
+        }
+    }
+
+    async function downloadPreviewReport(format) {
+        if (!currentPreviewReportType) {
+            if (window.Toast) {
+                window.Toast.show('Không có báo cáo để tải xuống', 'warning');
+            }
+            return;
+        }
+        await exportReport(currentPreviewReportType, format);
+    }
+
+    function closeReportPreview() {
+        const previewArea = document.getElementById('analytics-report-preview');
+        if (previewArea) {
+            previewArea.classList.add('hidden');
+        }
+        currentPreviewReportType = null;
     }
 
     // ==================== Tab Switching ====================

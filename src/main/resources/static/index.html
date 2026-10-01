@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="css/components/asset.css">
   <link rel="stylesheet" href="css/components/assetLink.css">
   <link rel="stylesheet" href="css/components/analytics.css">
+  <link rel="stylesheet" href="css/pages/reports.css">
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
@@ -61,9 +62,9 @@
         <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Dashboard</a>
         <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
         <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
-        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Incidents</a>
-        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Problems</a>
-        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Changes</a>
+        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Incidents</a>
+        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Problems</a>
+        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Changes</a>
         <a href="#/assets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Assets</a>
         <a href="#/analytics" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Analytics</a>
         <a href="#/service-requests" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF,ROLE_USER">Service Requests</a>
@@ -264,9 +265,16 @@
     </section>
 
     <section class="panel view" id="reports-panel" data-view="reports">
-      <header>
-        <h3>Báo cáo</h3>
-        <p>Tổng quan vận hành nhanh (mặc định trong 30 ngày qua).</p>
+      <header class="panel-header">
+        <div>
+          <h3>Báo cáo</h3>
+          <p>Tổng quan vận hành nhanh (mặc định trong 30 ngày qua).</p>
+        </div>
+        <div class="header-actions">
+          <button id="new-report-btn" class="btn primary" type="button">
+            <span class="btn-icon">📊</span> Tạo Báo Cáo Mới
+          </button>
+        </div>
       </header>
       <div class="stack">
         <div class="date-range-row">
@@ -361,9 +369,9 @@
         <div>
           <div class="panel-header compact">
             <h4>Tất cả người dùng</h4>
-            <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
-              +
-            </button>
+        <button id="open-user-modal" class="icon-btn" type="button" aria-label="Tạo người dùng">
+          +
+        </button>
           </div>
           <div class="toolbar">
             <input id="user-search" placeholder="Tìm kiếm tên đăng nhập" />
@@ -564,6 +572,7 @@
       <div id="problem-list-section" class="problem-list-section">
         <div class="toolbar">
           <input id="problem-search" placeholder="Tìm kiếm problem..." />
+          <button id="problem-search-btn" class="secondary" type="button">Tìm kiếm</button>
           <div class="custom-select">
             <select id="problem-status-filter">
               <option value="">Tất cả trạng thái</option>
@@ -581,6 +590,10 @@
       
       <!-- Known Errors List -->
       <div id="known-error-section" class="known-error-section hidden">
+        <div class="toolbar">
+          <input id="known-error-search-input" placeholder="Tìm kiếm Known Errors..." style="flex: 1;" />
+          <button class="secondary known-error-search-btn" type="button">Tìm kiếm</button>
+        </div>
         <div id="known-error-list" class="known-error-list"></div>
       </div>
     </section>
@@ -732,8 +745,14 @@
       
       <!-- Reports Section -->
       <div id="analytics-reports-section" class="analytics-reports-section hidden">
+        <div class="analytics-reports-header">
+          <h4>Report Templates</h4>
+          <button id="analytics-new-report-btn" class="btn primary btn-sm">
+            <span class="btn-icon">+</span> Tạo Báo Cáo Mới
+          </button>
+        </div>
         <div class="reports-list">
-          <div class="report-card">
+          <div class="report-card" data-report-type="tickets">
             <div class="report-icon">📊</div>
             <h4 class="report-name">Ticket Volume Report</h4>
             <p class="report-description">Overview of ticket volume over time</p>
@@ -741,8 +760,13 @@
               <span>Service Desk</span>
               <span class="report-type">Volume</span>
             </div>
+            <div class="report-actions-card">
+              <button class="btn btn-sm secondary preview-report-btn" data-type="tickets">Preview</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="tickets" data-format="csv">CSV</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="tickets" data-format="excel">Excel</button>
+            </div>
           </div>
-          <div class="report-card">
+          <div class="report-card" data-report-type="sla">
             <div class="report-icon">📈</div>
             <h4 class="report-name">SLA Compliance</h4>
             <p class="report-description">Track SLA compliance rates</p>
@@ -750,17 +774,13 @@
               <span>Operations</span>
               <span class="report-type">SLA</span>
             </div>
-          </div>
-          <div class="report-card">
-            <div class="report-icon">👤</div>
-            <h4 class="report-name">Agent Performance</h4>
-            <p class="report-description">Track response and resolution times</p>
-            <div class="report-meta">
-              <span>Service Desk</span>
-              <span class="report-type">Performance</span>
+            <div class="report-actions-card">
+              <button class="btn btn-sm secondary preview-report-btn" data-type="sla">Preview</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="sla" data-format="csv">CSV</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="sla" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card">
+          <div class="report-card" data-report-type="assets">
             <div class="report-icon">🖥️</div>
             <h4 class="report-name">Asset Health Overview</h4>
             <p class="report-description">Summary of asset health status</p>
@@ -768,8 +788,27 @@
               <span>Infrastructure</span>
               <span class="report-type">Assets</span>
             </div>
+            <div class="report-actions-card">
+              <button class="btn btn-sm secondary preview-report-btn" data-type="assets">Preview</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="assets" data-format="csv">CSV</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="assets" data-format="excel">Excel</button>
+            </div>
           </div>
-          <div class="report-card">
+          <div class="report-card" data-report-type="agent">
+            <div class="report-icon">👤</div>
+            <h4 class="report-name">Agent Performance</h4>
+            <p class="report-description">Track response and resolution times</p>
+            <div class="report-meta">
+              <span>Service Desk</span>
+              <span class="report-type">Performance</span>
+            </div>
+            <div class="report-actions-card">
+              <button class="btn btn-sm secondary preview-report-btn" data-type="agent">Preview</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="agent" data-format="csv">CSV</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="agent" data-format="excel">Excel</button>
+            </div>
+          </div>
+          <div class="report-card" data-report-type="changes">
             <div class="report-icon">🔄</div>
             <h4 class="report-name">Change Success Rate</h4>
             <p class="report-description">Track change implementation success</p>
@@ -777,7 +816,25 @@
               <span>Operations</span>
               <span class="report-type">Changes</span>
             </div>
+            <div class="report-actions-card">
+              <button class="btn btn-sm secondary preview-report-btn" data-type="changes">Preview</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="changes" data-format="csv">CSV</button>
+              <button class="btn btn-sm ghost export-report-btn" data-type="changes" data-format="excel">Excel</button>
+            </div>
           </div>
+        </div>
+        
+        <!-- Report Preview Area -->
+        <div id="analytics-report-preview" class="report-preview hidden">
+          <div class="preview-header">
+            <h4 id="preview-report-title">Report Preview</h4>
+            <div class="preview-actions">
+              <button class="btn btn-sm secondary" id="preview-download-csv">📥 CSV</button>
+              <button class="btn btn-sm secondary" id="preview-download-excel">📊 Excel</button>
+              <button class="btn btn-sm ghost preview-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="preview-report-content" class="preview-content"></div>
         </div>
       </div>
       
@@ -860,7 +917,8 @@
             </label>
             <label>
               Mô tả
-              <textarea name="description" rows="4" required></textarea>
+              <textarea name="description" rows="4" maxlength="10000" required></textarea>
+              <span class="char-counter"><span id="description-char-count">0</span> / 10,000 ký tự</span>
             </label>
             <div class="split">
               <label>
@@ -1098,7 +1156,7 @@
           <h3 id="dept-modal-title">Tạo phòng ban</h3>
           <p id="dept-modal-desc">Thêm một phòng ban mới vào hệ thống.</p>
         </div>
-        <button class="close-btn" id="close-dept-modal" aria-label="Đóng">&times;</button>
+        <button id="close-dept-modal" class="close-btn" type="button" aria-label="Đóng">&times;</button>
       </header>
       <form id="dept-form" class="stack">
         <input type="hidden" id="dept-id" />
@@ -1144,7 +1202,7 @@
         <div>
           <h3>Xóa phòng ban</h3>
         </div>
-        <button class="close-btn" id="close-dept-delete-modal" aria-label="Đóng">&times;</button>
+        <button id="close-dept-delete-modal" class="close-btn" type="button" aria-label="Đóng">&times;</button>
       </header>
       <div class="panel-body">
         <p id="dept-delete-warning" style="margin-bottom: 12px;"></p>
@@ -1487,6 +1545,22 @@
     </div>
   </div>
 
+  <!-- Known Error Detail Modal -->
+  <div class="modal hidden" id="known-error-modal" aria-hidden="true">
+    <div class="modal-content known-error-modal-content">
+      <header class="panel-header">
+        <div>
+          <h3>Chi tiết Known Error</h3>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="known-error-delete-btn" class="danger btn-sm" type="button" style="display: none;">🗑️ Xóa</button>
+          <button id="close-known-error-modal" class="ghost" type="button">Đóng</button>
+        </div>
+      </header>
+      <div id="known-error-detail-content" class="known-error-detail-content"></div>
+    </div>
+  </div>
+
   <!-- Change Modal -->
   <div class="modal hidden" id="change-modal" aria-hidden="true">
     <div class="modal-content change-modal-content">
@@ -1513,6 +1587,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=2026092905"></script>
+  <script type="module" src="js/app.js?v=2026093015"></script>
 </body>
 </html>

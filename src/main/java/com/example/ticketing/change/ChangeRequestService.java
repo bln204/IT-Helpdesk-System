@@ -350,6 +350,68 @@ public class ChangeRequestService {
         return "CHG-" + uuid;
     }
 
+    // ==================== CAB Calendar ====================
+
+    /**
+     * Lấy scheduled changes cho calendar.
+     */
+    public List<ChangeRequest> getScheduledChanges() {
+        return changeRepository.findByStatusInOrderByScheduledStartDateAsc(List.of(
+                ChangeRequest.ChangeStatus.SUBMITTED,
+                ChangeRequest.ChangeStatus.PENDING_APPROVAL,
+                ChangeRequest.ChangeStatus.APPROVED,
+                ChangeRequest.ChangeStatus.SCHEDULED
+        ));
+    }
+
+    /**
+     * Lấy pending CAB review.
+     */
+    public List<ChangeRequest> getPendingCABReview() {
+        return changeRepository.findByStatusInOrderByCreatedAtDesc(List.of(
+                ChangeRequest.ChangeStatus.SUBMITTED,
+                ChangeRequest.ChangeStatus.PENDING_APPROVAL
+        ));
+    }
+
+    // ==================== Linking ====================
+
+    /**
+     * Link change với incident.
+     */
+    public ChangeRequest linkIncident(Long changeId, String incidentId, String actorName) {
+        ChangeRequest change = getChangeById(changeId);
+        String current = change.getLinkedTickets();
+        if (current == null || current.isBlank()) {
+            change.setLinkedTickets("INC:" + incidentId);
+        } else if (!current.contains("INC:" + incidentId)) {
+            change.setLinkedTickets(current + ",INC:" + incidentId);
+        }
+        change.setUpdatedBy(actorName);
+        ChangeRequest saved = changeRepository.save(change);
+        addTimelineEvent(saved, ChangeTimeline.EventType.COMMENT_ADDED, actorName,
+                "Linked to Incident: " + incidentId);
+        return saved;
+    }
+
+    /**
+     * Link change với problem.
+     */
+    public ChangeRequest linkProblem(Long changeId, String problemId, String actorName) {
+        ChangeRequest change = getChangeById(changeId);
+        String current = change.getLinkedTickets();
+        if (current == null || current.isBlank()) {
+            change.setLinkedTickets("PRB:" + problemId);
+        } else if (!current.contains("PRB:" + problemId)) {
+            change.setLinkedTickets(current + ",PRB:" + problemId);
+        }
+        change.setUpdatedBy(actorName);
+        ChangeRequest saved = changeRepository.save(change);
+        addTimelineEvent(saved, ChangeTimeline.EventType.COMMENT_ADDED, actorName,
+                "Linked to Problem: " + problemId);
+        return saved;
+    }
+
     // ==================== Exceptions ====================
 
     public static class ChangeNotFoundException extends RuntimeException {

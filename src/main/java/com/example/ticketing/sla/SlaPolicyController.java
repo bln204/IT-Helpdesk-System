@@ -36,7 +36,7 @@ public class SlaPolicyController {
      * GET /api/sla-policies
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<SlaPolicyDtos.SlaPolicyResponse>> getAllPolicies() {
         log.info("GET /api/sla-policies - Fetching all SLA policies");
         List<SlaPolicy> policies = slaPolicyService.getAllPolicies();

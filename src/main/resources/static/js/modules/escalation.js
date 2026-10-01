@@ -13,15 +13,16 @@ const Escalation = (() => {
     // ==================== Initialization ====================
 
     function init() {
+        console.log('[Escalation] init() called');
         if (typeof window.Auth === 'undefined') {
-            console.error('Auth module not found');
+            console.error('[Escalation] Auth module not found');
             return;
         }
 
-        Auth.onAuthReady(() => {
-            setupEventListeners();
-            loadRules();
-        });
+        // Directly setup and load (auth is already validated during login)
+        console.log('[Escalation] Token valid:', window.Auth.isTokenValid());
+        setupEventListeners();
+        loadRules();
     }
 
     function setupEventListeners() {
@@ -64,14 +65,17 @@ const Escalation = (() => {
     // ==================== API Calls ====================
 
     async function loadRules() {
+        console.log('[Escalation] loadRules() called');
         try {
             const response = await fetch(`${API_BASE}/rules`, { headers: window.Auth.getAuthHeaders() });
+            console.log('[Escalation] Response status:', response.status);
             if (!response.ok) throw new Error('Failed to load escalation rules');
 
             rules = await response.json();
+            console.log('[Escalation] Rules loaded:', rules);
             renderRulesList();
         } catch (error) {
-            console.error('Error loading escalation rules:', error);
+            console.error('[Escalation] Error loading escalation rules:', error);
             if (typeof Toast !== 'undefined') {
                 Toast.show('Không thể tải danh sách escalation rules', 'error');
             }

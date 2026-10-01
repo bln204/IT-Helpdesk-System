@@ -94,9 +94,9 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) -> {
                     log.error("AUTH ENTRY POINT: {} {} - {}", request.getMethod(), request.getRequestURI(), authException.getMessage());
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"Access denied\",\"message\":\"" + authException.getMessage() + "\"}");
+                    response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"" + authException.getMessage() + "\"}");
                 })
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     log.error("ACCESS DENIED: {} {} - {}", request.getMethod(), request.getRequestURI(), accessDeniedException.getMessage());

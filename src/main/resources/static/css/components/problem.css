@@ -88,6 +88,17 @@
   border-top: 1px solid var(--border);
 }
 
+.problem-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.problem-add-known-error-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
 .problem-status {
   font-size: 0.75rem;
   padding: 3px 10px;
@@ -192,6 +203,88 @@
   gap: 12px;
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+.known-error-workaround-preview {
+  font-size: 0.78rem;
+  color: var(--success) !important;
+  background: rgba(46, 204, 113, 0.1);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* Known Error Detail Modal */
+.known-error-modal-content {
+  max-width: 700px;
+}
+
+.known-error-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.known-error-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.known-error-detail-header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.known-error-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.error-code-large {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.known-error-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.known-error-workaround-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  border-left: 4px solid var(--success);
+}
+
+.known-error-workaround-section h5 {
+  color: var(--success);
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.known-error-workaround-section textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.known-error-workaround-section textarea:focus {
+  outline: none;
+  border-color: var(--primary);
 }
 
 /* Problem Tabs */

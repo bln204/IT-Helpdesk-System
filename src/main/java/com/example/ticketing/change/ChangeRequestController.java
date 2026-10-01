@@ -35,7 +35,7 @@ public class ChangeRequestController {
      * GET /api/changes
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<ChangeRequestDto>> getAllChanges(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
@@ -90,7 +90,7 @@ public class ChangeRequestController {
      * POST /api/changes
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> createChange(@RequestBody ChangeRequestDto request) {
         log.info("POST /api/changes - Creating: {}", request.getTitle());
 
@@ -127,7 +127,7 @@ public class ChangeRequestController {
      * PUT /api/changes/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> updateChange(
             @PathVariable Long id,
             @RequestBody ChangeRequestDto request) {
@@ -177,7 +177,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/submit
      */
     @PostMapping("/{id}/submit")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> submitForReview(@PathVariable Long id) {
         log.info("POST /api/changes/{}/submit", id);
         ChangeRequest updated = changeService.submitForReview(id, "admin");
@@ -189,7 +189,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/approve
      */
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> approveChange(
             @PathVariable Long id,
             @RequestBody ApprovalRequest request) {
@@ -203,7 +203,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/reject
      */
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> rejectChange(
             @PathVariable Long id,
             @RequestBody ApprovalRequest request) {
@@ -217,7 +217,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/start
      */
     @PostMapping("/{id}/start")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> startImplementation(@PathVariable Long id) {
         log.info("POST /api/changes/{}/start", id);
         ChangeRequest updated = changeService.startImplementation(id, "admin");
@@ -229,7 +229,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/complete
      */
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> completeChange(
             @PathVariable Long id,
             @RequestBody CompletionRequest request) {
@@ -243,7 +243,7 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/cancel
      */
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> cancelChange(
             @PathVariable Long id,
             @RequestBody CancelRequest request) {
@@ -265,6 +265,93 @@ public class ChangeRequestController {
         return ResponseEntity.ok(timeline.stream()
                 .map(ChangeTimelineDto::fromEntity)
                 .collect(Collectors.toList()));
+    }
+
+    // ==================== CAB Calendar ====================
+
+    /**
+     * Lấy calendar của CAB.
+     * GET /api/changes/cab/calendar
+     */
+    @GetMapping("/cab/calendar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<List<ChangeRequestDto>> getCabCalendar(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        log.info("GET /api/changes/cab/calendar");
+        List<ChangeRequest> changes = changeService.getScheduledChanges();
+        return ResponseEntity.ok(changes.stream()
+                .map(ChangeRequestDto::fromEntity)
+                .collect(Collectors.toList()));
+    }
+
+    /**
+     * Lấy CAB dashboard - pending approvals.
+     * GET /api/changes/cab/dashboard
+     */
+    @GetMapping("/cab/dashboard")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<CabDashboardResponse> getCabDashboard() {
+        log.info("GET /api/changes/cab/dashboard");
+        List<ChangeRequest> pending = changeService.getPendingCABReview();
+        long totalPending = pending.size();
+        long urgentCount = pending.stream()
+                .filter(c -> c.getRiskLevel() == ChangeRequest.RiskLevel.HIGH || c.getRiskLevel() == ChangeRequest.RiskLevel.CRITICAL)
+                .count();
+        return ResponseEntity.ok(new CabDashboardResponse(pending, totalPending, urgentCount));
+    }
+
+    // ==================== Linking ====================
+
+    /**
+     * Link change với incident.
+     * POST /api/changes/{id}/link-incident
+     */
+    @PostMapping("/{id}/link-incident")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<ChangeRequestDto> linkIncident(
+            @PathVariable Long id,
+            @RequestBody LinkTicketRequest request) {
+        log.info("POST /api/changes/{}/link-incident - incident: {}", id, request.getTicketId());
+        ChangeRequest updated = changeService.linkIncident(id, request.getTicketId(), "admin");
+        return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * Link change với problem.
+     * POST /api/changes/{id}/link-problem
+     */
+    @PostMapping("/{id}/link-problem")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<ChangeRequestDto> linkProblem(
+            @PathVariable Long id,
+            @RequestBody LinkTicketRequest request) {
+        log.info("POST /api/changes/{}/link-problem - problem: {}", id, request.getTicketId());
+        ChangeRequest updated = changeService.linkProblem(id, request.getTicketId(), "admin");
+        return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
+    }
+
+    // ==================== Request Classes ====================
+
+    public static class LinkTicketRequest {
+        private String ticketId;
+        public String getTicketId() { return ticketId; }
+    }
+
+    public static class CabDashboardResponse {
+        private List<ChangeRequestDto> pendingChanges;
+        private long totalPending;
+        private long urgentCount;
+
+        public CabDashboardResponse(List<ChangeRequest> pending, long total, long urgent) {
+            this.pendingChanges = pending.stream().map(ChangeRequestDto::fromEntity).collect(Collectors.toList());
+            this.totalPending = total;
+            this.urgentCount = urgent;
+        }
+
+        public List<ChangeRequestDto> getPendingChanges() { return pendingChanges; }
+        public long getTotalPending() { return totalPending; }
+        public long getUrgentCount() { return urgentCount; }
     }
 
     // ==================== Exception Handlers ====================

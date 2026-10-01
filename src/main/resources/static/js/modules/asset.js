@@ -276,7 +276,11 @@ const AssetManagement = (() => {
     async function loadAssetById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
         if (!response.ok) throw new Error('Failed to load asset');
-        return await response.json();
+        const data = await response.json();
+        console.log('loadAssetById - raw response:', data);
+        console.log('loadAssetById - purchaseCost:', data.purchaseCost);
+        console.log('loadAssetById - purchaseDate:', data.purchaseDate);
+        return data;
     }
 
     async function submitAsset(data) {
@@ -293,6 +297,8 @@ const AssetManagement = (() => {
     }
 
     async function updateAsset(id, data) {
+        console.log('updateAsset called with:', JSON.stringify(data));
+        console.log('data type:', typeof data);
         const response = await fetch(`${API_BASE}/${id}`, {
             method: 'PUT',
             headers: window.Auth.getAuthHeaders(),
@@ -803,8 +809,8 @@ const AssetManagement = (() => {
             <div class="form-tab-content" data-tab="financial">
                 <div class="form-group">
                     <label class="form-field"><span>Purchase Date</span><input type="date" id="asset-purchase-date" value="${asset.purchaseDate || ''}" /></label>
-                    <label class="form-field"><span>Purchase Cost</span><input type="number" id="asset-purchase-cost" value="${asset.purchaseCost || ''}" min="0" step="0.01" /></label>
-                    <label class="form-field"><span>Current Value</span><input type="number" id="asset-current-value" value="${asset.currentValue || ''}" min="0" step="0.01" /></label>
+                    <label class="form-field"><span>Purchase Cost</span><input type="number" id="asset-purchase-cost" value="${asset.purchaseCost || ''}" min="0" max="9999999999.99" step="0.01" /></label>
+                    <label class="form-field"><span>Current Value</span><input type="number" id="asset-current-value" value="${asset.currentValue || ''}" min="0" max="9999999999.99" step="0.01" /></label>
                     <label class="form-field"><span>Depreciation Rate (%)</span><input type="number" id="asset-depreciation-rate" value="${asset.depreciationRate || ''}" min="0" max="100" step="0.01" /></label>
                     <label class="form-field"><span>Warranty Expiry</span><input type="date" id="asset-warranty-expiry" value="${asset.warrantyExpiryDate || ''}" /></label>
                     <label class="form-field"><span>Lease Expiry</span><input type="date" id="asset-lease-expiry" value="${asset.leaseExpiryDate || ''}" /></label>
@@ -985,11 +991,27 @@ const AssetManagement = (() => {
         }
 
         const data = buildAssetData();
+        const isUpdate = !!currentAsset;
+        const assetId = currentAsset?.id;
 
         try {
-            if (currentAsset) {
-                await updateAsset(currentAsset.id, data);
+            if (isUpdate) {
+                await updateAsset(assetId, data);
                 Toast.show('Asset updated successfully', 'success');
+                // Reset state and reload asset detail after a delay to ensure DB commit
+                currentAsset = null;
+                closeModal();
+                // Delay to ensure server commits the transaction
+                setTimeout(() => {
+                    loadAssetById(assetId).then(asset => {
+                        currentAsset = asset;
+                        document.getElementById('asset-modal-title').textContent = asset.assetNumber;
+                        document.getElementById('asset-modal').classList.add('detail-mode');
+                        renderAssetDetail(asset);
+                        document.getElementById('asset-modal').classList.remove('hidden');
+                        document.body.classList.add('modal-open');
+                    });
+                }, 300);
             } else {
                 await submitAsset(data);
                 Toast.show('Asset created successfully', 'success');
@@ -1023,7 +1045,7 @@ const AssetManagement = (() => {
             return el && el.value ? el.value : null;
         };
 
-        return {
+        const data = {
             assetNumber: getVal('asset-number') || null,
             name: getVal('asset-name'),
             assetType: getSelect('asset-type'),
@@ -1075,6 +1097,7 @@ const AssetManagement = (() => {
             notes: getVal('asset-notes') || null,
             photoUrl: getVal('asset-photo-url') || null
         };
+        return data;
     }
 
     // ==================== Helpers ====================

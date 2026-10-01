@@ -49,4 +49,37 @@ public interface ChangeRequestRepository extends JpaRepository<ChangeRequest, Lo
            "cr.status NOT IN ('COMPLETED', 'CANCELLED', 'REJECTED') " +
            "ORDER BY cr.priority DESC, cr.riskScore DESC")
     List<ChangeRequest> findActiveChanges();
+
+    List<ChangeRequest> findByStatusInOrderByScheduledStartDateAsc(List<ChangeRequest.ChangeStatus> statuses);
+
+    List<ChangeRequest> findByStatusInOrderByCreatedAtDesc(List<ChangeRequest.ChangeStatus> statuses);
+
+    // New methods added
+
+    /**
+     * Find changes by status and review status (ApprovalStatus).
+     * Review status is determined by the approval workflow.
+     */
+    @Query("SELECT DISTINCT cr FROM ChangeRequest cr " +
+           "LEFT JOIN cr.approvals ca " +
+           "WHERE cr.status = :status AND ca.status = :reviewStatus")
+    List<ChangeRequest> findByStatusAndReviewStatus(
+            @Param("status") ChangeRequest.ChangeStatus status,
+            @Param("reviewStatus") ChangeApproval.ApprovalStatus reviewStatus);
+
+    /**
+     * Find changes by change type and status.
+     */
+    List<ChangeRequest> findByChangeTypeAndStatus(
+            ChangeRequest.ChangeType changeType, 
+            ChangeRequest.ChangeStatus status);
+
+    /**
+     * Find changes by review status (ApprovalStatus).
+     * Returns changes that have approvals with the given review status.
+     */
+    @Query("SELECT DISTINCT cr FROM ChangeRequest cr " +
+           "JOIN cr.approvals ca " +
+           "WHERE ca.status = :reviewStatus")
+    List<ChangeRequest> findByReviewStatus(@Param("reviewStatus") ChangeApproval.ApprovalStatus reviewStatus);
 }

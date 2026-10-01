@@ -786,10 +786,8 @@
   background: var(--bg);
 }
 
-.tab-content {
-  display: none;
-  animation: fadeIn 0.2s ease;
-}
+/* Tab content styling - moved to tabs.css */
+/* Note: .tab-content display is controlled by .hidden class in tabs.css */
 
 .form-tab-content {
   display: none;

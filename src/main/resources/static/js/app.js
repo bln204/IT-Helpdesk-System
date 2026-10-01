@@ -42,6 +42,23 @@ window.ProblemManagement = ProblemManagement;
 import { ChangeManagement } from './modules/change.js';
 window.ChangeManagement = ChangeManagement;
 
+// ==================== Edge Case & Error Handling Modules ====================
+
+// Import XSS Sanitization module (auto-applied in service modules)
+import './core/sanitize.js';
+
+// Import Draft Service for auto-save functionality
+import { setupBeforeUnloadWarning, listDrafts } from './services/draftService.js';
+window.DraftService = { setupBeforeUnloadWarning, listDrafts };
+
+// Import Concurrent Edit module
+import { setupConcurrentEditWarning } from './modules/concurrentEdit.js';
+window.ConcurrentEdit = { setupConcurrentEditWarning };
+
+// Import Loading Spinner
+import { showLoading, hideLoading, resetLoading } from './ui/loading.js';
+window.LoadingUI = { showLoading, hideLoading, resetLoading };
+
 // ==================== Asset Management ====================
 
 // Import Asset module
@@ -55,6 +72,10 @@ window.AssetLinkModule = AssetLinkModule;
 // Import Analytics module
 import { AnalyticsModule } from './modules/analytics.js';
 window.AnalyticsModule = AnalyticsModule;
+
+// Import Reports module
+import * as ReportModule from './modules/reports.js';
+window.ReportModule = ReportModule;
 
 // Import services
 import { 
@@ -76,7 +97,7 @@ import {
   canManageUsers as checkCanManageUsers,
   isITStaff 
 } from './services/userService.js';
-import { loadDepartments } from './services/departmentService.js';
+import { loadDepartments, loadDepartmentsTable } from './services/departmentService.js';
 
 // Import UI utilities
 import { 
@@ -99,6 +120,45 @@ setStopNotificationPolling(stopNotificationPolling);
 // Current user reference
 let currentUser = null;
 
+/**
+ * Check for draft recovery on page load
+ * Shows recovery prompt if unsaved drafts exist
+ */
+const checkDraftRecovery = () => {
+    // Only check if on ticket creation page
+    const createForm = document.getElementById('create-form');
+    if (!createForm) return;
+    
+    // Check for drafts
+    const drafts = listDrafts();
+    const ticketDrafts = drafts.filter(d => d.type === 'ticket-create');
+    
+    if (ticketDrafts.length > 0) {
+        const latestDraft = ticketDrafts[0];
+        const recovery = confirm(
+            `Tìm thấy bản nháp được lưu lúc ${latestDraft.age}.\n\n` +
+            `Bạn có muốn khôi phục nội dung đã nhập trước đó không?\n\n` +
+            `Nhấn OK để khôi phục.\n` +
+            `Nhấn Cancel để xóa bản nháp và bắt đầu mới.`
+        );
+        
+        if (recovery && latestDraft.formData) {
+            // Populate form with draft data
+            Object.entries(latestDraft.formData).forEach(([key, value]) => {
+                const input = createForm.querySelector(`[name="${key}"]`);
+                if (input) {
+                    input.value = value;
+                }
+            });
+        } else {
+            // Clear the draft
+            import('./services/draftService.js').then(module => {
+                module.deleteDraft(latestDraft.key);
+            });
+        }
+    }
+};
+
 // Initialize application
 const init = async () => {
   // Initialize elements
@@ -118,6 +178,12 @@ const init = async () => {
 
   // Initialize ticket-specific events
   initTicketEvents();
+  
+  // Initialize beforeunload warning for unsaved changes
+  setupBeforeUnloadWarning();
+  
+  // Check for draft recovery on page load
+  checkDraftRecovery();
   
   // Update token status and nav visibility
   updateTokenStatus();
@@ -200,7 +266,10 @@ const loadSlaPolicies = async () => {
   console.log('[app.js] window.Auth:', typeof window.Auth);
   
   if (window.SlaPolicy) {
+    console.log('[app.js] Calling SlaPolicy.init()...');
     window.SlaPolicy.init();
+  } else {
+    console.error('[app.js] window.SlaPolicy is not defined!');
   }
 };
 
@@ -244,11 +313,22 @@ window.addEventListener('hashchange', () => {
 
 // Watch for tab changes to load SLA policies
 document.addEventListener('tabChanged', (e) => {
+  console.log('[app.js] tabChanged event received:', e.detail?.tab);
   if (e.detail && e.detail.tab === 'sla-policies') {
+    console.log('[app.js] Calling loadSlaPolicies...');
     loadSlaPolicies();
   }
   if (e.detail && e.detail.tab === 'escalation') {
+    console.log('[app.js] Calling loadEscalationRules...');
     loadEscalationRules();
+  }
+  if (e.detail && e.detail.tab === 'users') {
+    console.log('[app.js] Calling loadAdminUsers...');
+    loadAdminUsers();
+  }
+  if (e.detail && e.detail.tab === 'departments') {
+    console.log('[app.js] Calling loadDepartmentsTable...');
+    loadDepartmentsTable();
   }
 });
 

@@ -58,7 +58,7 @@ public class ServiceRequestController {
      * GET /api/service-requests
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<ServiceRequestDto>> getAllRequests(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
@@ -140,7 +140,7 @@ public class ServiceRequestController {
      * PUT /api/service-requests/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> updateRequest(
             @PathVariable Long id,
             @RequestBody ServiceRequestRequest request) {
@@ -175,7 +175,7 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/status
      */
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> updateStatus(
             @PathVariable Long id,
             @RequestBody StatusUpdateRequest request) {
@@ -195,7 +195,7 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/approve
      */
     @PatchMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> approveRequest(
             @PathVariable Long id,
             @RequestBody ApprovalRequest request) {
@@ -215,7 +215,7 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/reject
      */
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> rejectRequest(
             @PathVariable Long id,
             @RequestBody ApprovalRequest request) {
@@ -235,7 +235,7 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/assign
      */
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> assignRequest(
             @PathVariable Long id,
             @RequestBody AssignRequest request) {
@@ -301,7 +301,131 @@ public class ServiceRequestController {
                 .body(new ErrorResponse("BAD_REQUEST", ex.getMessage()));
     }
 
+    @ExceptionHandler(NullPointerException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
+        log.error("NullPointerException: ", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
+        log.error("General error: ", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+    }
+
+    /**
+     * Tạo service request mới (cho End User - tự động lấy user info từ header).
+     * POST /api/service-requests/my
+     */
+    @PostMapping("/my")
+    public ResponseEntity<ServiceRequestDto> createRequestForCurrentUser(
+            @RequestBody ServiceRequestRequest request,
+            @RequestHeader(value = "X-User-Username", required = false) String username,
+            @RequestHeader(value = "X-User-Name", required = false) String userName,
+            @RequestHeader(value = "X-User-Email", required = false) String email,
+            @RequestHeader(value = "X-User-Department", required = false) String department) {
+        log.info("POST /api/service-requests/my - by: {}", username);
+
+        ServiceRequest serviceRequest = new ServiceRequest();
+        serviceRequest.setTitle(request.getTitle());
+        serviceRequest.setDescription(request.getDescription());
+        serviceRequest.setServiceId(request.getServiceId());
+        serviceRequest.setPriority(request.getPriority());
+        serviceRequest.setFormData(request.getFormData());
+
+        ServiceRequest created = serviceRequestService.createRequest(
+                serviceRequest,
+                username,
+                userName,
+                email,
+                department
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ServiceRequestDto.fromEntity(created));
+    }
+
+    /**
+     * IT Staff nhận request (Take Ownership).
+     * PATCH /api/service-requests/{id}/take-ownership
+     */
+    @PatchMapping("/{id}/take-ownership")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<ServiceRequestDto> takeOwnership(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Username", required = false) String username) {
+        log.info("PATCH /api/service-requests/{}/take-ownership - by: {}", id, username);
+
+        ServiceRequest updated = serviceRequestService.takeOwnership(id, username);
+
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * IT Staff hoàn thành request.
+     * PATCH /api/service-requests/{id}/complete
+     */
+    @PatchMapping("/{id}/complete")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<ServiceRequestDto> completeRequest(
+            @PathVariable Long id,
+            @RequestBody CompletionRequest request,
+            @RequestHeader(value = "X-User-Username", required = false) String username) {
+        log.info("PATCH /api/service-requests/{}/complete - by: {}", id, username);
+
+        ServiceRequest updated = serviceRequestService.completeRequest(id, request.getResolution(), username);
+
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * User xác nhận hoàn thành.
+     * PATCH /api/service-requests/{id}/confirm
+     */
+    @PatchMapping("/{id}/confirm")
+    public ResponseEntity<ServiceRequestDto> confirmCompletion(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Username", required = false) String username) {
+        log.info("PATCH /api/service-requests/{}/confirm - by: {}", id, username);
+
+        ServiceRequest updated = serviceRequestService.confirmCompletion(id, username);
+
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * User yêu cầu mở lại.
+     * PATCH /api/service-requests/{id}/reopen
+     */
+    @PatchMapping("/{id}/reopen")
+    public ResponseEntity<ServiceRequestDto> reopenRequest(
+            @PathVariable Long id,
+            @RequestBody ReopenRequest request,
+            @RequestHeader(value = "X-User-Username", required = false) String username) {
+        log.info("PATCH /api/service-requests/{}/reopen - by: {}", id, username);
+
+        ServiceRequest updated = serviceRequestService.reopenRequest(id, request.getReason(), username);
+
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
     // ==================== DTOs ====================
+
+    public static class CompletionRequest {
+        private String resolution;
+
+        public String getResolution() { return resolution; }
+    }
+
+    public static class ReopenRequest {
+        private String reason;
+
+        public String getReason() { return reason; }
+    }
 
     public static class ErrorResponse {
         private String code;

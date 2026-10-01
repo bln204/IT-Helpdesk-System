@@ -20,6 +20,7 @@ import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketNotFoundException;
 import com.example.ticketing.ticket.TicketTypes.TicketPriority;
+import com.example.ticketing.sla.SlaPolicyService;
 
 /**
  * Service cho Incident Management.
@@ -36,6 +37,8 @@ public class IncidentService {
     private final TicketRepository ticketRepository;
     private final UserAccountRepository userAccountRepository;
     private final TeamRepository teamRepository;
+    private final SlaPolicyService slaPolicyService;
+    private final IncidentNotificationService incidentNotificationService;
 
     public IncidentService(
             IncidentRepository incidentRepository,
@@ -43,13 +46,17 @@ public class IncidentService {
             IncidentTimelineRepository timelineRepository,
             TicketRepository ticketRepository,
             UserAccountRepository userAccountRepository,
-            TeamRepository teamRepository) {
+            TeamRepository teamRepository,
+            SlaPolicyService slaPolicyService,
+            IncidentNotificationService incidentNotificationService) {
         this.incidentRepository = incidentRepository;
         this.linkRepository = linkRepository;
         this.timelineRepository = timelineRepository;
         this.ticketRepository = ticketRepository;
         this.userAccountRepository = userAccountRepository;
         this.teamRepository = teamRepository;
+        this.slaPolicyService = slaPolicyService;
+        this.incidentNotificationService = incidentNotificationService;
     }
 
     // ==================== CRUD Operations ====================
@@ -64,6 +71,16 @@ public class IncidentService {
         incident.setIncidentNumber(generateIncidentNumber());
         incident.setStatus(Incident.IncidentStatus.INVESTIGATING);
         incident.setCreatedBy(createdBy);
+        
+        // Set reportedByUsername nếu chưa có
+        if (incident.getReportedByUsername() == null || incident.getReportedByUsername().isBlank()) {
+            incident.setReportedByUsername(createdBy);
+        }
+
+        // Calculate SLA deadlines based on priority
+        if (incident.getPriority() != null) {
+            calculateAndSetSlaDeadlines(incident);
+        }
 
         Incident saved = incidentRepository.save(incident);
 
@@ -71,7 +88,26 @@ public class IncidentService {
         logTimeline(saved, IncidentTimeline.EventType.CREATED,
                 "Incident được tạo", createdBy, null, null);
 
+        // Gửi notification về incident mới
+        incidentNotificationService.notifyIncidentCreated(saved);
+
         return saved;
+    }
+    
+    /**
+     * Tính và set SLA deadlines cho incident dựa trên priority.
+     */
+    private void calculateAndSetSlaDeadlines(Incident incident) {
+        SlaPolicyService.SlaDeadline deadline = slaPolicyService.calculateSlaDeadlines(
+                incident.getPriority(), 
+                LocalDateTime.now()
+        );
+        
+        incident.setResponseDeadline(deadline.getResponseDeadline());
+        incident.setResolutionDeadline(deadline.getResolutionDeadline());
+        incident.setSlaResponseMinutes(deadline.getResponseMinutes());
+        incident.setSlaResolutionMinutes(deadline.getResolutionMinutes());
+        incident.setSlaPolicyName("SLA Policy");
     }
 
     /**
@@ -113,9 +149,34 @@ public class IncidentService {
 
     /**
      * Xóa incident.
+     * Chỉ ADMIN, TRUONG_PHONG IT, hoặc người tạo mới được xóa.
      */
-    public void deleteIncident(Long id) {
-        log.info("Deleting incident: {}", id);
+    public void deleteIncident(Long id, String username, String userRole) {
+        log.info("Delete incident: {} by user: {} ({})", id, username, userRole);
+        
+        Incident incident = getIncidentById(id);
+        
+        // Check permission: ADMIN, TRUONG_PHONG IT, hoặc người tạo
+        boolean isCreator = incident.getCreatedBy() != null && 
+                           incident.getCreatedBy().equals(username);
+        boolean isAdmin = "ADMIN".equals(userRole);
+        
+        // TRUONG_PHONG chỉ xóa được nếu thuộc phòng IT
+        boolean isTruongPhongIT = false;
+        if ("TRUONG_PHONG".equals(userRole)) {
+            UserAccount user = userAccountRepository.findByUsername(username).orElse(null);
+            if (user != null && user.getDepartment() != null) {
+                String deptName = user.getDepartment().getName().toUpperCase();
+                if (deptName.contains("IT") || deptName.contains("INFORMATION")) {
+                    isTruongPhongIT = true;
+                }
+            }
+        }
+        
+        if (!isAdmin && !isCreator && !isTruongPhongIT) {
+            throw new SecurityException("Bạn không có quyền xóa incident này");
+        }
+        
         incidentRepository.deleteById(id);
     }
 
@@ -155,6 +216,9 @@ public class IncidentService {
                 "Trạng thái thay đổi: " + oldStatus + " → " + newStatus,
                 actorName, oldStatus.name(), newStatus.name());
 
+        // Gửi notification
+        incidentNotificationService.notifyStatusChanged(saved, oldStatus, newStatus, actorName);
+
         return saved;
     }
 
@@ -177,6 +241,156 @@ public class IncidentService {
         logTimeline(saved, IncidentTimeline.EventType.ASSIGNEE_CHANGED,
                 "Người phụ trách thay đổi: " + oldAssignee + " → " + assigneeUsername,
                 actorName, oldAssignee, assigneeUsername);
+
+        // Gửi notification
+        if (oldAssignee != null && !oldAssignee.equals(assigneeUsername)) {
+            // Reassignment
+            incidentNotificationService.notifyIncidentReassigned(saved, oldAssignee, assigneeUsername, actorName);
+        } else {
+            // New assignment
+            incidentNotificationService.notifyIncidentAssigned(saved, actorName);
+        }
+
+        return saved;
+    }
+
+    /**
+     * IT Staff nhận incident (Take Ownership).
+     * - Assign cho user hiện tại
+     * - Đổi status từ INVESTIGATING → IN_PROGRESS
+     */
+    public Incident takeOwnership(Long id, String username) {
+        Incident incident = getIncidentById(id);
+
+        // Get current user
+        UserAccount user = userAccountRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
+        
+        Incident.IncidentStatus oldStatus = incident.getStatus();
+        String oldAssignee = incident.getAssignedTo() != null ? 
+                incident.getAssignedTo().getUsername() : null;
+
+        // Assign to current user
+        incident.setAssignedTo(user);
+        incident.setStatus(Incident.IncidentStatus.IN_PROGRESS);
+
+        Incident saved = incidentRepository.save(incident);
+
+        // Log timeline
+        logTimeline(saved, IncidentTimeline.EventType.ASSIGNEE_CHANGED,
+                "Nhận incident: " + username + " → " + username,
+                username, null, username);
+        logTimeline(saved, IncidentTimeline.EventType.STATUS_CHANGED,
+                "Trạng thái thay đổi: " + oldStatus + " → " + Incident.IncidentStatus.IN_PROGRESS,
+                username, oldStatus.name(), Incident.IncidentStatus.IN_PROGRESS.name());
+
+        // Gửi notification về việc nhận incident và đổi status
+        incidentNotificationService.notifyIncidentAssigned(saved, username);
+        incidentNotificationService.notifyStatusChanged(saved, oldStatus, Incident.IncidentStatus.IN_PROGRESS, username);
+
+        return saved;
+    }
+
+    /**
+     * IT Staff resolve incident.
+     * - Đổi status thành RESOLVED
+     * - Set resolvedAt
+     * - Lưu resolution
+     */
+    public Incident resolveIncident(Long id, String resolution, String username) {
+        Incident incident = getIncidentById(id);
+        Incident.IncidentStatus oldStatus = incident.getStatus();
+
+        incident.setStatus(Incident.IncidentStatus.RESOLVED);
+        incident.setResolvedAt(LocalDateTime.now());
+        if (resolution != null && !resolution.isBlank()) {
+            incident.setResolution(resolution);
+        }
+
+        Incident saved = incidentRepository.save(incident);
+
+        // Log timeline
+        logTimeline(saved, IncidentTimeline.EventType.STATUS_CHANGED,
+                "Trạng thái thay đổi: " + oldStatus + " → " + Incident.IncidentStatus.RESOLVED,
+                username, oldStatus.name(), Incident.IncidentStatus.RESOLVED.name());
+        if (resolution != null && !resolution.isBlank()) {
+            logTimeline(saved, IncidentTimeline.EventType.NOTE_ADDED,
+                    "Giải pháp được cung cấp",
+                    username, null, resolution);
+        }
+
+        // Gửi notification
+        incidentNotificationService.notifyIncidentResolved(saved, username);
+
+        return saved;
+    }
+
+    /**
+     * User xác nhận resolution → Close incident.
+     */
+    public Incident confirmResolution(Long id, String username) {
+        Incident incident = getIncidentById(id);
+        Incident.IncidentStatus oldStatus = incident.getStatus();
+
+        incident.setStatus(Incident.IncidentStatus.CLOSED);
+        incident.setClosedAt(LocalDateTime.now());
+
+        Incident saved = incidentRepository.save(incident);
+
+        // Log timeline
+        logTimeline(saved, IncidentTimeline.EventType.STATUS_CHANGED,
+                "Người dùng xác nhận giải pháp - Đóng incident",
+                username, oldStatus.name(), Incident.IncidentStatus.CLOSED.name());
+
+        // Gửi notification
+        incidentNotificationService.notifyIncidentClosed(saved, username);
+
+        return saved;
+    }
+
+    /**
+     * User yêu cầu reopen incident.
+     * - Đổi status từ RESOLVED → IN_PROGRESS
+     * - Clear resolvedAt
+     */
+    public Incident reopenIncident(Long id, String reason, String username) {
+        Incident incident = getIncidentById(id);
+        Incident.IncidentStatus oldStatus = incident.getStatus();
+
+        incident.setStatus(Incident.IncidentStatus.IN_PROGRESS);
+        incident.setResolvedAt(null);
+
+        Incident saved = incidentRepository.save(incident);
+
+        // Log timeline
+        logTimeline(saved, IncidentTimeline.EventType.STATUS_CHANGED,
+                "Người dùng yêu cầu mở lại: " + (reason != null ? reason : "Không có lý do"),
+                username, oldStatus.name(), Incident.IncidentStatus.IN_PROGRESS.name());
+
+        // Gửi notification
+        incidentNotificationService.notifyIncidentReopened(saved, username);
+
+        return saved;
+    }
+
+    /**
+     * Cập nhật priority của incident (với SLA recalculation).
+     */
+    public Incident updatePriority(Long id, TicketPriority newPriority, String actorName) {
+        Incident incident = getIncidentById(id);
+        TicketPriority oldPriority = incident.getPriority();
+
+        incident.setPriority(newPriority);
+
+        // Recalculate SLA deadlines based on new priority
+        calculateAndSetSlaDeadlines(incident);
+
+        Incident saved = incidentRepository.save(incident);
+
+        // Log timeline
+        logTimeline(saved, IncidentTimeline.EventType.STATUS_CHANGED,
+                "Priority thay đổi: " + (oldPriority != null ? oldPriority : "N/A") + " → " + newPriority,
+                actorName, oldPriority != null ? oldPriority.name() : null, newPriority.name());
 
         return saved;
     }
@@ -322,7 +536,15 @@ public class IncidentService {
      */
     @Transactional(readOnly = true)
     public Page<Incident> getAllIncidents(Pageable pageable) {
-        return incidentRepository.findAllByOrderByCreatedAtDesc(pageable);
+        log.info("getAllIncidents called with pageable: {}", pageable);
+        try {
+            Page<Incident> result = incidentRepository.findAllByOrderByCreatedAtDesc(pageable);
+            log.info("Found {} incidents", result.getTotalElements());
+            return result;
+        } catch (Exception e) {
+            log.error("Error in getAllIncidents", e);
+            throw e;
+        }
     }
 
     /**

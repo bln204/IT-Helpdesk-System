@@ -33,7 +33,7 @@ public class ChangeTimeline {
     @Column(name = "actor_role", length = 50)
     private String actorRole;
 
-    @Column(name = "event_data", columnDefinition = "jsonb")
+    @Column(name = "event_data", columnDefinition = "TEXT")
     private String eventData;
 
     @Column(columnDefinition = "TEXT")
@@ -57,7 +57,11 @@ public class ChangeTimeline {
         CANCELLED,
         COMMENT_ADDED,
         FILE_ATTACHED,
-        TASK_COMPLETED
+        TASK_COMPLETED,
+        REVIEW_STARTED,
+        REVIEW_COMPLETED,
+        CLOSED,
+        EMERGENCY_MODE
     }
 
     // ==================== Constructors ====================

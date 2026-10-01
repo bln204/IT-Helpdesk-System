@@ -28,14 +28,17 @@ public class AssetService {
     private final AssetRepository assetRepository;
     private final AssetMaintenanceRecordRepository maintenanceRepository;
     private final AssetAssignmentRepository assignmentRepository;
+    private final AssetIncidentLinkRepository assetIncidentLinkRepository;
 
     public AssetService(
             AssetRepository assetRepository,
             AssetMaintenanceRecordRepository maintenanceRepository,
-            AssetAssignmentRepository assignmentRepository) {
+            AssetAssignmentRepository assignmentRepository,
+            AssetIncidentLinkRepository assetIncidentLinkRepository) {
         this.assetRepository = assetRepository;
         this.maintenanceRepository = maintenanceRepository;
         this.assignmentRepository = assignmentRepository;
+        this.assetIncidentLinkRepository = assetIncidentLinkRepository;
     }
 
     // ==================== Asset CRUD ====================
@@ -80,9 +83,19 @@ public class AssetService {
      */
     public Asset updateAsset(Long id, Asset updates, String updatedBy) {
         Asset existing = getAssetById(id);
+        log.info("Update asset {} - existing assetNumber: {}", id, existing.getAssetNumber());
+        log.info("Update asset {} - incoming updates assetNumber: {}", id, updates.getAssetNumber());
+        log.info("Update asset {} - incoming name: {}", id, updates.getName());
         
-        existing.setAssetNumber(updates.getAssetNumber());
+        // Chỉ update asset_number nếu có giá trị mới (preserve existing value if null)
+        if (updates.getAssetNumber() != null && !updates.getAssetNumber().isBlank()) {
+            existing.setAssetNumber(updates.getAssetNumber());
+            log.info("Updated assetNumber to: {}", updates.getAssetNumber());
+        } else {
+            log.info("Keeping existing assetNumber: {}", existing.getAssetNumber());
+        }
         existing.setName(updates.getName());
+        log.info("Updated name to: {}", updates.getName());
         existing.setDescription(updates.getDescription());
         existing.setAssetType(updates.getAssetType());
         existing.setCategory(updates.getCategory());
@@ -300,6 +313,59 @@ public class AssetService {
                 HealthStatus.CRITICAL, 
                 HealthStatus.UNKNOWN
         ));
+    }
+
+    // ==================== Maintenance Schedule ====================
+
+    /**
+     * Lấy assets sắp đến lịch bảo trì.
+     */
+    @Transactional(readOnly = true)
+    public List<Asset> getUpcomingMaintenance(int days) {
+        LocalDate today = LocalDate.now();
+        LocalDate future = today.plusDays(days);
+        return assetRepository.findUpcomingMaintenance(today, future);
+    }
+
+    /**
+     * Lên lịch bảo trì cho asset.
+     */
+    public Asset scheduleMaintenance(Long assetId, LocalDate nextMaintenanceDate, String updatedBy) {
+        Asset asset = getAssetById(assetId);
+        asset.setNextMaintenanceDate(nextMaintenanceDate);
+        asset.setUpdatedBy(updatedBy);
+        return assetRepository.save(asset);
+    }
+
+    // ==================== Linking ====================
+
+    /**
+     * Link asset với incident.
+     */
+    public AssetIncidentLink linkIncident(Long assetId, String incidentIdStr, String linkedBy) {
+        Asset asset = getAssetById(assetId);
+        Long incidentId = Long.parseLong(incidentIdStr);
+        AssetIncidentLink link = new AssetIncidentLink(asset, incidentId, AssetIncidentLink.LinkRole.AFFECTED);
+        link.setCreatedBy(linkedBy);
+        return assetIncidentLinkRepository.save(link);
+    }
+
+    /**
+     * Lấy incidents liên quan.
+     */
+    @Transactional(readOnly = true)
+    public List<AssetIncidentLink> getLinkedIncidents(Long assetId) {
+        return assetIncidentLinkRepository.findByAssetIdOrderByCreatedAtDesc(assetId);
+    }
+
+    // ==================== Child Assets ====================
+
+    /**
+     * Lấy child assets.
+     */
+    @Transactional(readOnly = true)
+    public List<Asset> getChildAssets(Long parentId) {
+        return assetRepository.findByParentAssetId(parentId);
     }
 
     // ==================== Statistics ====================

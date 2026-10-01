@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.exception.UserNotApprovedActionException;
+import com.example.ticketing.security.JwtBlacklistService;
 
 import org.springframework.http.HttpStatus;
 
@@ -24,19 +25,22 @@ public class UserAdminService {
     private final PasswordEncoder passwordEncoder;
     private final UserAuditService userAuditService;
     private final NotificationService notificationService;
+    private final JwtBlacklistService jwtBlacklistService;
 
     public UserAdminService(
         UserAccountRepository userAccountRepository,
         DepartmentRepository departmentRepository,
         PasswordEncoder passwordEncoder,
         UserAuditService userAuditService,
-        NotificationService notificationService
+        NotificationService notificationService,
+        JwtBlacklistService jwtBlacklistService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.userAuditService = userAuditService;
         this.notificationService = notificationService;
+        this.jwtBlacklistService = jwtBlacklistService;
     }
 
     /**
@@ -78,6 +82,7 @@ public class UserAdminService {
             }
         } else if (role != UserRole.Role.ADMIN) {
             // Validation annotation sẽ catch trường hợp này, nhưng đây là backup
+            // TRUONG_PHONG tạo user sẽ luôn có departmentId được gán tự động từ controller
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                 "Phòng ban không được để trống. Vui lòng chọn một phòng ban.");
         }
@@ -99,6 +104,7 @@ public class UserAdminService {
             user.setApprovedAt(LocalDateTime.now());
             user.setApprovedBy(actorUsername);
             user.setEnabled(true); // Tự động enabled khi admin tạo
+            // passwordMustChange = true (default) để tăng bảo mật - user phải đổi password khi đăng nhập lần đầu
             
             userAuditService.log(
                 UserAuditAction.USER_CREATED,
@@ -107,7 +113,7 @@ public class UserAdminService {
                 username
             );
         }
-        // TRUONG_PHONG tạo: cần duyệt
+        // TRUONG_PHONG tạo: cần duyệt - user sẽ tự reset password khi đăng nhập lần đầu
         else if ("TRUONG_PHONG".equals(actorRole)) {
             // TRUONG_PHONG chỉ có thể tạo NHAN_VIEN
             if (role != UserRole.Role.NHAN_VIEN) {
@@ -266,6 +272,9 @@ public class UserAdminService {
     /**
      * Approve a pending user account.
      * Only ADMIN can approve users.
+     * Note: passwordMustChange is set during user creation (by TRUONG_PHONG),
+     * and should NOT be changed here. The user was created with a temporary password
+     * and will need to change it on first login.
      */
     public UserAccount approveUser(
         Long id,
@@ -291,6 +300,7 @@ public class UserAdminService {
         user.setApprovedBy(actorUsername);
         user.setRejectionReason(null);
         user.setEnabled(true); // Auto-enable when approved
+        // NOTE: passwordMustChange is kept as-is (set during user creation by TRUONG_PHONG)
 
         userAuditService.log(
             UserAuditAction.USER_APPROVED,
@@ -419,6 +429,13 @@ public class UserAdminService {
             String.valueOf(!enabled),
             String.valueOf(enabled)
         );
+        
+        // Revoke all user tokens when disabling, restore when enabling
+        if (!enabled) {
+            jwtBlacklistService.revokeAllUserTokens(user.getUsername());
+        } else {
+            jwtBlacklistService.restoreUserTokens(user.getUsername());
+        }
         
         return userAccountRepository.save(user);
     }

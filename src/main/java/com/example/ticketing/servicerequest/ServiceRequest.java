@@ -69,6 +69,9 @@ public class ServiceRequest {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(columnDefinition = "TEXT")
+    private String resolution;
+
     @Column(name = "approval_required")
     private Boolean approvalRequired = false;
 
@@ -138,6 +141,7 @@ public class ServiceRequest {
         APPROVED("Đã phê duyệt"),
         IN_PROGRESS("Đang xử lý"),
         COMPLETED("Hoàn thành"),
+        CLOSED("Đã đóng"),
         REJECTED("Từ chối"),
         CANCELLED("Hủy bỏ");
 
@@ -210,6 +214,8 @@ public class ServiceRequest {
     public void setFirstResponseAt(LocalDateTime firstResponseAt) { this.firstResponseAt = firstResponseAt; }
     public LocalDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+    public String getResolution() { return resolution; }
+    public void setResolution(String resolution) { this.resolution = resolution; }
     public Boolean getApprovalRequired() { return approvalRequired; }
     public void setApprovalRequired(Boolean approvalRequired) { this.approvalRequired = approvalRequired; }
     public String getApprovedBy() { return approvedBy; }

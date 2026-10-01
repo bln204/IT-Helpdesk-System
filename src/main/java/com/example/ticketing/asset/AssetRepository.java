@@ -73,6 +73,17 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
            "AND a.nextMaintenanceDate <= :today")
     List<Asset> findOverdueMaintenance(@Param("today") LocalDate today);
 
+    // Assets with upcoming maintenance
+    @Query("SELECT a FROM Asset a WHERE a.nextMaintenanceDate IS NOT NULL " +
+           "AND a.nextMaintenanceDate BETWEEN :start AND :end " +
+           "ORDER BY a.nextMaintenanceDate ASC")
+    List<Asset> findUpcomingMaintenance(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
+
+    // Child assets
+    List<Asset> findByParentAssetId(Long parentAssetId);
+
     // Software licenses
     @Query("SELECT a FROM Asset a WHERE a.assetType = 'SOFTWARE_LICENSE' " +
            "ORDER BY a.name ASC")

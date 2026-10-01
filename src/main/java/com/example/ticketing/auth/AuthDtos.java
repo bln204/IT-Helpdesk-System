@@ -38,12 +38,22 @@ public final class AuthDtos {
         private String tokenType;
         private long expiresInSeconds;
         private UserInfo user;
+        private boolean passwordMustChange;
 
         public LoginResponse(String token, long expiresInSeconds, UserInfo user) {
             this.token = token;
             this.tokenType = "Bearer";
             this.expiresInSeconds = expiresInSeconds;
             this.user = user;
+            this.passwordMustChange = false;
+        }
+        
+        public LoginResponse(String token, long expiresInSeconds, UserInfo user, boolean passwordMustChange) {
+            this.token = token;
+            this.tokenType = "Bearer";
+            this.expiresInSeconds = expiresInSeconds;
+            this.user = user;
+            this.passwordMustChange = passwordMustChange;
         }
 
         public String getToken() {
@@ -56,6 +66,14 @@ public final class AuthDtos {
 
         public long getExpiresInSeconds() {
             return expiresInSeconds;
+        }
+        
+        public boolean isPasswordMustChange() {
+            return passwordMustChange;
+        }
+        
+        public void setPasswordMustChange(boolean passwordMustChange) {
+            this.passwordMustChange = passwordMustChange;
         }
 
         public UserInfo getUser() {
@@ -123,6 +141,35 @@ public final class AuthDtos {
 
         public String getEmail() {
             return email;
+        }
+    }
+    
+    /**
+     * Request to force change password (for first login).
+     */
+    public static class ForcePasswordChangeRequest {
+        @NotBlank
+        @Size(min = 7, max = 128)
+        private String newPassword;
+        
+        @NotBlank
+        @Size(min = 7, max = 128)
+        private String confirmPassword;
+        
+        public String getNewPassword() {
+            return newPassword;
+        }
+        
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
+        }
+        
+        public String getConfirmPassword() {
+            return confirmPassword;
+        }
+        
+        public void setConfirmPassword(String confirmPassword) {
+            this.confirmPassword = confirmPassword;
         }
     }
 }

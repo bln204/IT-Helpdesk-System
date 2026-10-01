@@ -12,4 +12,11 @@ import java.util.List;
 public interface ChangeTaskRepository extends JpaRepository<ChangeTask, Long> {
 
     List<ChangeTask> findByChangeRequestIdOrderByTaskOrderAsc(Long changeRequestId);
+
+    // New method added
+
+    /**
+     * Find tasks by status.
+     */
+    List<ChangeTask> findByStatus(ChangeTask.TaskStatus status);
 }

@@ -2,6 +2,7 @@
 import { request } from '../core/api.js';
 import { getToken, getCurrentUser } from '../core/auth.js';
 import { formatStatus, formatName, getDisplayName, formatHours, formatSlaBucket } from '../ui/utils.js';
+import { escapeHtml } from '../core/sanitize.js';
 import { userAvatarMap, selectedTicket, engineerOptions } from '../config/constants.js';
 import { setActiveReportButton, renderReportTable, setCurrentReport } from '../modules/reports.js';
 
@@ -166,11 +167,11 @@ export const renderTickets = (rows, { append = false } = {}) => {
     
     row.innerHTML = `
       <div class="assignee-avatar" aria-hidden="true">
-        ${avatarImage || avatarLetter}
+        ${avatarImage || escapeHtml(avatarLetter)}
       </div>
       <div class="ticket-row-main">
-        <h4>${ticket.title}</h4>
-        <div class="ticket-row-meta">${ticket.ticketNumber} • ${formatStatus(ticket.category)} ${deptBadge}</div>
+        <h4>${escapeHtml(ticket.title)}</h4>
+        <div class="ticket-row-meta">${escapeHtml(ticket.ticketNumber)} • ${formatStatus(ticket.category)} ${deptBadge}</div>
       </div>
       <div class="ticket-row-tags">
         <span class="status ${statusClass}">${formatStatus(ticket.status)}</span>
@@ -181,8 +182,8 @@ export const renderTickets = (rows, { append = false } = {}) => {
         ${slaHtml}
       </div>
       <div class="ticket-row-side">
-        <strong>${assigneeLabel}</strong>
-        <span>${createdAt}</span>
+        <strong>${escapeHtml(assigneeLabel)}</strong>
+        <span>${escapeHtml(createdAt)}</span>
       </div>
     `;
     row.addEventListener('click', () => selectTicket(ticket));
@@ -551,15 +552,15 @@ export const selectTicket = async (ticket) => {
   ticketDetails.innerHTML = `
     <div class="ticket-detail-card">
       <div class="ticket-detail-header">
-        <h4>${full.title}</h4>
+        <h4>${escapeHtml(full.title)}</h4>
         <div class="ticket-detail-chips">
           <span class="status ${full.status ? full.status.toLowerCase().replace(/_/g, '-') : 'new'}">${formatStatus(full.status)}</span>
           <span class="priority ${full.priority ? full.priority.toLowerCase() : 'low'}">${formatStatus(full.priority)}</span>
           <span class="pill">${formatStatus(full.category)}</span>
-          ${deptInfo ? `<span class="dept-badge">${deptInfo}</span>` : ''}
+          ${deptInfo ? `<span class="dept-badge">${escapeHtml(deptInfo)}</span>` : ''}
         </div>
       </div>
-      <p>${full.description}</p>
+      <p>${escapeHtml(full.description)}</p>
       
       <!-- SLA Info Card -->
       ${slaInfoHtml}
@@ -567,23 +568,23 @@ export const selectTicket = async (ticket) => {
       <div class="ticket-detail-grid">
         <div class="ticket-detail-field">
           <span>Người phụ trách</span>
-          <strong>${assignee}</strong>
+          <strong>${escapeHtml(assignee)}</strong>
         </div>
         <div class="ticket-detail-field">
           <span>Người yêu cầu</span>
-          <strong>${formatName(full.requesterName)}</strong>
+          <strong>${escapeHtml(formatName(full.requesterName))}</strong>
         </div>
         <div class="ticket-detail-field">
           <span>Mã phiếu</span>
-          <strong>${full.ticketNumber}</strong>
+          <strong>${escapeHtml(full.ticketNumber)}</strong>
         </div>
         <div class="ticket-detail-field">
           <span>Ngày tạo</span>
-          <strong>${createdAt}</strong>
+          <strong>${escapeHtml(createdAt)}</strong>
         </div>
         <div class="ticket-detail-field">
           <span>Cập nhật</span>
-          <strong>${updatedAt}</strong>
+          <strong>${escapeHtml(updatedAt)}</strong>
         </div>
       </div>
     </div>

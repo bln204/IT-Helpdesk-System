@@ -86,6 +86,43 @@ public class Incident {
     @Column(name = "linked_ticket_count")
     private Integer linkedTicketCount = 0;
 
+    // ==================== SLA Tracking Fields ====================
+    
+    /**
+     * Thời hạn phản hồi (deadline) - tính từ createdAt.
+     * VD: Priority HIGH = 4 tiếng → responseDeadline = createdAt + 4 hours
+     */
+    @Column(name = "response_deadline")
+    private LocalDateTime responseDeadline;
+
+    /**
+     * Thời hạn giải quyết (deadline) - tính từ createdAt.
+     * VD: Priority HIGH = 8 tiếng → resolutionDeadline = createdAt + 8 hours
+     */
+    @Column(name = "resolution_deadline")
+    private LocalDateTime resolutionDeadline;
+
+    /**
+     * SLA có bị breach chưa?
+     */
+    @Column(name = "response_sla_breached")
+    private Boolean responseSlaBreached = false;
+
+    @Column(name = "resolution_sla_breached")
+    private Boolean resolutionSlaBreached = false;
+
+    /**
+     * Lưu SLA policy đã apply (để hiển thị)
+     */
+    @Column(name = "sla_policy_name", length = 100)
+    private String slaPolicyName;
+
+    @Column(name = "sla_response_minutes")
+    private Integer slaResponseMinutes;
+
+    @Column(name = "sla_resolution_minutes")
+    private Integer slaResolutionMinutes;
+
     @OneToMany(mappedBy = "incident", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("linkedAt DESC")
     private List<TicketIncidentLink> ticketLinks = new ArrayList<>();
@@ -108,6 +145,7 @@ public class Incident {
 
     public enum IncidentStatus {
         INVESTIGATING("Đang điều tra"),
+        IN_PROGRESS("Đang xử lý"),
         IDENTIFIED("Đã xác định nguyên nhân"),
         RESOLVED("Đã giải quyết"),
         CLOSED("Đã đóng");
@@ -226,6 +264,23 @@ public class Incident {
     public void setClosedAt(LocalDateTime closedAt) { this.closedAt = closedAt; }
     public Integer getLinkedTicketCount() { return linkedTicketCount; }
     public void setLinkedTicketCount(Integer linkedTicketCount) { this.linkedTicketCount = linkedTicketCount; }
+    
+    // ==================== SLA Fields ====================
+    public LocalDateTime getResponseDeadline() { return responseDeadline; }
+    public void setResponseDeadline(LocalDateTime responseDeadline) { this.responseDeadline = responseDeadline; }
+    public LocalDateTime getResolutionDeadline() { return resolutionDeadline; }
+    public void setResolutionDeadline(LocalDateTime resolutionDeadline) { this.resolutionDeadline = resolutionDeadline; }
+    public Boolean getResponseSlaBreached() { return responseSlaBreached; }
+    public void setResponseSlaBreached(Boolean responseSlaBreached) { this.responseSlaBreached = responseSlaBreached; }
+    public Boolean getResolutionSlaBreached() { return resolutionSlaBreached; }
+    public void setResolutionSlaBreached(Boolean resolutionSlaBreached) { this.resolutionSlaBreached = resolutionSlaBreached; }
+    public String getSlaPolicyName() { return slaPolicyName; }
+    public void setSlaPolicyName(String slaPolicyName) { this.slaPolicyName = slaPolicyName; }
+    public Integer getSlaResponseMinutes() { return slaResponseMinutes; }
+    public void setSlaResponseMinutes(Integer slaResponseMinutes) { this.slaResponseMinutes = slaResponseMinutes; }
+    public Integer getSlaResolutionMinutes() { return slaResolutionMinutes; }
+    public void setSlaResolutionMinutes(Integer slaResolutionMinutes) { this.slaResolutionMinutes = slaResolutionMinutes; }
+    
     public List<TicketIncidentLink> getTicketLinks() { return ticketLinks; }
     public void setTicketLinks(List<TicketIncidentLink> ticketLinks) { this.ticketLinks = ticketLinks; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -65,6 +65,14 @@ public class UserAccount implements UserDetails {
     @Column(name = "password_changed_at")
     private LocalDateTime passwordChangedAt;
     
+    /**
+     * Flag to force user to change password on first login.
+     * - TRUE: User must change password before using the system
+     * - FALSE: User can use the system normally
+     */
+    @Column(name = "password_must_change", nullable = false)
+    private boolean passwordMustChange = true;
+    
     // ============ NEW: Approval System Fields ============
     
     /**
@@ -190,6 +198,23 @@ public class UserAccount implements UserDetails {
     
     public void markPasswordChanged() {
         this.passwordChangedAt = LocalDateTime.now();
+    }
+    
+    /**
+     * Mark password as changed and clear the passwordMustChange flag.
+     * This is called when user voluntarily changes their password.
+     */
+    public void markPasswordChangedAndClearFlag() {
+        this.passwordChangedAt = LocalDateTime.now();
+        this.passwordMustChange = false;
+    }
+    
+    public boolean isPasswordMustChange() {
+        return passwordMustChange;
+    }
+    
+    public void setPasswordMustChange(boolean passwordMustChange) {
+        this.passwordMustChange = passwordMustChange;
     }
     
     // ============ NEW: Approval System Getters and Setters ============
