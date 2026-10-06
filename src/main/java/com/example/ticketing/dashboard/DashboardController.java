@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketTypes;
@@ -42,7 +43,10 @@ public class DashboardController {
     
     @Autowired
     private DepartmentRepository departmentRepository;
-    
+
+    @Autowired
+    private ItDepartmentResolver itDepartmentResolver;
+
     @Autowired
     private SlaSchedulerService slaSchedulerService;
     
@@ -142,7 +146,7 @@ public class DashboardController {
     @GetMapping("/it-workload")
     public ResponseEntity<List<ITStaffWorkload>> getITWorkload() {
         // Tìm IT Department
-        var itDept = departmentRepository.findByCode("IT").orElse(null);
+        var itDept = departmentRepository.findByCode(itDepartmentResolver.getItDepartmentCode()).orElse(null);
         if (itDept == null) {
             return ResponseEntity.ok(List.of());
         }

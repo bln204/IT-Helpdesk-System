@@ -13,6 +13,7 @@ import com.example.ticketing.auth.Notification.NotificationType;
 import com.example.ticketing.auth.NotificationRepository;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 
 /**
@@ -27,12 +28,15 @@ public class TicketNotificationService {
     
     private final NotificationRepository notificationRepository;
     private final UserAccountRepository userAccountRepository;
-    
+    private final ItDepartmentResolver itDepartmentResolver;
+
     public TicketNotificationService(
             NotificationRepository notificationRepository,
-            UserAccountRepository userAccountRepository) {
+            UserAccountRepository userAccountRepository,
+            ItDepartmentResolver itDepartmentResolver) {
         this.notificationRepository = notificationRepository;
         this.userAccountRepository = userAccountRepository;
+        this.itDepartmentResolver = itDepartmentResolver;
     }
     
     /**
@@ -349,19 +353,19 @@ public class TicketNotificationService {
      */
     private List<UserAccount> getITStaff() {
         return userAccountRepository.findAll().stream()
-            .filter(u -> u.getDepartment() != null && "IT".equals(u.getDepartment().getCode()))
+            .filter(u -> itDepartmentResolver.isITDepartment(u.getDepartment()))
             .filter(UserAccount::isEnabled)
             .collect(Collectors.toList());
     }
-    
+
     /**
      * Lấy danh sách IT Managers (TRUONG_PHONG IT và Admins).
      */
     private List<UserAccount> getITManagers() {
         return userAccountRepository.findAll().stream()
-            .filter(u -> u.isAdmin() || 
-                (u.getRole() == com.example.ticketing.auth.UserRole.Role.TRUONG_PHONG && 
-                 u.getDepartment() != null && "IT".equals(u.getDepartment().getCode())))
+            .filter(u -> u.isAdmin() ||
+                (u.getRole() == com.example.ticketing.auth.UserRole.Role.TRUONG_PHONG &&
+                 itDepartmentResolver.isITDepartment(u.getDepartment())))
             .filter(UserAccount::isEnabled)
             .collect(Collectors.toList());
     }

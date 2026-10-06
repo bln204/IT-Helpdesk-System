@@ -69,8 +69,13 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     long countByTeamId(@Param("teamId") Long teamId);
     
     /**
-     * Tìm IT teams (department code = 'IT').
+     * Tìm teams đang được kích hoạt theo department code.
+     *
+     * <p>Phase 1.1: the department code is supplied by the caller (in production,
+     * {@code TeamService} reads it from {@code ItDepartmentResolver}). This removes the
+     * previously hardcoded JPQL literal {@code 'IT'} so the configured IT department code
+     * is the single source of truth.
      */
-    @Query("SELECT t FROM Team t WHERE t.department.code = 'IT' AND t.enabled = true ORDER BY t.displayOrder ASC")
-    List<Team> findActiveITTeams();
+    @Query("SELECT t FROM Team t WHERE t.department.code = :departmentCode AND t.enabled = true ORDER BY t.displayOrder ASC")
+    List<Team> findActiveByDepartmentCode(@Param("departmentCode") String departmentCode);
 }

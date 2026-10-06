@@ -66,10 +66,15 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     List<TeamMember> findTeamLeads(@Param("teamId") Long teamId);
     
     /**
-     * Tìm tất cả thành viên IT (users trong IT department).
+     * Tìm tất cả thành viên đang được kích hoạt theo department code.
+     *
+     * <p>Phase 1.1: the department code is supplied by the caller (in production,
+     * {@code TeamService} reads it from {@code ItDepartmentResolver}). This removes the
+     * previously hardcoded JPQL literal {@code 'IT'} so the configured IT department code
+     * is the single source of truth.
      */
-    @Query("SELECT m FROM TeamMember m JOIN FETCH m.user WHERE m.team.department.code = 'IT' AND m.enabled = true")
-    List<TeamMember> findAllITMembers();
+    @Query("SELECT m FROM TeamMember m JOIN FETCH m.user WHERE m.team.department.code = :departmentCode AND m.enabled = true")
+    List<TeamMember> findAllByDepartmentCode(@Param("departmentCode") String departmentCode);
     
     /**
      * Lấy workload của các thành viên trong team (số tickets đang xử lý).

@@ -35,6 +35,10 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.TicketAuthorization;
+import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 
 import jakarta.validation.Valid;
@@ -46,20 +50,36 @@ public class TicketController {
     private final TicketService ticketService;
     private final TicketAttachmentService attachmentService;
     private final UserAccountRepository userAccountRepository;
+    private final ItDepartmentResolver itDepartmentResolver;
+    private final ActorContextService actorContextService;
+    private final TicketAuthorization ticketAuthorization;
 
     public TicketController(
             TicketService ticketService,
             TicketAttachmentService attachmentService,
-            UserAccountRepository userAccountRepository) {
+            UserAccountRepository userAccountRepository,
+            ItDepartmentResolver itDepartmentResolver,
+            ActorContextService actorContextService,
+            TicketAuthorization ticketAuthorization) {
         this.ticketService = ticketService;
         this.attachmentService = attachmentService;
         this.userAccountRepository = userAccountRepository;
+        this.itDepartmentResolver = itDepartmentResolver;
+        this.actorContextService = actorContextService;
+        this.ticketAuthorization = ticketAuthorization;
     }
 
     // ============================================================
     // TICKET CREATION
     // ============================================================
     
+    /**
+     * Create a ticket. PHASE 3 (H-3 fix): the create-time assignee is no longer trusted
+     * from client input. The authorization decision is made from the canonical
+     * {@link ActorContext} (via {@link TicketAuthorization}). Only TRUONG_PHONG + IT may
+     * supply an assignee during creation, and only when the target is a valid
+     * enabled NHAN_VIEN in the configured IT department.
+     */
     @PostMapping
     public ResponseEntity<TicketDtos.TicketResponse> createTicket(
         @Valid @RequestBody TicketDtos.TicketCreateRequest request,
@@ -75,6 +95,11 @@ public class TicketController {
         ticket.setCategory(request.getCategory());
         ticket.setRequesterName(request.getRequesterName());
         ticket.setRequesterEmail(request.getRequesterEmail());
+        // PHASE 3 (H-3): the controller forwards the client-supplied assignee string to the
+        // service exactly as before. Authorization is decided by the service from the
+        // authenticated ActorContext, not from this field. This intentionally preserves the
+        // existing wire format (the frontend may still send the field) so the rejection is
+        // server-authoritative and the client cannot bypass the policy.
         ticket.setAssigneeName(request.getAssigneeName());
 
         Ticket created = ticketService.createTicket(ticket, authentication.getName(), actorRole);
@@ -156,7 +181,7 @@ public class TicketController {
         Authentication authentication
     ) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanReceiveTicket(user, authentication);
 
         Ticket updated = ticketService.assignTicket(
             id,
@@ -167,14 +192,14 @@ public class TicketController {
         );
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     @PostMapping("/{id}/unassign")
     public TicketDtos.TicketResponse unassignTicket(
         @PathVariable Long id,
         Authentication authentication
     ) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanAssignOthers(user, authentication);
 
         Ticket updated = ticketService.unassignTicket(
             id,
@@ -192,7 +217,7 @@ public class TicketController {
         Authentication authentication
     ) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanAssignOthers(user, authentication);
 
         Ticket updated = ticketService.assignTicket(
             id,
@@ -431,6 +456,28 @@ public class TicketController {
     }
 
     // ============================================================
+    // CONTENT UPDATE ENDPOINT
+    // ============================================================
+    
+    @PatchMapping("/{id}/content")
+    public TicketDtos.TicketResponse updateContent(
+        @PathVariable Long id,
+        @Valid @RequestBody TicketDtos.TicketContentUpdateRequest request,
+        Authentication authentication
+    ) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.updateContent(
+            id,
+            request.getTitle(),
+            request.getDescription(),
+            user.getRole(),
+            user.getDepartmentId(),
+            authentication.getName()
+        );
+        return TicketDtos.TicketResponse.from(updated);
+    }
+
+    // ============================================================
     // COMMENTS ENDPOINTS
     // ============================================================
     
@@ -466,7 +513,7 @@ public class TicketController {
         Authentication authentication
     ) {
         UserAccount user = getCurrentUser(authentication);
-        return ticketService.listComments(id, user.getRole(), visibility).stream()
+        return ticketService.listComments(id, authentication.getName(), user.getRole(), visibility).stream()
             .map(TicketDtos.TicketCommentResponse::from)
             .toList();
     }
@@ -748,17 +795,33 @@ public class TicketController {
         }
     }
 
-    private void requireAssignPermission(UserAccount user) {
-        boolean canAssign = switch (user.getRole()) {
-            case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> user.isTruongPhongIT();
-            case NHAN_VIEN -> user.isInITDepartment();
-        };
+    // PHASE 2.1: controller-level authorization gates. These do NOT duplicate the service-level
+    // policy; they delegate to the canonical TicketAuthorization via ActorContextService and
+    // produce a 403 (per the brief \u00a724 / existing controller convention). The service-level
+    // gate produces a TicketRuleViolationException (400) on top of this defense-in-depth check,
+    // but the user-facing response is determined here.
 
-        if (!canAssign) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "You don't have permission to assign tickets. Only IT Staff or IT Manager can assign tickets.");
+    private void requireCanReceiveTicket(UserAccount user, Authentication authentication) {
+        ActorContext actor = resolveActor(authentication, user);
+        if (!ticketAuthorization.canReceiveTicket(actor)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to receive this ticket. Only IT Helpdesk operators can self-receive.");
         }
+    }
+
+    private void requireCanAssignOthers(UserAccount user, Authentication authentication) {
+        ActorContext actor = resolveActor(authentication, user);
+        if (!ticketAuthorization.canAssignOthers(actor)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to assign other users. Only an IT Helpdesk manager can assign.");
+        }
+    }
+
+    private ActorContext resolveActor(Authentication authentication, UserAccount user) {
+        // Authentication.getName() is the canonical identity source (brief \u00a75). The user object
+        // is what the controller already loaded, but the canonical policy consumes an
+        // ActorContext, so we resolve it via ActorContextService which is the single seam.
+        return actorContextService.fromAuthentication(authentication);
     }
 
     private boolean withinRange(LocalDateTime value, LocalDateTime from, LocalDateTime to) {

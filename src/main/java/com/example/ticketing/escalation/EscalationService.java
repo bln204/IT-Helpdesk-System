@@ -14,6 +14,8 @@ import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.team.Team;
 import com.example.ticketing.team.TeamRepository;
+import com.example.ticketing.ticket.AssignmentTargetValidator;
+import com.example.ticketing.ticket.AssignmentTargetVerdict;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketNotFoundException;
@@ -29,6 +31,14 @@ import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 @Transactional
 public class EscalationService {
 
+    /**
+     * PHASE 3.1: system-actor convention for automatic SLA escalations.
+     * The SLA scheduler is not a human user; the history row records {@code "SYSTEM"}
+     * as the actor. Manual escalations continue to record the authenticated username.
+     * The column already exists on {@link EscalationHistory#getCreatedBy()}.
+     */
+    public static final String SYSTEM_ACTOR = "SYSTEM";
+
     private static final Logger log = LoggerFactory.getLogger(EscalationService.class);
 
     private final EscalationRuleRepository ruleRepository;
@@ -36,18 +46,21 @@ public class EscalationService {
     private final TicketRepository ticketRepository;
     private final UserAccountRepository userAccountRepository;
     private final TeamRepository teamRepository;
+    private final AssignmentTargetValidator assignmentTargetValidator;
 
     public EscalationService(
             EscalationRuleRepository ruleRepository,
             EscalationHistoryRepository historyRepository,
             TicketRepository ticketRepository,
             UserAccountRepository userAccountRepository,
-            TeamRepository teamRepository) {
+            TeamRepository teamRepository,
+            AssignmentTargetValidator assignmentTargetValidator) {
         this.ruleRepository = ruleRepository;
         this.historyRepository = historyRepository;
         this.ticketRepository = ticketRepository;
         this.userAccountRepository = userAccountRepository;
         this.teamRepository = teamRepository;
+        this.assignmentTargetValidator = assignmentTargetValidator;
     }
 
     // ==================== Rule Management ====================
@@ -253,6 +266,14 @@ public class EscalationService {
 
     /**
      * Thực hiện escalation action.
+     *
+     * <p>PHASE 3.1: this is the SLA-driven path (no human actor). The history row's
+     * {@code createdBy} is recorded as {@link #SYSTEM_ACTOR} so audit trails can
+     * distinguish a system escalation from a manual one. There is no
+     * {@code TicketAuthorization.canAssignOthers()} call here: the SLA scheduler is
+     * not a human and so the actor-side policy does not apply; the configured target
+     * is still validated by {@link #performReassignment(Ticket, EscalationRule, EscalationHistory)}
+     * through the canonical {@link AssignmentTargetValidator}.
      */
     private void executeEscalation(Ticket ticket, EscalationRule rule, String reason) {
         log.info("Executing escalation for ticket {} - Rule: {} - Reason: {}",
@@ -266,6 +287,7 @@ public class EscalationService {
                 .reason(reason)
                 .previousAssignee(ticket.getAssigneeName())
                 .previousStatus(ticket.getStatus().name())
+                .createdBy(SYSTEM_ACTOR)
                 .build();
 
         // Execute action
@@ -289,14 +311,36 @@ public class EscalationService {
 
     /**
      * Thực hiện reassignment.
+     *
+     * <p>PHASE 3.1: this method now validates the configured target through the canonical
+     * {@link AssignmentTargetValidator} before mutating the ticket. Invalid targets (disabled,
+     * unapproved, non-NHAN_VIEN, non-IT, missing) are rejected safely: the history records
+     * the attempted escalation but the ticket's {@code assignee} and {@code assigneeName}
+     * are NOT changed and the existing escalation history entry is marked as not having
+     * reassigned. No silent fallback to another user is performed.
      */
     private void performReassignment(Ticket ticket, EscalationRule rule, EscalationHistory history) {
         if (rule.getEscalateToUserId() != null) {
-            userAccountRepository.findById(rule.getEscalateToUserId()).ifPresent(user -> {
-                history.setNewAssignee(user.getUsername());
-                ticket.setAssigneeName(user.getUsername());
-                ticket.setAssignee(user);
-            });
+            AssignmentTargetVerdict verdict = assignmentTargetValidator.validateById(rule.getEscalateToUserId());
+            if (verdict == AssignmentTargetVerdict.VALID) {
+                UserAccount user = userAccountRepository.findById(rule.getEscalateToUserId()).orElse(null);
+                if (user != null) {
+                    history.setNewAssignee(user.getUsername());
+                    history.setActionTaken("REASSIGN");
+                    ticket.setAssigneeName(user.getUsername());
+                    ticket.setAssignee(user);
+                } else {
+                    // Race: the user was deleted between verdict and load. Treat as
+                    // TARGET_NOT_FOUND - safe no-op, no fallback.
+                    log.warn("Escalation target user id={} disappeared between validate and load; skipping reassignment for ticket {}",
+                        rule.getEscalateToUserId(), ticket.getTicketNumber());
+                    history.setActionTaken("REASSIGN_FAILED_TARGET_MISSING");
+                }
+            } else {
+                log.warn("Escalation REASSIGN target id={} is invalid ({}); skipping reassignment for ticket {}",
+                    rule.getEscalateToUserId(), verdict, ticket.getTicketNumber());
+                history.setActionTaken("REASSIGN_FAILED_INVALID_TARGET");
+            }
         } else if (rule.getEscalateToTeamId() != null) {
             teamRepository.findById(rule.getEscalateToTeamId()).ifPresent(team -> {
                 history.setNewTeamId(team.getId());

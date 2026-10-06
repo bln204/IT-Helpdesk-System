@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -17,12 +18,17 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.ai.EmbeddingService;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.TicketAuthorization;
 import com.example.ticketing.category.Category;
 import com.example.ticketing.category.CategoryRepository;
 import com.example.ticketing.category.CategoryTeamMapping;
 import com.example.ticketing.category.CategoryTeamMappingRepository;
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.sla.SlaPolicyService;
 import com.example.ticketing.team.Team;
 import com.example.ticketing.team.TeamRepository;
@@ -44,6 +50,11 @@ public class TicketService {
     private final TeamRepository teamRepository;
     private final TicketNotificationService ticketNotificationService;
     private final SlaPolicyService slaPolicyService;
+    private final EmbeddingService embeddingService;
+    private final ItDepartmentResolver itDepartmentResolver;
+    private final ActorContextService actorContextService;
+    private final TicketAuthorization ticketAuthorization;
+    private final AssignmentTargetValidator assignmentTargetValidator;
 
     public TicketService(
         TicketRepository ticketRepository,
@@ -57,7 +68,12 @@ public class TicketService {
         CategoryTeamMappingRepository categoryTeamMappingRepository,
         TeamRepository teamRepository,
         TicketNotificationService ticketNotificationService,
-        SlaPolicyService slaPolicyService
+        SlaPolicyService slaPolicyService,
+        EmbeddingService embeddingService,
+        ItDepartmentResolver itDepartmentResolver,
+        ActorContextService actorContextService,
+        TicketAuthorization ticketAuthorization,
+        AssignmentTargetValidator assignmentTargetValidator
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketAssignmentRepository = ticketAssignmentRepository;
@@ -71,14 +87,182 @@ public class TicketService {
         this.teamRepository = teamRepository;
         this.ticketNotificationService = ticketNotificationService;
         this.slaPolicyService = slaPolicyService;
+        this.embeddingService = embeddingService;
+        this.itDepartmentResolver = itDepartmentResolver;
+        this.actorContextService = actorContextService;
+        this.ticketAuthorization = ticketAuthorization;
+        this.assignmentTargetValidator = assignmentTargetValidator;
+    }
+
+    // ============================================================
+    // PHASE 2.1 - canonical actor authorization helpers
+    // ============================================================
+
+    /**
+     * Build the canonical {@link ActorContext} from role + department id. Used by service
+     * methods that already receive both inputs from the controller. The department code is
+     * resolved via a single repository lookup, then the IT membership flag is decided by the
+     * configured {@link ItDepartmentResolver}.
+     */
+    private ActorContext actorContextFor(String username, UserRole.Role role, Long departmentId) {
+        if (role == null) {
+            // Defensive: an unauthenticated call should never reach the service. Mirror the
+            // existing convention of throwing a 401 for the missing principal.
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required.");
+        }
+        String departmentCode = null;
+        boolean itMember = false;
+        if (departmentId != null) {
+            Department dept = departmentRepository.findById(departmentId).orElse(null);
+            if (dept != null) {
+                departmentCode = dept.getCode();
+                itMember = itDepartmentResolver.isITDepartment(dept);
+            }
+        }
+        return ActorContext.of(username, role, departmentCode, itMember);
+    }
+
+    /**
+     * Build the canonical {@link ActorContext} from a username only. Used by service methods
+     * (close, reopen, addComment, listComments) that historically did not receive the actor's
+     * department id. Delegates to {@link ActorContextService} so the principal source remains
+     * exactly the same one the controller used.
+     */
+    private ActorContext actorContextFor(String username) {
+        return actorContextService.fromUsername(username);
+    }
+
+    // ============================================================
+    // PHASE 3 - canonical assignment TARGET validation (C-3 fix).
+    // The actor policy is encoded in TicketAuthorization. The TARGET policy
+    // (existence / enabled / role / department) is a database-aware concern
+    // and therefore lives in the orchestration layer (TicketService).
+    // A target is valid iff all of the following are true:
+    //   1. User exists.
+    //   2. User is enabled AND approved (active).
+    //   3. User role is exactly NHAN_VIEN.
+    //   4. User department is the configured IT department.
+    // The IT department code is delegated to ItDepartmentResolver; "IT"
+    // is never hardcoded here.
+    // ============================================================
+
+    /**
+     * The outcome of the canonical target-validation step.
+     *
+     * <p>PHASE 3. The actor policy says "may I act"; this struct says
+     * "is this specific target a valid assignment target?". The two answers
+     * are intentionally separate.
+     */
+    public enum AssignmentTargetValidation {
+        /** Target is a valid enabled NHAN_VIEN in the configured IT department. */
+        VALID,
+        /** Username does not resolve to any UserAccount. */
+        TARGET_NOT_FOUND,
+        /** Target exists but is not enabled/approved. */
+        TARGET_DISABLED,
+        /** Target role is not NHAN_VIEN. */
+        INVALID_ROLE,
+        /** Target department is not the configured IT department. */
+        INVALID_DEPARTMENT
+    }
+
+    /**
+     * Validate that the given target username is a valid NHAN_VIEN in the configured IT
+     * department. The caller is responsible for performing the actor authorization check
+     * (TicketAuthorization.canAssignOthers / canReceiveTicket) BEFORE this call.
+     *
+     * <p>PHASE 3.1: the underlying rule is now shared with the SLA escalation path through
+     * {@link AssignmentTargetValidator}. The verdict enum and semantics are preserved so the
+     * existing Phase 3 API and tests are not affected.
+     */
+    public AssignmentTargetValidation validateAssignmentTarget(String targetUsername) {
+        return toLegacyVerdict(assignmentTargetValidator.validate(targetUsername));
+    }
+
+    private static AssignmentTargetValidation toLegacyVerdict(AssignmentTargetVerdict v) {
+        return switch (v) {
+            case VALID -> AssignmentTargetValidation.VALID;
+            case TARGET_NOT_FOUND -> AssignmentTargetValidation.TARGET_NOT_FOUND;
+            case TARGET_DISABLED -> AssignmentTargetValidation.TARGET_DISABLED;
+            case INVALID_ROLE -> AssignmentTargetValidation.INVALID_ROLE;
+            case INVALID_DEPARTMENT -> AssignmentTargetValidation.INVALID_DEPARTMENT;
+        };
+    }
+
+    /**
+     * Resolve the target UserAccount for an assignment. This method:
+     * <ol>
+     *   <li>Performs the canonical target validation (C-3).</li>
+     *   <li>Returns the resolved UserAccount so the caller can set the FK and
+     *       keep assignee_id and assignee_name synchronized.</li>
+     *   <li>Throws an existing project exception (TicketRuleViolationException for
+     *       actor/policy issues; TicketNotFoundException for missing targets).</li>
+     * </ol>
+     */
+    private UserAccount resolveAssignmentTarget(String targetUsername) {
+        AssignmentTargetValidation verdict = validateAssignmentTarget(targetUsername);
+        switch (verdict) {
+            case VALID:
+                // Safe: validateAssignmentTarget already ensured the user exists and
+                // is enabled.
+                return userAccountRepository.findByUsername(targetUsername).orElseThrow(
+                    () -> new TicketNotFoundException("Assignment target not found: " + targetUsername));
+            case TARGET_NOT_FOUND:
+                throw new TicketNotFoundException("Assignment target not found: " + targetUsername);
+            case TARGET_DISABLED:
+                throw new TicketRuleViolationException(
+                    "Assignment target is not an active user: " + targetUsername);
+            case INVALID_ROLE:
+                throw new TicketRuleViolationException(
+                    "Assignment target role is not NHAN_VIEN: " + targetUsername);
+            case INVALID_DEPARTMENT:
+                throw new TicketRuleViolationException(
+                    "Assignment target department is not the IT Helpdesk: " + targetUsername);
+            default:
+                // Defensive: unreachable in this state.
+                throw new TicketRuleViolationException(
+                    "Assignment target is not a valid IT Helpdesk staff member: " + targetUsername);
+        }
+    }
+
+    /**
+     * Apply a validated assignment to the ticket and return the resolved target.
+     * Keeps assignee_id and assignee_name synchronized: the caller passes both via
+     * the resolved UserAccount.
+     */
+    private void applyValidatedTarget(Ticket t, UserAccount target) {
+        t.setAssignee(target);
+        t.setAssigneeName(target.getUsername());
+    }
+
+    /**
+     * Apply an unassignment. Both representations are cleared consistently:
+     * the legacy {@code assigneeName} and the FK {@code assignee} are both nulled.
+     */
+    private void clearAssignment(Ticket t) {
+        t.setAssignee(null);
+        t.setAssigneeName(null);
     }
 
     // ============================================================
     // TICKET CREATION
     // ============================================================
-    
+
     /**
      * Tạo ticket mới.
+     *
+     * <p>PHASE 3 (H-3 fix). The actor is the authenticated principal; the requester's
+     * department is the ticket's department. A client-supplied {@code assigneeName}
+     * is honored ONLY when the canonical policy permits it:
+     *
+     * <ul>
+     *   <li>ADMIN / GIAM_DOC / non-IT TRUONG_PHONG / non-IT NHAN_VIEN /
+     *       NHAN_VIEN + IT: client-supplied assignee is REJECTED. The ticket
+     *       remains unassigned. (NHAN_VIEN + IT uses {@code /assign/me} instead.)</li>
+     *   <li>TRUONG_PHONG + IT: client-supplied assignee is accepted ONLY when the
+     *       target is an enabled NHAN_VIEN in the configured IT department.
+     *       Invalid targets are rejected per C-3.</li>
+     * </ul>
      */
     public Ticket createTicket(
         Ticket ticket,
@@ -100,22 +284,36 @@ public class TicketService {
         // Auto-assign team dựa trên category (nếu có category)
         autoAssignTeam(ticket);
 
-        // Auto-assign logic:
-        // - IT Staff (NHAN_VIEN in IT): auto-assign for themselves
-        // - TRUONG_PHONG in IT: auto-assign (they handle tickets too)
-        // - Others (ADMIN, GIAM_DOC, NHAN_VIEN not in IT, TRUONG_PHONG not in IT): don't auto-assign
-        boolean shouldAutoAssign = 
-            (actorRole == UserRole.Role.NHAN_VIEN && requester.isInITDepartment()) ||
-            (actorRole == UserRole.Role.TRUONG_PHONG && requester.isInITDepartment());
-        
-        if (shouldAutoAssign) {
-            // IT Staff hoặc Trưởng phòng IT: tự assign cho mình nếu chưa có assignee
-            if (ticket.getAssigneeName() == null || ticket.getAssigneeName().isBlank()) {
-                ticket.setAssigneeName(actorUsername);
+        // PHASE 3 (H-3): build the canonical ActorContext once.
+        ActorContext requesterActor = actorContextFor(actorUsername, actorRole, requester.getDepartmentId());
+
+        // PHASE 3 (H-3): decide what to do with the client-supplied assignee.
+        //   * TRUONG_PHONG + IT may specify an assignee at create time, but only
+        //     when the target is a valid enabled NHAN_VIEN + IT (C-3 target validation).
+        //   * Every other role must not specify an assignee during creation.
+        //     The client-supplied field is REJECTED (TicketRuleViolationException) rather
+        //     than silently discarded; silent discard would allow a malicious actor to
+        //     probe for stale data without triggering an alarm.
+        // No auto-self-assign on create: the self-receive flow is /assign/me (POST
+        // \u00a76), which is a separate operation that happens AFTER creation.
+        String clientAssignee = normalizeAssignee(ticket.getAssigneeName());
+        if (clientAssignee != null) {
+            boolean canCreateWithAssignee =
+                requesterActor.role() == UserRole.Role.TRUONG_PHONG
+                    && requesterActor.isItDepartmentMember();
+            if (!canCreateWithAssignee) {
+                throw new TicketRuleViolationException(
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation.");
             }
+            // Validate target (C-3). resolveAssignmentTarget throws on any failure
+            // (not-found, disabled, wrong department, wrong role).
+            UserAccount target = resolveAssignmentTarget(clientAssignee);
+            applyValidatedTarget(ticket, target);
         } else {
-            // Người dùng khác: không auto-assign (ADMIN, GIAM_DOC, NHAN_VIEN thường, TRUONG_PHONG không thuộc IT)
-            ticket.setAssigneeName(null);
+            // No client-supplied assignee. The ticket starts unassigned regardless of the
+            // creator's role - including for NHAN_VIEN + IT, which takes ownership via
+            // /assign/me (a separate post-creation operation).
+            clearAssignment(ticket);
         }
 
         Ticket created = ticketRepository.save(ticket);
@@ -143,6 +341,14 @@ public class TicketService {
         
         // Gửi notification
         ticketNotificationService.notifyTicketCreated(created);
+        
+        // Create embedding record for async processing
+        try {
+            embeddingService.createEmbedding(created.getId());
+        } catch (Exception e) {
+            // Log error but don't fail ticket creation
+            // Embedding can be retried later
+        }
         
         return created;
     }
@@ -300,6 +506,14 @@ public class TicketService {
     
     /**
      * Assign ticket cho user/team.
+     *
+     * <p>PHASE 3 (C-3 fix). After the actor authorization gate (canAssignOthers or
+     * canReceiveTicket for self-receive) succeeds, the requested target is validated
+     * against the canonical target policy: must be enabled NHAN_VIEN in the configured
+     * IT department. Invalid targets (nonexistent / non-IT / non-NHAN_VIEN / disabled)
+     * are rejected with a project exception; no partial mutation reaches the database.
+     * The FK (assignee) and legacy (assigneeName) representations are kept
+     * synchronized.
      */
     public Ticket assignTicket(
         Long id,
@@ -308,13 +522,33 @@ public class TicketService {
         Long actorDepartmentId,
         String actorName
     ) {
-        if (!canAssignTickets(actorRole, actorDepartmentId)) {
-            throw new TicketRuleViolationException("You don't have permission to assign tickets.");
+        // PHASE 2.1: canonical policy separates "receive" (self-assign) from "assign others".
+        // The actor's username is passed in actorName (see TicketController), so the self-receive
+        // case is exactly: newAssignee.equalsIgnoreCase(actorName).
+        boolean isSelfReceive = newAssignee != null
+            && actorName != null
+            && newAssignee.equalsIgnoreCase(actorName);
+        ActorContext actor = actorContextFor(actorName, actorRole, actorDepartmentId);
+        boolean allowed = isSelfReceive
+            ? ticketAuthorization.canReceiveTicket(actor)
+            : ticketAuthorization.canAssignOthers(actor);
+        if (!allowed) {
+            throw new TicketRuleViolationException(
+                isSelfReceive
+                    ? "You don't have permission to receive this ticket."
+                    : "You don't have permission to assign other users.");
         }
 
         Ticket ticket = getTicket(id);
         String previousAssignee = ticket.getAssigneeName();
-        
+
+        // PHASE 3 (C-3): validate the target user. This throws TicketNotFoundException for a
+        // missing username and TicketRuleViolationException for role / department / disabled
+        // mismatches. The validation runs BEFORE any state mutation so a partial assignment
+        // can never reach the database.
+        String normalizedNewAssignee = normalizeAssignee(newAssignee);
+        UserAccount resolvedTarget = resolvedTargetForAssignment(newAssignee, isSelfReceive);
+
         // Validate transition: NEW -> ASSIGNED hoặc ASSIGNED -> ASSIGNED
         if (ticket.getStatus() == TicketTypes.TicketStatus.NEW) {
             if (!StatusTransitionValidator.isValidTransition(TicketTypes.TicketStatus.NEW, TicketTypes.TicketStatus.ASSIGNED)) {
@@ -322,19 +556,20 @@ public class TicketService {
             }
             ticket.setStatus(TicketTypes.TicketStatus.ASSIGNED);
         }
-        
-        ticket.setAssigneeName(normalizeAssignee(newAssignee));
 
-        // Also set the assignee entity for proper query support
-        userAccountRepository.findByUsername(newAssignee).ifPresentOrElse(
-            ticket::setAssignee,
-            () -> { /* User not found, leave assignee as null */ }
-        );
+        if (resolvedTarget != null) {
+            applyValidatedTarget(ticket, resolvedTarget);
+        } else {
+            // Defensive: resolvedTargetForAssignment must always return non-null when the
+            // actor passed the authorization check. If we got here, treat as unassign.
+            clearAssignment(ticket);
+            normalizedNewAssignee = null;
+        }
 
         TicketAssignment assignment = new TicketAssignment();
         assignment.setTicketId(ticket.getId());
         assignment.setPreviousAssignee(previousAssignee);
-        assignment.setNewAssignee(newAssignee);
+        assignment.setNewAssignee(normalizedNewAssignee);
         assignment.setActorRole(actorRole.name());
         assignment.setActorName(actorName);
         ticketAssignmentRepository.save(assignment);
@@ -344,7 +579,7 @@ public class TicketService {
             TicketTypes.AuditAction.ASSIGNEE_CHANGED,
             "assigneeName",
             previousAssignee,
-            normalizeAssignee(newAssignee),
+            normalizedNewAssignee,
             actorRole,
             actorName
         );
@@ -353,6 +588,27 @@ public class TicketService {
         ticketNotificationService.notifyTicketAssigned(ticket, actorName);
 
         return ticket;
+    }
+
+    /**
+     * Resolve the target UserAccount for an assignment, applying the C-3 canonical
+     * target policy. Self-receive (target = actor) does NOT trigger C-3 because the
+     * actor's identity has already been authenticated and verified, and the
+     * {@code canReceiveTicket} actor gate already restricts self-receive to IT
+     * operators (TRUONG_PHONG + IT and NHAN_VIEN + IT per the canonical policy).
+     * C-3 applies to assign-others: the resolved target must be a valid
+     * enabled NHAN_VIEN + IT.
+     */
+    private UserAccount resolvedTargetForAssignment(String newAssignee, boolean isSelfReceive) {
+        if (isSelfReceive) {
+            // Self-receive is the self-receive policy (\u00a76), not a target-validation case.
+            // The actor's eligibility to take a ticket into their own queue is decided by
+            // the canReceiveTicket actor gate above. We do not re-validate their own role
+            // or department here.
+            return userAccountRepository.findByUsername(newAssignee).orElseThrow(
+                () -> new TicketNotFoundException("Self-receive target not found: " + newAssignee));
+        }
+        return resolveAssignmentTarget(newAssignee);
     }
     
     /**
@@ -364,15 +620,18 @@ public class TicketService {
         Long actorDepartmentId,
         String actorName
     ) {
-        if (!canAssignTickets(actorRole, actorDepartmentId)) {
+        // PHASE 2.1: unassign is "remove another's assignment" - canonical policy is
+        // canAssignOthers (only TRUONG_PHONG + IT). ADMIN/GIAM_DOC and NHAN_VIEN + IT no longer
+        // reach this code path. The previous private canAssignTickets is removed in this phase.
+        ActorContext actor = actorContextFor(actorName, actorRole, actorDepartmentId);
+        if (!ticketAuthorization.canAssignOthers(actor)) {
             throw new TicketRuleViolationException("You don't have permission to unassign tickets.");
         }
 
         Ticket ticket = getTicket(id);
         String previousAssignee = ticket.getAssigneeName();
         
-        ticket.setAssigneeName(null);
-        ticket.setAssignee(null);
+        clearAssignment(ticket);
 
         TicketAssignment assignment = new TicketAssignment();
         assignment.setTicketId(ticket.getId());
@@ -395,13 +654,10 @@ public class TicketService {
         return ticket;
     }
 
-    private boolean canAssignTickets(UserRole.Role actorRole, Long actorDepartmentId) {
-        return switch (actorRole) {
-            case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> isITDepartment(actorDepartmentId);
-            case NHAN_VIEN -> isITDepartment(actorDepartmentId);
-        };
-    }
+    // PHASE 2.1: the private canAssignTickets helper has been removed. Assignment authorization
+    // is decided through ActorContext + TicketAuthorization.canAssignOthers / canReceiveTicket
+    // inside assignTicket / unassignTicket above. Keeping a second private switch would have
+    // duplicated the canonical policy.
 
     // ============================================================
     // STATUS MANAGEMENT - Phase 2.2
@@ -424,13 +680,16 @@ public class TicketService {
 
         // Kiểm tra xem có phải IT Staff không (NHAN_VIEN trong IT department)
         boolean isITStaffUser = actorRole == UserRole.Role.NHAN_VIEN && isITDepartment(actorDepartmentId);
-        
-        // NHAN_VIEN thường (không phải IT Staff) chỉ có thể đóng hoặc reopen ticket của mình
+
+        // PHASE 2.1: the requester's own-ticket close/reopen path for NHAN_VIEN is preserved
+        // verbatim from the previous implementation. The brief \u00a74 keeps the existing
+        // requester-oriented behavior, and the canonical policy for the IT Helpdesk manager
+        // remains "may process any ticket", so the operator path is unchanged.
         if (actorRole == UserRole.Role.NHAN_VIEN && !isITStaffUser) {
             if (!actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
                 throw new TicketRuleViolationException("You can only modify your own tickets.");
             }
-            
+
             // NHAN_VIEN chỉ có thể:
             // - CLOSE ticket đã RESOLVED
             // - REOPEN ticket đã CLOSED
@@ -445,19 +704,29 @@ public class TicketService {
             } else {
                 throw new TicketRuleViolationException("You can only close or reopen your own tickets.");
             }
-            
+
             return performStatusChange(ticket, currentStatus, newStatus, actorRole, actorName, comment);
         }
 
-        // IT Staff và Admin: validate transition
+        // PHASE 2.1: every non-NHAN_VIEN-non-IT actor must pass the canonical processing gate.
+        // The previous code allowed ADMIN, GIAM_DOC, and non-IT TRUONG_PHONG to reach the
+        // transition graph (C-4 / C-5 gaps). The canonical matrix says only IT operators may
+        // process tickets, so we add the gate here, BEFORE the transition graph is consulted.
+        ActorContext actor = actorContextFor(actorName, actorRole, actorDepartmentId);
+        if (!ticketAuthorization.canProcessTickets(actor)) {
+            throw new TicketRuleViolationException(
+                "You don't have permission to modify ticket status.");
+        }
+
+        // IT Staff and IT Manager: validate transition
         if (!StatusTransitionValidator.isValidTransition(currentStatus, newStatus)) {
             Set<TicketTypes.TicketStatus> validNext = StatusTransitionValidator.getValidNextStatuses(currentStatus);
             throw new TicketRuleViolationException(
-                "Invalid status transition: " + currentStatus + " -> " + newStatus + 
+                "Invalid status transition: " + currentStatus + " -> " + newStatus +
                 ". Valid transitions: " + validNext
             );
         }
-        
+
         // CANCELLED chỉ có thể được set bởi Admin
         if (newStatus == TicketTypes.TicketStatus.CANCELLED && actorRole != UserRole.Role.ADMIN) {
             throw new TicketRuleViolationException("Only administrators can cancel tickets.");
@@ -557,7 +826,7 @@ public class TicketService {
         Long actorDepartmentId,
         String actorName
     ) {
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to modify ticket status.");
         }
         
@@ -585,7 +854,7 @@ public class TicketService {
         String actorName,
         String message
     ) {
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to modify ticket status.");
         }
         
@@ -641,7 +910,7 @@ public class TicketService {
         String actorName,
         String resolution
     ) {
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to resolve tickets.");
         }
         
@@ -677,27 +946,35 @@ public class TicketService {
         UserRole.Role actorRole
     ) {
         Ticket ticket = getTicket(id);
-        
-        // User chỉ có thể close ticket của mình
-        if (actorRole == UserRole.Role.NHAN_VIEN && 
-            !actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
-            throw new TicketRuleViolationException("You can only close your own tickets.");
+
+        // PHASE 2.1: the requester's own-ticket close path for NHAN_VIEN is preserved
+        // verbatim from the previous implementation (brief \u00a74). The canonical matrix says
+        // ADMIN/GIAM_DOC and non-IT TRUONG_PHONG cannot process tickets, so we add the canonical
+        // processing gate for everyone who is NOT the requester closing their own ticket.
+        if (actorRole == UserRole.Role.NHAN_VIEN
+            && actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
+            // Non-IT staff chỉ có thể close RESOLVED tickets
+            if (ticket.getStatus() != TicketTypes.TicketStatus.RESOLVED) {
+                throw new TicketRuleViolationException("You can only close resolved tickets.");
+            }
+        } else {
+            // IT operators (TRUONG_PHONG + IT, NHAN_VIEN + IT) close any ticket;
+            // ADMIN/GIAM_DOC and non-IT TRUONG_PHONG are denied.
+            ActorContext actor = actorContextFor(actorUsername);
+            if (!ticketAuthorization.canProcessTickets(actor)) {
+                throw new TicketRuleViolationException(
+                    "You don't have permission to close this ticket.");
+            }
         }
-        
-        // Non-IT staff chỉ có thể close RESOLVED tickets
-        if (actorRole == UserRole.Role.NHAN_VIEN && 
-            ticket.getStatus() != TicketTypes.TicketStatus.RESOLVED) {
-            throw new TicketRuleViolationException("You can only close resolved tickets.");
-        }
-        
+
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
-        
+
         if (!StatusTransitionValidator.isValidTransition(currentStatus, TicketTypes.TicketStatus.CLOSED)) {
             throw new TicketRuleViolationException(
                 "Cannot close from status: " + currentStatus
             );
         }
-        
+
         return performStatusChange(ticket, currentStatus, TicketTypes.TicketStatus.CLOSED, actorRole, actorUsername, null);
     }
     
@@ -713,18 +990,24 @@ public class TicketService {
         String reason
     ) {
         Ticket ticket = getTicket(id);
-        
-        // User chỉ có thể reopen ticket của mình
-        if (actorRole == UserRole.Role.NHAN_VIEN && 
-            !actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
-            throw new TicketRuleViolationException("You can only reopen your own tickets.");
+
+        // PHASE 2.1: the requester's own-ticket reopen path for NHAN_VIEN is preserved
+        // verbatim (brief \u00a74). For everyone else, the canonical processing gate applies:
+        // only IT operators may reopen; ADMIN/GIAM_DOC and non-IT TRUONG_PHONG are denied.
+        if (!(actorRole == UserRole.Role.NHAN_VIEN
+            && actorUsername.equalsIgnoreCase(ticket.getRequesterUsername()))) {
+            ActorContext actor = actorContextFor(actorUsername);
+            if (!ticketAuthorization.canProcessTickets(actor)) {
+                throw new TicketRuleViolationException(
+                    "You don't have permission to reopen this ticket.");
+            }
         }
-        
+
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
-        
+
         if (!StatusTransitionValidator.isValidTransition(currentStatus, TicketTypes.TicketStatus.REOPENED)) {
             throw new TicketRuleViolationException(
-                "Cannot reopen from status: " + currentStatus + 
+                "Cannot reopen from status: " + currentStatus +
                 ". Only CLOSED tickets can be reopened."
             );
         }
@@ -753,7 +1036,7 @@ public class TicketService {
         String actorName,
         String reason
     ) {
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to escalate tickets.");
         }
         
@@ -819,23 +1102,25 @@ public class TicketService {
         return valid;
     }
 
-    private boolean canModifyTicketStatus(UserRole.Role actorRole, Long actorDepartmentId) {
-        return switch (actorRole) {
-            case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> {
-                if (actorDepartmentId == null) {
-                    yield false;
-                }
-                yield isITDepartment(actorDepartmentId);
-            }
-            case NHAN_VIEN -> {
-                if (actorDepartmentId == null) {
-                    yield false;
-                }
-                yield isITDepartment(actorDepartmentId);
-            }
-        };
+    /**
+     * PHASE 2.1: canonical status-modification gate. Replaces the previous private
+     * canModifyTicketStatus switch. Only IT operators may modify ticket status:
+     * TRUONG_PHONG + IT or NHAN_VIEN + IT. ADMIN, GIAM_DOC, non-IT TRUONG_PHONG, and non-IT
+     * NHAN_VIEN are all denied. Non-IT NHAN_VIEN requesters reach a separate
+     * close/reopen-only path inside updateStatus, which is preserved per the brief.
+     */
+    private boolean canModifyTicketStatus(UserRole.Role actorRole, Long actorDepartmentId, String actorName) {
+        if (actorRole == null) {
+            return false;
+        }
+        return ticketAuthorization.canProcessTickets(
+            actorContextFor(actorName, actorRole, actorDepartmentId));
     }
+
+    // PHASE 2.1: the private isITDepartment(Long) helper is retained for read-only checks that
+    // do not need a full ActorContext (e.g. compatibility accessors and the auto-assign on
+    // create). It still delegates to the configured ItDepartmentResolver, so the Phase 1
+    // centralization is preserved.
     
     /**
      * Kiểm tra user có thuộc IT department không.
@@ -845,7 +1130,20 @@ public class TicketService {
             return false;
         }
         Department dept = departmentRepository.findById(departmentId).orElse(null);
-        return dept != null && "IT".equals(dept.getCode());
+        // Phase 1: IT department resolution is delegated to the single configured source of
+        // truth. Semantics are unchanged - it still returns false for a null or unknown id.
+        return itDepartmentResolver.isITDepartment(dept);
+    }
+
+    /**
+     * Looks up the configured IT department entity.
+     *
+     * <p>Phase 1: replaces the hardcoded {@code findByCode("IT")} lookups with the single
+     * configured source of truth. Returns null when the department does not exist, which is the
+     * behavior the previous call sites already relied on.
+     */
+    private Department resolveItDepartment() {
+        return departmentRepository.findByCode(itDepartmentResolver.getItDepartmentCode()).orElse(null);
     }
 
     // ============================================================
@@ -864,7 +1162,7 @@ public class TicketService {
             throw new TicketRuleViolationException("You cannot change ticket priority.");
         }
 
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to change priority.");
         }
 
@@ -884,6 +1182,10 @@ public class TicketService {
             actorRole,
             actorName
         );
+
+        // Trigger re-embedding if priority changed
+        triggerReembedding(ticket.getId());
+
         return ticket;
     }
     
@@ -903,7 +1205,7 @@ public class TicketService {
         Long actorDepartmentId,
         String actorName
     ) {
-        if (!canModifyTicketStatus(actorRole, actorDepartmentId)) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
             throw new TicketRuleViolationException("You don't have permission to change ticket category.");
         }
 
@@ -943,8 +1245,13 @@ public class TicketService {
         ticket.setCategoryEntity(newCategory);
         ticket.setSubcategoryEntity(newSubcategory);
         
+        // Check if category or subcategory actually changed (for re-embedding decision)
+        boolean categoryChanged = !Objects.equals(oldCategoryId, categoryId);
+        boolean subcategoryChanged = !Objects.equals(oldSubcategoryId, subcategoryId);
+        boolean semanticChanged = categoryChanged || subcategoryChanged;
+        
         // Auto-update team nếu có category change và team chưa được set
-        if (oldCategoryId == null || !oldCategoryId.equals(categoryId)) {
+        if (categoryChanged) {
             autoAssignTeam(ticket);
         }
         
@@ -963,8 +1270,99 @@ public class TicketService {
             actorRole,
             actorName
         );
-        
+
+        // Trigger re-embedding ONLY if category or subcategory actually changed
+        // This matches the fields used in buildEmbeddingText()
+        if (semanticChanged) {
+            triggerReembedding(ticket.getId());
+        }
+
         return ticket;
+    }
+
+    // ============================================================
+    // EMBEDDING REFRESH
+    // ============================================================
+
+    /**
+     * Update ticket title and/or description.
+     * Triggers re-embedding if content changes.
+     */
+    public Ticket updateContent(
+        Long id,
+        String newTitle,
+        String newDescription,
+        UserRole.Role actorRole,
+        Long actorDepartmentId,
+        String actorName
+    ) {
+        if (!canModifyTicketStatus(actorRole, actorDepartmentId, actorName)) {
+            throw new TicketRuleViolationException("You don't have permission to edit ticket content.");
+        }
+
+        Ticket ticket = getTicket(id);
+        boolean contentChanged = false;
+
+        // Update title if provided
+        if (newTitle != null && !newTitle.equals(ticket.getTitle())) {
+            String oldTitle = ticket.getTitle();
+            ticket.setTitle(newTitle);
+            logAudit(
+                ticket.getId(),
+                TicketTypes.AuditAction.TITLE_CHANGED,
+                "title",
+                oldTitle,
+                newTitle,
+                actorRole,
+                actorName
+            );
+            contentChanged = true;
+        }
+
+        // Update description if provided
+        if (newDescription != null && !newDescription.equals(ticket.getDescription())) {
+            String oldDesc = ticket.getDescription();
+            ticket.setDescription(newDescription);
+            logAudit(
+                ticket.getId(),
+                TicketTypes.AuditAction.DESCRIPTION_CHANGED,
+                "description",
+                truncateForAudit(oldDesc),
+                truncateForAudit(newDescription),
+                actorRole,
+                actorName
+            );
+            contentChanged = true;
+        }
+
+        // Trigger re-embedding if content changed
+        if (contentChanged) {
+            triggerReembedding(ticket.getId());
+        }
+
+        return ticket;
+    }
+
+    /**
+     * Truncate string for audit log.
+     */
+    private String truncateForAudit(String value) {
+        if (value == null) return null;
+        if (value.length() <= 200) return value;
+        return value.substring(0, 200) + "...";
+    }
+
+    /**
+     * Trigger re-embedding for a ticket.
+     * Schedules the embedding to be regenerated on next scheduler run.
+     */
+    private void triggerReembedding(Long ticketId) {
+        try {
+            embeddingService.reembedTicket(ticketId);
+        } catch (Exception e) {
+            // Log but don't fail the operation
+            // Embedding can be retried later
+        }
     }
 
     // ============================================================
@@ -978,9 +1376,17 @@ public class TicketService {
         UserRole.Role actorRole,
         String actorName
     ) {
-        if (visibility == TicketTypes.CommentVisibility.INTERNAL
-            && actorRole == UserRole.Role.NHAN_VIEN) {
-            throw new TicketRuleViolationException("Only IT staff can add internal comments.");
+        // PHASE 2.1: canonical comment authorization.
+        //   * INTERNAL: only the canonical policy may add. ADMIN/GIAM_DOC and the IT Helpdesk
+        //     operators (TRUONG_PHONG + IT, NHAN_VIEN + IT) are allowed. Non-IT operators and
+        //     any other role are denied. The previous code denied all NHAN_VIEN regardless of
+        //     department (H-4 gap); the canonical matrix lifts the deny for NHAN_VIEN + IT.
+        //   * PUBLIC: every authenticated actor is allowed (no actor-level gate today).
+        if (visibility == TicketTypes.CommentVisibility.INTERNAL) {
+            ActorContext actor = actorContextFor(actorName);
+            if (!ticketAuthorization.canAddInternalComment(actor)) {
+                throw new TicketRuleViolationException("Only IT staff can add internal comments.");
+            }
         }
 
         Ticket ticket = getTicket(ticketId);
@@ -1012,15 +1418,34 @@ public class TicketService {
     @Transactional(readOnly = true)
     public List<TicketComment> listComments(
         Long ticketId,
+        String actorName,
         UserRole.Role actorRole,
         TicketTypes.CommentVisibility visibility
     ) {
         getTicket(ticketId);
+        // PHASE 2.1: canonical policy. The previous implementation denied INTERNAL visibility
+        // to every NHAN_VIEN, including IT-department staff (H-4 gap). The canonical matrix
+        // says: ADMIN/GIAM_DOC and the IT Helpdesk operators may view INTERNAL; everyone else
+        // is restricted to PUBLIC. Non-IT NHAN_VIEN continues to see only PUBLIC; the change
+        // is that NHAN_VIEN + IT now sees both.
+        if (visibility == TicketTypes.CommentVisibility.INTERNAL) {
+            ActorContext actor = actorContextFor(actorName);
+            if (!ticketAuthorization.canViewInternalComments(actor)) {
+                throw new TicketRuleViolationException(
+                    "You don't have permission to view internal comments.");
+            }
+        }
         if (actorRole == UserRole.Role.NHAN_VIEN) {
-            return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
-                ticketId,
-                TicketTypes.CommentVisibility.PUBLIC
-            );
+            // Non-IT NHAN_VIEN see only PUBLIC; NHAN_VIEN + IT already passed the
+            // canViewInternalComments check above and falls through to the all-visibility
+            // query below.
+            ActorContext actor = actorContextFor(actorName);
+            if (!actor.isItDepartmentMember()) {
+                return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
+                    ticketId,
+                    TicketTypes.CommentVisibility.PUBLIC
+                );
+            }
         }
         if (visibility != null) {
             return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
@@ -1076,7 +1501,7 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<TicketDtos.EngineerReportRow> buildEngineerReport(LocalDateTime from, LocalDateTime to) {
-        Department itDept = departmentRepository.findByCode("IT").orElse(null);
+        Department itDept = resolveItDepartment();
         List<UserAccount> itStaff;
         if (itDept != null) {
             itStaff = userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(itDept.getId());

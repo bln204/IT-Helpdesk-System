@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.exception.UserNotApprovedActionException;
 import com.example.ticketing.security.JwtBlacklistService;
 
@@ -26,6 +27,7 @@ public class UserAdminService {
     private final UserAuditService userAuditService;
     private final NotificationService notificationService;
     private final JwtBlacklistService jwtBlacklistService;
+    private final ItDepartmentResolver itDepartmentResolver;
 
     public UserAdminService(
         UserAccountRepository userAccountRepository,
@@ -33,7 +35,8 @@ public class UserAdminService {
         PasswordEncoder passwordEncoder,
         UserAuditService userAuditService,
         NotificationService notificationService,
-        JwtBlacklistService jwtBlacklistService
+        JwtBlacklistService jwtBlacklistService,
+        ItDepartmentResolver itDepartmentResolver
     ) {
         this.userAccountRepository = userAccountRepository;
         this.departmentRepository = departmentRepository;
@@ -41,6 +44,7 @@ public class UserAdminService {
         this.userAuditService = userAuditService;
         this.notificationService = notificationService;
         this.jwtBlacklistService = jwtBlacklistService;
+        this.itDepartmentResolver = itDepartmentResolver;
     }
 
     /**
@@ -259,10 +263,14 @@ public class UserAdminService {
 
     /**
      * Lấy danh sách IT staff (cho assign tickets)
+     *
+     * <p>Phase 1: department lookup is driven by the centralized
+     * {@link ItDepartmentResolver}. Role filtering is NOT added here, by design - the
+     * role policy for this method belongs to a later phase.
      */
     @Transactional(readOnly = true)
     public List<UserAccount> listITStaff() {
-        Department itDept = departmentRepository.findByCode("IT")
+        Department itDept = departmentRepository.findByCode(itDepartmentResolver.getItDepartmentCode())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "IT department not found."));
         return userAccountRepository.findByDepartmentIdAndEnabledTrueOrderByUsernameAsc(itDept.getId());
     }

@@ -14,6 +14,7 @@ import com.example.ticketing.auth.NotificationRepository;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.department.ItDepartmentResolver;
 
 /**
  * Scheduler kiểm tra SLA cho incidents.
@@ -27,14 +28,17 @@ public class IncidentSlaSchedulerService {
     private final IncidentRepository incidentRepository;
     private final IncidentNotificationService incidentNotificationService;
     private final UserAccountRepository userAccountRepository;
-    
+    private final ItDepartmentResolver itDepartmentResolver;
+
     public IncidentSlaSchedulerService(
             IncidentRepository incidentRepository,
             IncidentNotificationService incidentNotificationService,
-            UserAccountRepository userAccountRepository) {
+            UserAccountRepository userAccountRepository,
+            ItDepartmentResolver itDepartmentResolver) {
         this.incidentRepository = incidentRepository;
         this.incidentNotificationService = incidentNotificationService;
         this.userAccountRepository = userAccountRepository;
+        this.itDepartmentResolver = itDepartmentResolver;
     }
     
     /**
@@ -165,19 +169,19 @@ public class IncidentSlaSchedulerService {
      */
     private List<UserAccount> getITStaff() {
         return userAccountRepository.findAll().stream()
-            .filter(u -> u.getDepartment() != null && "IT".equals(u.getDepartment().getCode()))
+            .filter(u -> itDepartmentResolver.isITDepartment(u.getDepartment()))
             .filter(UserAccount::isEnabled)
             .collect(java.util.stream.Collectors.toList());
     }
-    
+
     /**
      * Lấy danh sách IT Managers.
      */
     private List<UserAccount> getITManagers() {
         return userAccountRepository.findAll().stream()
-            .filter(u -> u.isAdmin() || 
-                (u.getRole() == UserRole.Role.TRUONG_PHONG && 
-                 u.getDepartment() != null && "IT".equals(u.getDepartment().getCode())))
+            .filter(u -> u.isAdmin() ||
+                (u.getRole() == UserRole.Role.TRUONG_PHONG &&
+                 itDepartmentResolver.isITDepartment(u.getDepartment())))
             .filter(UserAccount::isEnabled)
             .collect(java.util.stream.Collectors.toList());
     }
