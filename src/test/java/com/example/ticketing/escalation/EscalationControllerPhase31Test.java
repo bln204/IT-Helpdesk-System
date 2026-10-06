@@ -38,7 +38,9 @@ import com.example.ticketing.config.SecurityConfig;
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.security.JwtBlacklistService;
+import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketExceptionHandler;
+import com.example.ticketing.ticket.TicketService;
 
 /**
  * PHASE 3.1 - HTTP-level controller tests for the manual escalation endpoint.
@@ -64,6 +66,9 @@ class EscalationControllerPhase31Test {
 
     @MockitoBean
     private EscalationService escalationService;
+
+    @MockitoBean
+    private TicketService ticketService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -114,7 +119,25 @@ class EscalationControllerPhase31Test {
         when(userAccountRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
     }
 
+    /**
+     * PHASE 5.1: manualEscalate now requires a read gate on the parent ticket.
+     * The existing test fixtures for the manual escalate path use a ticket id but
+     * never materialize a Ticket entity. We stub the actor-aware getTicket to
+     * return a fresh Ticket so the test continues to exercise the authorization
+     * decision (canAssignOthers) and not the read gate.
+     */
+    private void givenTicketExists(Long ticketId) {
+        Ticket ticket = new Ticket();
+        // The entity has no setId; this stub exists only so the controller can call
+        // ticketService.getTicket(ticketId, principal) and pass the read gate.
+        ticket.setTicketNumber("PHASE31-STUB");
+        ticket.setDepartment(MKT);
+        when(ticketService.getTicket(eq(ticketId), any(String.class))).thenReturn(ticket);
+        when(ticketService.getTicket(eq(ticketId), any(org.springframework.security.core.Authentication.class))).thenReturn(ticket);
+    }
+
     private void givenManualEscalateReturns(EscalationHistory history) {
+        givenTicketExists(history.getTicketId());
         when(escalationService.manualEscalate(anyLong(), any(), any())).thenReturn(history);
     }
 

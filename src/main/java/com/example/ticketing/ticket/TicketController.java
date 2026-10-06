@@ -129,6 +129,8 @@ public class TicketController {
         Sort.Direction direction = Sort.Direction.fromOptionalString(sortDirection).orElse(Sort.Direction.ASC);
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortField));
 
+        // PHASE 5.1 (C-7): the read scope is decided inside the service from the actor
+        // context. The controller no longer needs to compute the scope itself.
         return ticketService.listTickets(
             assignee,
             status,
@@ -136,13 +138,20 @@ public class TicketController {
             excludeClosed,
             pageRequest,
             user.getRole().name(),
-            user.getDepartmentId()
+            user.getDepartmentId(),
+            authentication.getName()
         ).map(TicketDtos.TicketResponse::from);
     }
 
     @GetMapping("/{id}")
-    public TicketDtos.TicketResponse getTicket(@PathVariable Long id) {
-        return TicketDtos.TicketResponse.from(ticketService.getTicket(id));
+    public TicketDtos.TicketResponse getTicket(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        // PHASE 5.1 (C-7): the actor-aware getTicket enforces the canonical object-level
+        // read policy. Unauthenticated / unauthorized callers receive 403; an unknown id
+        // still produces 404 (TicketNotFoundException).
+        return TicketDtos.TicketResponse.from(ticketService.getTicket(id, authentication.getName()));
     }
 
     @GetMapping("/{id}/valid-transitions")
@@ -482,8 +491,12 @@ public class TicketController {
     // ============================================================
     
     @GetMapping("/{id}/assignments")
-    public List<TicketDtos.TicketAssignmentResponse> listAssignments(@PathVariable Long id) {
-        return ticketService.listAssignments(id).stream()
+    public List<TicketDtos.TicketAssignmentResponse> listAssignments(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        // PHASE 5.1 (C-7): nested resource is gated by the canonical ticket read policy.
+        return ticketService.listAssignments(id, authentication.getName()).stream()
             .map(TicketDtos.TicketAssignmentResponse::from)
             .toList();
     }
@@ -512,8 +525,9 @@ public class TicketController {
         @RequestParam(required = false) TicketTypes.CommentVisibility visibility,
         Authentication authentication
     ) {
-        UserAccount user = getCurrentUser(authentication);
-        return ticketService.listComments(id, authentication.getName(), user.getRole(), visibility).stream()
+        // PHASE 5.1 (C-7): nested resource is gated by the canonical ticket read policy.
+        // The Phase 2.1 INTERNAL-visibility gate is preserved as an additional filter.
+        return ticketService.listComments(id, authentication.getName(), visibility).stream()
             .map(TicketDtos.TicketCommentResponse::from)
             .toList();
     }
@@ -521,17 +535,25 @@ public class TicketController {
     // ============================================================
     // AUDIT ENDPOINTS
     // ============================================================
-    
+
     @GetMapping("/{id}/audit")
-    public List<TicketDtos.TicketAuditResponse> listAudit(@PathVariable Long id) {
-        return ticketService.listAudit(id).stream()
+    public List<TicketDtos.TicketAuditResponse> listAudit(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        // PHASE 5.1 (C-7): audit data is gated by the canonical ticket read policy.
+        return ticketService.listAudit(id, authentication.getName()).stream()
             .map(TicketDtos.TicketAuditResponse::from)
             .toList();
     }
 
     @GetMapping("/{id}/audit/export")
-    public ResponseEntity<String> exportAudit(@PathVariable Long id) {
-        List<TicketAudit> entries = ticketService.listAudit(id);
+    public ResponseEntity<String> exportAudit(
+        @PathVariable Long id,
+        Authentication authentication
+    ) {
+        // PHASE 5.1 (C-7): audit export is gated by the canonical ticket read policy.
+        List<TicketAudit> entries = ticketService.listAudit(id, authentication.getName());
         StringBuilder csv = new StringBuilder();
         csv.append("created_at,action,field,old_value,new_value,actor_role,actor_name\n");
         for (TicketAudit entry : entries) {
@@ -566,15 +588,14 @@ public class TicketController {
         @RequestPart("file") MultipartFile file,
         Authentication authentication
     ) {
-        ticketService.getTicket(id);
-        UserAccount user = getCurrentUser(authentication);
-        
+        // PHASE 5.1 (C-7): upload is gated by the canonical ticket read policy.
+        ticketService.getTicket(id, authentication.getName());
         TicketAttachment attachment = attachmentService.uploadAttachment(
             id,
             file,
             authentication.getName()
         );
-        
+
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(TicketDtos.TicketAttachmentResponse.from(attachment));
     }
@@ -584,7 +605,8 @@ public class TicketController {
         @PathVariable Long id,
         Authentication authentication
     ) {
-        ticketService.getTicket(id);
+        // PHASE 5.1 (C-7): list is gated by the canonical ticket read policy.
+        ticketService.getTicket(id, authentication.getName());
         return attachmentService.getAttachmentsByTicketId(id).stream()
             .map(TicketDtos.TicketAttachmentResponse::from)
             .toList();
@@ -595,9 +617,13 @@ public class TicketController {
         @PathVariable Long attachmentId,
         Authentication authentication
     ) {
+        // PHASE 5.1 (C-7): the URL contains only the attachmentId. The endpoint MUST
+        // resolve the parent ticket and consult TicketAuthorization.canReadTicket before
+        // returning the binary resource. The actor-aware downloadAttachment enforces
+        // that policy; a second call returns the Resource once the gate has passed.
         TicketAttachment attachment = attachmentService.getAttachment(attachmentId);
-        Resource resource = attachmentService.downloadAttachment(attachmentId);
-        
+        Resource resource = attachmentService.downloadAttachment(attachmentId, authentication.getName());
+
         String contentDisposition = "attachment; filename=\"" + attachment.getOriginalName() + "\"";
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(attachment.getContentType()))
@@ -620,8 +646,13 @@ public class TicketController {
         LocalDateTime to
     ) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         Map<TicketTypes.TicketStatus, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+            null, null, null, false, Pageable.unpaged(),
+            user.getRole().name(), user.getDepartmentId(),
+            authentication.getName()
+        )) {
             if (!withinRange(ticket.getCreatedAt(), from, to)) {
                 continue;
             }
@@ -667,8 +698,13 @@ public class TicketController {
         LocalDateTime to
     ) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         Map<String, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+            null, null, null, false, Pageable.unpaged(),
+            user.getRole().name(), user.getDepartmentId(),
+            authentication.getName()
+        )) {
             if (status != null && ticket.getStatus() != status) {
                 continue;
             }
@@ -697,9 +733,14 @@ public class TicketController {
         LocalDateTime to
     ) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         long resolvedCount = 0;
         long totalSeconds = 0;
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+            null, null, null, false, Pageable.unpaged(),
+            user.getRole().name(), user.getDepartmentId(),
+            authentication.getName()
+        )) {
             if (ticket.getResolvedAt() != null && ticket.getCreatedAt() != null) {
                 if (!withinRange(ticket.getResolvedAt(), from, to)) {
                     continue;

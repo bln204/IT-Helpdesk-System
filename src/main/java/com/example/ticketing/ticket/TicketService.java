@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -413,6 +414,21 @@ public class TicketService {
     
     /**
      * Lấy tickets với department filter.
+     *
+     * <p>PHASE 5.1 (C-7): the authorization scope is computed from the actor context and
+     * dispatched to a single authorization-aware query. We DO NOT load-then-filter; the
+     * SQL boundary applies the read scope.
+     *
+     * <p>Scopes:
+     * <ul>
+     *   <li>{@code ALL} (ADMIN, GIAM_DOC, IT operators): every ticket, filtered by
+     *       assignee / status / search / excludeClosed.</li>
+     *   <li>{@code DEPARTMENT} (non-IT TP/NV): only tickets whose requester department
+     *       equals the actor's department, with the requester-ownership carve-out
+     *       (so a non-IT user can see tickets they personally created even outside
+     *       their department — defensive; in normal operation requester.department
+     *       equals ticket.department, so the OR-clause is a no-op).</li>
+     * </ul>
      */
     @Transactional(readOnly = true)
     public Page<Ticket> listTickets(
@@ -422,78 +438,98 @@ public class TicketService {
         boolean excludeClosed,
         Pageable pageable,
         String userRole,
-        Long userDepartmentId
+        Long userDepartmentId,
+        String username
     ) {
-        String normalizedAssignee = normalizeAssignee(assigneeName);
+        ActorContext actor = actorContextFor(username, parseRoleOrNull(userRole), userDepartmentId);
         boolean hasSearch = search != null && !search.isBlank();
         boolean applyExcludeClosed = excludeClosed && status == null;
+        TicketTypes.TicketStatus excludedStatus = TicketTypes.TicketStatus.CLOSED;
+        String normalizedAssignee = normalizeAssignee(assigneeName);
+        boolean assigneeIsUnassigned = normalizedAssignee != null
+            && normalizedAssignee.equalsIgnoreCase("UNASSIGNED");
+        String assigneeFilter = assigneeIsUnassigned ? "" : normalizedAssignee;
+        String searchParam = hasSearch ? search.trim() : null;
 
-        if ("NHAN_VIEN".equals(userRole) || "TRUONG_PHONG".equals(userRole)) {
-            // Use the same filtering logic as ADMIN/GIAM_DOC but without department restriction
+        boolean isFullScope = actor.role() == UserRole.Role.ADMIN
+            || actor.role() == UserRole.Role.GIAM_DOC
+            || (actor.role() == UserRole.Role.TRUONG_PHONG && actor.isItDepartmentMember())
+            || (actor.role() == UserRole.Role.NHAN_VIEN && actor.isItDepartmentMember());
+
+        if (isFullScope) {
+            return ticketRepository.findAuthorizedAll(
+                status, assigneeFilter, searchParam, excludedStatus, applyExcludeClosed, pageable);
         }
-
-        if (normalizedAssignee != null && normalizedAssignee.equalsIgnoreCase("UNASSIGNED")) {
-            if (hasSearch) {
-                if (applyExcludeClosed) {
-                    return ticketRepository.searchTicketsUnassignedExcludeStatus(
-                        search.trim(),
-                        TicketTypes.TicketStatus.CLOSED,
-                        pageable
-                    );
-                }
-                return ticketRepository.searchTicketsUnassigned(search.trim(), status, pageable);
+        if (actor.role() == UserRole.Role.TRUONG_PHONG
+            || actor.role() == UserRole.Role.NHAN_VIEN) {
+            // Non-IT TP/NV: department OR requester ownership (canonical policy branch 4).
+            Long deptId = userDepartmentId;
+            if (deptId == null) {
+                // A non-IT user with no department can only see their own requests.
+                return ticketRepository.findByRequesterUsername(actor.username(), pageable);
             }
-            if (status != null) {
-                return ticketRepository.findByAssigneeNameIsNullOrAssigneeNameAndStatus("", status, pageable);
-            }
-            if (applyExcludeClosed) {
-                return ticketRepository.findByAssigneeNameIsNullOrAssigneeNameAndStatusNot(
-                    "",
-                    TicketTypes.TicketStatus.CLOSED,
-                    pageable
-                );
-            }
-            return ticketRepository.findByAssigneeNameIsNullOrAssigneeName("", pageable);
+            return ticketRepository.findAuthorizedByDepartmentOrOwner(
+                deptId, actor.username(),
+                status, assigneeFilter, searchParam, excludedStatus, applyExcludeClosed, pageable);
         }
-
-        if (hasSearch) {
-            if (applyExcludeClosed) {
-                return ticketRepository.searchTicketsExcludeStatus(
-                    search.trim(),
-                    normalizedAssignee,
-                    TicketTypes.TicketStatus.CLOSED,
-                    pageable
-                );
-            }
-            return ticketRepository.searchTickets(search.trim(), status, normalizedAssignee, pageable);
-        }
-
-        if (normalizedAssignee != null && status != null) {
-            return ticketRepository.findByAssigneeNameAndStatus(normalizedAssignee, status, pageable);
-        }
-
-        if (normalizedAssignee != null) {
-            if (applyExcludeClosed) {
-                return ticketRepository.findByAssigneeNameAndStatusNot(
-                    normalizedAssignee,
-                    TicketTypes.TicketStatus.CLOSED,
-                    pageable
-                );
-            }
-            return ticketRepository.findByAssigneeName(normalizedAssignee, pageable);
-        }
-
-        if (status != null) {
-            return ticketRepository.findByStatus(status, pageable);
-        }
-
-        if (applyExcludeClosed) {
-            return ticketRepository.findByStatusNot(TicketTypes.TicketStatus.CLOSED, pageable);
-        }
-
-        return ticketRepository.findAll(pageable);
+        // Unknown / null role: deny all (canonical "invalid actor" path).
+        return Page.empty(pageable);
     }
-    
+
+    private static UserRole.Role parseRoleOrNull(String userRole) {
+        if (userRole == null) {
+            return null;
+        }
+        try {
+            return UserRole.Role.valueOf(userRole);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * PHASE 5.1 (C-7): object-level read of a single ticket. The actor is loaded through
+     * {@link ActorContextService} (the canonical String-principal seam) and the read
+     * decision is delegated to {@link TicketAuthorization#canReadTicket(ActorContext, Ticket)}.
+     * On denial we throw {@code ResponseStatusException(403)} so the existing exception
+     * contract is preserved.
+     */
+    @Transactional(readOnly = true)
+    public Ticket getTicket(Long id, Authentication authentication) {
+        Ticket ticket = ticketRepository.findById(id)
+            .orElseThrow(() -> new TicketNotFoundException(id));
+        ActorContext actor = actorContextService.fromAuthentication(authentication);
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        return ticket;
+    }
+
+    /**
+     * Backwards-compatible overload used by call sites that already have the ticket
+     * materialized. The actor is loaded from the String principal via
+     * {@link ActorContextService#fromUsername(String)}. Prefer the {@code Authentication}
+     * overload when authentication is available.
+     */
+    @Transactional(readOnly = true)
+    public Ticket getTicket(Long id, String actorUsername) {
+        Ticket ticket = ticketRepository.findById(id)
+            .orElseThrow(() -> new TicketNotFoundException(id));
+        ActorContext actor = actorContextService.fromUsername(actorUsername);
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        return ticket;
+    }
+
+    /**
+     * Backwards-compatible legacy overload: returns the ticket by id without any
+     * object-level check. Call sites that use this are explicitly accepting the
+     * pre-C-7 read behavior (e.g. internal services that already do their own check).
+     * The new write/audit paths use the actor-aware overloads.
+     */
     @Transactional(readOnly = true)
     public Ticket getTicket(Long id) {
         return ticketRepository.findById(id)
@@ -1415,6 +1451,47 @@ public class TicketService {
         return saved;
     }
 
+    /**
+     * PHASE 5.1 (C-7): list comments of a ticket through the canonical object-level read
+     * policy. The actor is loaded from the authenticated principal; the parent ticket is
+     * fetched, the read gate is consulted, and the comment query runs only on success.
+     * On denial a {@code 403} is returned.
+     */
+    @Transactional(readOnly = true)
+    public List<TicketComment> listComments(
+        Long ticketId,
+        String actorName,
+        TicketTypes.CommentVisibility visibility
+    ) {
+        Ticket ticket = getTicket(ticketId);
+        ActorContext actor = actorContextService.fromUsername(actorName);
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        // Existing INTERNAL-visibility gate (Phase 2.1) is preserved as an additional filter.
+        if (visibility == TicketTypes.CommentVisibility.INTERNAL) {
+            if (!ticketAuthorization.canViewInternalComments(actor)) {
+                throw new TicketRuleViolationException(
+                    "You don't have permission to view internal comments.");
+            }
+        }
+        if (actor.role() == UserRole.Role.NHAN_VIEN && !actor.isItDepartmentMember()) {
+            return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
+                ticketId, TicketTypes.CommentVisibility.PUBLIC);
+        }
+        if (visibility != null) {
+            return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
+                ticketId, visibility);
+        }
+        return ticketCommentRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
+    }
+
+    /**
+     * Backwards-compatible listComments overload. The new actor-aware overload is the
+     * canonical C-7 path; this overload exists for the few call sites that have not yet
+     * been migrated and which perform their own authorization.
+     */
     @Transactional(readOnly = true)
     public List<TicketComment> listComments(
         Long ticketId,
@@ -1422,12 +1499,10 @@ public class TicketService {
         UserRole.Role actorRole,
         TicketTypes.CommentVisibility visibility
     ) {
+        // The Phase 2.1 visibility gate is preserved. The C-7 object-level read policy
+        // is enforced through {@link #listComments(Long, String, TicketTypes.CommentVisibility)}
+        // which is the new canonical overload.
         getTicket(ticketId);
-        // PHASE 2.1: canonical policy. The previous implementation denied INTERNAL visibility
-        // to every NHAN_VIEN, including IT-department staff (H-4 gap). The canonical matrix
-        // says: ADMIN/GIAM_DOC and the IT Helpdesk operators may view INTERNAL; everyone else
-        // is restricted to PUBLIC. Non-IT NHAN_VIEN continues to see only PUBLIC; the change
-        // is that NHAN_VIEN + IT now sees both.
         if (visibility == TicketTypes.CommentVisibility.INTERNAL) {
             ActorContext actor = actorContextFor(actorName);
             if (!ticketAuthorization.canViewInternalComments(actor)) {
@@ -1436,22 +1511,15 @@ public class TicketService {
             }
         }
         if (actorRole == UserRole.Role.NHAN_VIEN) {
-            // Non-IT NHAN_VIEN see only PUBLIC; NHAN_VIEN + IT already passed the
-            // canViewInternalComments check above and falls through to the all-visibility
-            // query below.
             ActorContext actor = actorContextFor(actorName);
             if (!actor.isItDepartmentMember()) {
                 return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
-                    ticketId,
-                    TicketTypes.CommentVisibility.PUBLIC
-                );
+                    ticketId, TicketTypes.CommentVisibility.PUBLIC);
             }
         }
         if (visibility != null) {
             return ticketCommentRepository.findByTicketIdAndVisibilityOrderByCreatedAtDesc(
-                ticketId,
-                visibility
-            );
+                ticketId, visibility);
         }
         return ticketCommentRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
     }
@@ -1459,17 +1527,55 @@ public class TicketService {
     // ============================================================
     // AUDIT & ASSIGNMENTS
     // ============================================================
-    
+
+    /**
+     * PHASE 5.1 (C-7): list audit entries of a ticket through the canonical object-level
+     * read policy. Same pattern as {@link #listComments(Long, String, TicketTypes.CommentVisibility)}.
+     */
     @Transactional(readOnly = true)
-    public List<TicketAssignment> listAssignments(Long ticketId) {
-        getTicket(ticketId);
-        return ticketAssignmentRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
+    public List<TicketAudit> listAudit(Long ticketId, String actorName) {
+        Ticket ticket = getTicket(ticketId);
+        ActorContext actor = actorContextService.fromUsername(actorName);
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        return ticketAuditRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
     }
-    
+
+    /**
+     * Backwards-compatible listAudit overload (no actor). The actor-aware overload is the
+     * canonical C-7 path; the legacy overload is kept for internal services that already
+     * do their own authorization (e.g. SLA scheduler).
+     */
     @Transactional(readOnly = true)
     public List<TicketAudit> listAudit(Long ticketId) {
         getTicket(ticketId);
         return ticketAuditRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
+    }
+
+    /**
+     * PHASE 5.1 (C-7): list assignment history through the canonical object-level read policy.
+     */
+    @Transactional(readOnly = true)
+    public List<TicketAssignment> listAssignments(Long ticketId, String actorName) {
+        Ticket ticket = getTicket(ticketId);
+        ActorContext actor = actorContextService.fromUsername(actorName);
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        return ticketAssignmentRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
+    }
+
+    /**
+     * Backwards-compatible listAssignments overload (no actor). The actor-aware overload is
+     * the canonical C-7 path.
+     */
+    @Transactional(readOnly = true)
+    public List<TicketAssignment> listAssignments(Long ticketId) {
+        getTicket(ticketId);
+        return ticketAssignmentRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
     }
     
     @Transactional(readOnly = true)

@@ -1,6 +1,7 @@
 package com.example.ticketing.ticket;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -146,7 +147,20 @@ class TicketControllerAuthorizationTest {
         t.setRequesterUsername(NHAN_VIEN_MKT.getUsername());
         t.setRequesterName("MKT requester");
         t.setDepartment(MKT);
+        // PHASE 5.1 (C-7): the controller now calls the actor-aware getTicket(id, principal)
+        // and the list endpoint calls listTickets(...username). Stub both signatures.
+        when(ticketService.getTicket(eq(TICKET_ID), any(String.class))).thenReturn(t);
+        when(ticketService.getTicket(eq(TICKET_ID), any(org.springframework.security.core.Authentication.class))).thenReturn(t);
         when(ticketService.getTicket(TICKET_ID)).thenReturn(t);
+        when(ticketService.listTickets(
+            any(), any(), any(), anyBoolean(), any(), any(), any(), any()
+        )).thenReturn(org.springframework.data.domain.Page.empty());
+        when(ticketService.listComments(eq(TICKET_ID), any(), any())).thenReturn(List.of());
+        when(ticketService.listComments(eq(TICKET_ID), any(), any(), any())).thenReturn(List.of());
+        when(ticketService.listAudit(eq(TICKET_ID), any())).thenReturn(List.of());
+        when(ticketService.listAudit(TICKET_ID)).thenReturn(List.of());
+        when(ticketService.listAssignments(eq(TICKET_ID), any())).thenReturn(List.of());
+        when(ticketService.listAssignments(TICKET_ID)).thenReturn(List.of());
         when(ticketService.assignTicket(anyLong(), any(), any(), any(), any())).thenReturn(t);
         when(ticketService.unassignTicket(anyLong(), any(), any(), any())).thenReturn(t);
         when(ticketService.startProgress(anyLong(), any(), any(), any())).thenReturn(t);
@@ -417,33 +431,40 @@ class TicketControllerAuthorizationTest {
     }
 
     // ========================================================================
-    // Object-level read authorization
+    // Object-level read authorization (PHASE 5.1 - C-7 fix)
+    //
+    // PHASE 0 originally characterized the absence of an object-level read check
+    // (C-7 gap). PHASE 5.1 closes C-7. The test that documented the gap
+    // (everyAuthenticatedRoleMayReadAnyTicket) is replaced here with the
+    // intended-policy regression test, per brief §20.
     // ========================================================================
 
     @Nested
-    @DisplayName("Object-level read - CURRENT behavior")
+    @DisplayName("Object-level read - PHASE 5.1 intended policy")
     class ObjectLevelRead {
 
         @Test
-        @DisplayName("CURRENT: GET /{id} accepts no actor and enforces no ownership check")
-        void getTicketEnforcesNoObjectLevelCheck_isPolicyGapC7() throws Exception {
-            // The handler signature takes only @PathVariable Long id - no Authentication at all.
-            givenUserExists(NHAN_VIEN_MKT);
+        @DisplayName("PHASE 5.1: GET /{id} now requires an Authentication argument and forwards the actor to the service")
+        void getTicketForwardsActorToService_canonicalPolicy() throws Exception {
+            // The handler signature now includes Authentication. The service applies
+            // TicketAuthorization.canReadTicket before returning the ticket. This test
+            // pins the new contract: the controller passes the principal through.
+            givenUserExists(NHAN_VIEN_IT);
             givenTicket();
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
-                    .with(authentication(stringPrincipal(NHAN_VIEN_MKT))))
+                    .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
                 .andExpect(status().isOk());
 
-            // A non-IT staff account reads a ticket belonging to the IT department's workflow.
-            verify(ticketService).getTicket(TICKET_ID);
+            verify(ticketService).getTicket(eq(TICKET_ID), eq("nv_it"));
         }
 
         @Test
-        @DisplayName("CURRENT: any authenticated role may read any ticket by id")
-        void everyAuthenticatedRoleMayReadAnyTicket() throws Exception {
+        @DisplayName("PHASE 5.1: ADMIN, GIAM_DOC, and IT operators can read any ticket; non-IT TP/NV may not")
+        void authorizedRolesMayReadAnyTicket_canonicalPolicy() throws Exception {
+            // ADMIN, GIAM_DOC, TRUONG_PHONG + IT, NHAN_VIEN + IT all have full read scope.
             for (UserAccount reader : List.of(
-                    ADMIN, GIAM_DOC, TRUONG_PHONG_IT, NHAN_VIEN_IT, TRUONG_PHONG_MKT, NHAN_VIEN_MKT)) {
+                    ADMIN, GIAM_DOC, TRUONG_PHONG_IT, NHAN_VIEN_IT)) {
                 givenUserExists(reader);
                 givenTicket();
 

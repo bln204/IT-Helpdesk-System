@@ -8,49 +8,136 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.TicketAuthorization;
 
 /**
  * Service quản lý ticket timeline.
+ *
+ * <p>PHASE 5.1 (C-7): every read method now consults the canonical object-level
+ * read policy through {@link TicketAuthorization#canReadTicket(ActorContext, Ticket)}.
+ * The actor-aware overloads accept a username (canonical String principal) and the
+ * read gate runs before any data is returned. The legacy no-actor overloads are
+ * retained for internal callers that already do their own authorization (e.g. the
+ * timeline writers).
  */
 @Service
 @Transactional
 public class TicketTimelineService {
-    
+
     private final TicketTimelineRepository timelineRepository;
-    
-    public TicketTimelineService(TicketTimelineRepository timelineRepository) {
+    private final TicketRepository ticketRepository;
+    private final ActorContextService actorContextService;
+    private final TicketAuthorization ticketAuthorization;
+
+    public TicketTimelineService(
+            TicketTimelineRepository timelineRepository,
+            TicketRepository ticketRepository,
+            ActorContextService actorContextService,
+            TicketAuthorization ticketAuthorization) {
         this.timelineRepository = timelineRepository;
+        this.ticketRepository = ticketRepository;
+        this.actorContextService = actorContextService;
+        this.ticketAuthorization = ticketAuthorization;
     }
-    
+
     // ============================================================
-    // TIMELINE OPERATIONS
+    // PHASE 5.1: C-7 read gate
     // ============================================================
-    
+
     /**
-     * Lấy full timeline của một ticket.
+     * Consult the canonical object-level read policy for a ticket id. Throws
+     * {@code 404} when the ticket is missing and {@code 403} when the actor is
+     * not authorized to read the ticket. On success, the resolved actor is returned.
      */
     @Transactional(readOnly = true)
-    public List<TicketTimeline.TimelineResponse> getTicketTimeline(Long ticketId) {
-        List<TicketTimeline> events = timelineRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
-        return events.stream()
+    public ActorContext requireReadAccess(Long ticketId, ActorContext actor) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new com.example.ticketing.ticket.TicketNotFoundException(ticketId));
+        if (!ticketAuthorization.canReadTicket(actor, ticket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to read this ticket.");
+        }
+        return actor;
+    }
+
+    private void requireReadAccess(Long ticketId, String actorUsername) {
+        ActorContext actor = actorContextService.fromUsername(actorUsername);
+        requireReadAccess(ticketId, actor);
+    }
+
+    // ============================================================
+    // TIMELINE OPERATIONS — actor-aware overloads (PHASE 5.1)
+    // ============================================================
+
+    @Transactional(readOnly = true)
+    public List<TicketTimeline.TimelineResponse> getTicketTimeline(Long ticketId, String actorUsername) {
+        requireReadAccess(ticketId, actorUsername);
+        return timelineRepository.findByTicketIdOrderByCreatedAtDesc(ticketId).stream()
             .map(TicketTimeline.TimelineResponse::new)
             .toList();
     }
-    
-    /**
-     * Lấy timeline với phân trang.
-     */
+
+    @Transactional(readOnly = true)
+    public Page<TicketTimeline.TimelineResponse> getTicketTimeline(Long ticketId, Pageable pageable, String actorUsername) {
+        requireReadAccess(ticketId, actorUsername);
+        return timelineRepository.findByTicketId(ticketId, pageable)
+            .map(TicketTimeline.TimelineResponse::new);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TicketTimeline.TimelineResponse> getTicketTimelineByCategory(
+            Long ticketId, TicketTimeline.EventCategory category, String actorUsername) {
+        requireReadAccess(ticketId, actorUsername);
+        return timelineRepository.findByTicketIdAndCategory(ticketId, category).stream()
+            .map(TicketTimeline.TimelineResponse::new)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TicketTimeline.TimelineResponse> getTicketComments(Long ticketId, String actorUsername) {
+        requireReadAccess(ticketId, actorUsername);
+        return timelineRepository.findComments(ticketId).stream()
+            .map(TicketTimeline.TimelineResponse::new)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Long> getTicketTimelineSummary(Long ticketId, String actorUsername) {
+        requireReadAccess(ticketId, actorUsername);
+        return timelineRepository.findByTicketIdOrderByCreatedAtDesc(ticketId).stream()
+            .collect(Collectors.groupingBy(
+                e -> e.getEventCategory().name(),
+                Collectors.counting()
+            ));
+    }
+
+    // ============================================================
+    // TIMELINE OPERATIONS — legacy no-actor overloads (back-compat)
+    //
+    // Internal callers (e.g. the SLA scheduler) reach these and already do their
+    // own authorization. The new controller endpoints use the actor-aware
+    // overloads above.
+    // ============================================================
+
+    @Transactional(readOnly = true)
+    public List<TicketTimeline.TimelineResponse> getTicketTimeline(Long ticketId) {
+        return timelineRepository.findByTicketIdOrderByCreatedAtDesc(ticketId).stream()
+            .map(TicketTimeline.TimelineResponse::new)
+            .toList();
+    }
+
     @Transactional(readOnly = true)
     public Page<TicketTimeline.TimelineResponse> getTicketTimeline(Long ticketId, Pageable pageable) {
         return timelineRepository.findByTicketId(ticketId, pageable)
             .map(TicketTimeline.TimelineResponse::new);
     }
-    
-    /**
-     * Lấy timeline theo category.
-     */
+
     @Transactional(readOnly = true)
     public List<TicketTimeline.TimelineResponse> getTicketTimelineByCategory(
             Long ticketId, TicketTimeline.EventCategory category) {
@@ -58,20 +145,14 @@ public class TicketTimelineService {
             .map(TicketTimeline.TimelineResponse::new)
             .toList();
     }
-    
-    /**
-     * Lấy comments từ timeline.
-     */
+
     @Transactional(readOnly = true)
     public List<TicketTimeline.TimelineResponse> getTicketComments(Long ticketId) {
         return timelineRepository.findComments(ticketId).stream()
             .map(TicketTimeline.TimelineResponse::new)
             .toList();
     }
-    
-    /**
-     * Lấy timeline summary (count by category).
-     */
+
     @Transactional(readOnly = true)
     public Map<String, Long> getTicketTimelineSummary(Long ticketId) {
         return timelineRepository.findByTicketIdOrderByCreatedAtDesc(ticketId).stream()

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.authorization.ActorContextService;
 import com.example.ticketing.authorization.TicketAuthorization;
+import com.example.ticketing.ticket.TicketService;
 import com.example.ticketing.ticket.TicketTypes.TicketPriority;
 
 /**
@@ -30,14 +31,17 @@ public class EscalationController {
     private final EscalationService escalationService;
     private final ActorContextService actorContextService;
     private final TicketAuthorization ticketAuthorization;
+    private final TicketService ticketService;
 
     public EscalationController(
             EscalationService escalationService,
             ActorContextService actorContextService,
-            TicketAuthorization ticketAuthorization) {
+            TicketAuthorization ticketAuthorization,
+            TicketService ticketService) {
         this.escalationService = escalationService;
         this.actorContextService = actorContextService;
         this.ticketAuthorization = ticketAuthorization;
+        this.ticketService = ticketService;
     }
 
     // ==================== Escalation Rules ====================
@@ -129,11 +133,22 @@ public class EscalationController {
     /**
      * Lấy lịch sử escalation của ticket.
      * GET /api/escalation/history/{ticketId}
+     *
+     * <p>PHASE 5.1 (C-7): escalation history is a ticket-derived read surface. We
+     * reuse the canonical object-level read policy instead of inventing a separate
+     * history policy. The previous role-only gate ({@code @PreAuthorize("hasAnyRole
+     * ('ADMIN', 'NHAN_VIEN')")}) is replaced by the canonical check; the URL, HTTP
+     * method, and DTOs are unchanged.
      */
     @GetMapping("/history/{ticketId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'NHAN_VIEN')")
-    public ResponseEntity<List<EscalationHistoryDto>> getTicketHistory(@PathVariable Long ticketId) {
+    public ResponseEntity<List<EscalationHistoryDto>> getTicketHistory(
+            @PathVariable Long ticketId,
+            Authentication authentication) {
         log.info("GET /api/escalation/history/{}", ticketId);
+        ActorContext actor = actorContextService.fromAuthentication(authentication);
+        // The history is ticket-derived data. We must be allowed to read the parent
+        // ticket before we can list its history.
+        ticketService.getTicket(ticketId, authentication.getName());
         List<EscalationHistory> history = escalationService.getTicketEscalationHistory(ticketId);
         return ResponseEntity.ok(history.stream().map(EscalationHistoryDto::fromEntity).toList());
     }
@@ -166,6 +181,11 @@ public class EscalationController {
             throw new AccessDeniedException(
                 "Only the IT Helpdesk manager may manually escalate tickets.");
         }
+
+        // PHASE 5.1 (C-7): manual escalation also requires the actor to be allowed
+        // to read the parent ticket. This prevents a manager who happens to know an
+        // unrelated ticket id from escalating it.
+        ticketService.getTicket(ticketId, authentication.getName());
 
         EscalationHistory history = escalationService.manualEscalate(
             ticketId, request.getReason(), authentication.getName());

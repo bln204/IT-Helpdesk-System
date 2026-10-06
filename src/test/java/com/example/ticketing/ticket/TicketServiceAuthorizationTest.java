@@ -94,33 +94,48 @@ class TicketServiceAuthorizationTest {
     class Viewing {
 
         @Test
-        @DisplayName("CURRENT: listTickets applies no department or role filter for any actor")
-        void currentListTicketsHasNoDepartmentOrRoleFilter() {
-            // TicketService.listTickets contains an EMPTY if-block for NHAN_VIEN/TRUONG_PHONG,
-            // so every actor receives the same unfiltered result set.
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+        @DisplayName("PHASE 5.1: listTickets applies the canonical read scope (IT operators see all; non-IT actors are department-scoped)")
+        void phase51ListTicketsAppliesCanonicalReadScope() {
+            // PHASE 5.1 (C-7): the list endpoint dispatches to a single authorization-aware
+            // repository query. IT operators / ADMIN / GIAM_DOC see every ticket; non-IT
+            // TRUONG_PHONG / NHAN_VIEN are department-scoped (with the requester-ownership
+            // carve-out). This is the new contract.
+            ticketRepository.save(fixtures.itRequestedTicket());
+            ticketRepository.save(fixtures.mktRequestedTicket(
+                "Phase 5.1 - mkt requester", TicketPriority.LOW));
+            ticketRepository.save(fixtures.mktRequestedTicket(
+                "Phase 5.1 - hr requester", TicketPriority.LOW));
 
-            long visibleToMktStaff = countVisibleTo(fixtures.nhanVienMkt());
+            // Full-scope actors see every ticket.
             long visibleToItStaff = countVisibleTo(fixtures.nhanVienIT());
             long visibleToAdmin = countVisibleTo(fixtures.admin());
+
+            // Department-scoped actors see only the MKT-requester tickets (the IT- and
+            // HR-requester ones are filtered out at the SQL boundary).
+            long visibleToMktStaff = countVisibleTo(fixtures.nhanVienMkt());
             long visibleToMktManager = countVisibleTo(fixtures.truongPhongMkt());
 
-            assertTrue(saved.getId() > 0, "fixture ticket must be persisted");
-            assertEquals(visibleToMktStaff, visibleToItStaff,
-                "IT staff and non-IT staff currently see the same tickets");
-            assertEquals(visibleToMktStaff, visibleToAdmin,
-                "ADMIN sees the same tickets as everyone else");
+            assertTrue(visibleToItStaff >= 3,
+                "IT staff should see all tickets (IT + MKT + HR requesters): " + visibleToItStaff);
+            assertEquals(visibleToItStaff, visibleToAdmin,
+                "ADMIN sees the same full scope as IT staff");
+            assertTrue(visibleToMktStaff < visibleToItStaff,
+                "non-IT MKT staff is department-scoped and sees fewer tickets than IT staff");
+            assertTrue(visibleToMktStaff >= 1,
+                "non-IT MKT staff should still see at least the MKT-requester tickets");
             assertEquals(visibleToMktStaff, visibleToMktManager,
-                "a non-IT TRUONG_PHONG sees IT-department tickets too");
+                "non-IT TP and non-IT NV in the same department see the same tickets");
         }
 
         @Test
-        @DisplayName("CURRENT: getTicket performs no object-level authorization check")
+        @DisplayName("CURRENT: getTicket performs no object-level authorization check (legacy no-actor overload)")
         void currentGetTicketHasNoObjectLevelCheck() {
             Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
 
-            // No actor/role/ownership argument exists on getTicket at all, so any authenticated
-            // caller reaching this method can read any ticket by id.
+            // The legacy no-actor overload is preserved for internal callers that already
+            // do their own authorization. It is intentionally NOT the canonical C-7 path.
+            // The new actor-aware overloads (getTicket(id, username) and getTicket(id, Authentication))
+            // are the canonical entry points.
             Ticket read = ticketService.getTicket(saved.getId());
 
             assertNotNull(read);
@@ -144,7 +159,7 @@ class TicketServiceAuthorizationTest {
         private long countVisibleTo(UserAccount actor) {
             return ticketService.listTickets(
                 null, null, null, false, PageRequest.of(0, 50),
-                actor.getRole().name(), actor.getDepartmentId()
+                actor.getRole().name(), actor.getDepartmentId(), actor.getUsername()
             ).getTotalElements();
         }
     }
