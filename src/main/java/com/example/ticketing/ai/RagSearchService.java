@@ -1,6 +1,5 @@
 package com.example.ticketing.ai;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -10,8 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import com.example.ticketing.auth.UserAccount;
-import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.RagAuthorizationDecision;
+import com.example.ticketing.authorization.RagAuthorizationPolicy;
+import com.example.ticketing.department.Department;
+import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.ticket.EmbeddingStatus;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketEmbedding;
@@ -24,6 +26,21 @@ import jakarta.persistence.PersistenceContext;
 /**
  * RAG (Retrieval-Augmented Generation) service for semantic ticket search.
  * Uses pgvector for efficient similarity search with authorization filtering.
+ *
+ * <p>PHASE 4.1 (C-6 fix). Authorization now goes through the canonical
+ * {@link RagAuthorizationPolicy}, which mirrors the same policy used by
+ * {@link RagRetrievalService}. The two services cannot disagree on the scope of a
+ * retrieval because they share the same policy bean and the same SQL-boundary branches.
+ *
+ * <p>SQL BOUNDARY. The verdict is materialized into one of three SQL shapes:
+ * <ul>
+ *   <li>{@link RagAuthorizationDecision.Kind#ALLOW_ALL} - the unfiltered vector search path
+ *       ({@code searchBySimilarity}). Used for IT operators and ADMIN/GIAM_DOC.</li>
+ *   <li>{@link RagAuthorizationDecision.Kind#DEPARTMENT_SCOPED} - the SQL filter list contains
+ *       exactly the actor's department id. Used for non-IT TRUONG_PHONG / NHAN_VIEN.</li>
+ *   <li>{@link RagAuthorizationDecision.Kind#DENY} - the service returns an empty response
+ *       WITHOUT invoking any vector search.</li>
+ * </ul>
  */
 @Service
 public class RagSearchService {
@@ -33,9 +50,11 @@ public class RagSearchService {
     private final EmbeddingService embeddingService;
     private final TicketEmbeddingRepository embeddingRepository;
     private final TicketRepository ticketRepository;
-    private final UserAccountRepository userAccountRepository;
     private final VectorSearchRepository vectorSearchRepository;
     private final OllamaProperties ollamaProperties;
+    private final RagAuthorizationPolicy ragAuthorizationPolicy;
+    private final ActorContextService actorContextService;
+    private final DepartmentRepository departmentRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -44,20 +63,32 @@ public class RagSearchService {
             EmbeddingService embeddingService,
             TicketEmbeddingRepository embeddingRepository,
             TicketRepository ticketRepository,
-            UserAccountRepository userAccountRepository,
             VectorSearchRepository vectorSearchRepository,
-            OllamaProperties ollamaProperties) {
+            OllamaProperties ollamaProperties,
+            RagAuthorizationPolicy ragAuthorizationPolicy,
+            ActorContextService actorContextService,
+            DepartmentRepository departmentRepository) {
         this.embeddingService = embeddingService;
         this.embeddingRepository = embeddingRepository;
         this.ticketRepository = ticketRepository;
-        this.userAccountRepository = userAccountRepository;
         this.vectorSearchRepository = vectorSearchRepository;
         this.ollamaProperties = ollamaProperties;
+        this.ragAuthorizationPolicy = ragAuthorizationPolicy;
+        this.actorContextService = actorContextService;
+        this.departmentRepository = departmentRepository;
     }
+
+    // ========================================================================
+    // Public entry points
+    // ========================================================================
 
     /**
      * Search tickets semantically using natural language query.
-     * Results are filtered by user's authorization (department access).
+     * Results are filtered by the actor's authorization (per the canonical RAG policy).
+     *
+     * @param request the search request
+     * @param username the authenticated username (from {@code Authentication.getName()}); may
+     *        be null / blank / unknown, in which case the request is DENY
      */
     public RagSearchDto.SearchResponse search(RagSearchDto.SearchRequest request, String username) {
         long startTime = System.currentTimeMillis();
@@ -65,6 +96,19 @@ public class RagSearchService {
         // Validate query
         if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
             return buildEmptyResponse(request.getQuery(), startTime, "empty_query");
+        }
+
+        // Phase 4.1: ask the canonical policy FIRST. DENY short-circuits before any vector
+        // search is invoked.
+        RagAuthorizationDecision decision = ragAuthorizationPolicy.decideByUsername(
+            username, actorContextService);
+
+        if (decision.kind() == RagAuthorizationDecision.Kind.DENY) {
+            if (log.isInfoEnabled()) {
+                log.info("RAG search denied for username={} reason={}",
+                    safeUsername(username), decision.reason());
+            }
+            return buildEmptyResponse(request.getQuery(), startTime, "denied");
         }
 
         try {
@@ -79,30 +123,31 @@ public class RagSearchService {
             // Convert to JSON string for pgvector
             String queryVectorJson = vectorToJson(queryVector);
 
-            // Get authorized department IDs for the user
-            List<Long> allowedDepartmentIds = getAuthorizedDepartmentIds(username);
-
             // Search using pgvector with authorization filter
             List<VectorSearchRepository.TicketSimilarity> similarities;
-            
-            if (allowedDepartmentIds != null && !allowedDepartmentIds.isEmpty()) {
-                // Filter by department
-                similarities = vectorSearchRepository.searchBySimilarityWithDepartmentFilter(
-                        queryVectorJson,
-                        request.getMinScore(),
-                        request.getLimit(),
-                        allowedDepartmentIds);
-            } else {
-                // Admin - no filter (but check if pgvector is available)
+
+            if (decision.kind() == RagAuthorizationDecision.Kind.ALLOW_ALL) {
                 if (!vectorSearchRepository.isPgvectorAvailable()) {
                     log.warn("pgvector not available, falling back to Java calculation");
-                    return searchWithJavaFallback(request, startTime, username);
+                    return searchWithJavaFallback(request, startTime, decision);
                 }
-                
                 similarities = vectorSearchRepository.searchBySimilarity(
                         queryVectorJson,
                         request.getMinScore(),
                         request.getLimit());
+            } else {
+                // DEPARTMENT_SCOPED
+                Long departmentId = resolveDepartmentId(decision.departmentCode());
+                if (departmentId == null) {
+                    log.warn("RAG search could not resolve department code={}",
+                        decision.departmentCode());
+                    return buildEmptyResponse(request.getQuery(), startTime, "denied");
+                }
+                similarities = vectorSearchRepository.searchBySimilarityWithDepartmentFilter(
+                        queryVectorJson,
+                        request.getMinScore(),
+                        request.getLimit(),
+                        List.of(departmentId));
             }
 
             if (similarities.isEmpty()) {
@@ -142,43 +187,98 @@ public class RagSearchService {
     }
 
     /**
-     * Get authorized department IDs for a user.
-     * - ADMIN, GIAM_DOC: Access to all departments (no filter)
-     * - TRUONG_PHONG, NHAN_VIEN: Only their own department
+     * Search without authorization filter (for the ADMIN-only {@code /api/ai/search/admin}
+     * endpoint).
+     *
+     * <p>This is the only entry point that is allowed to bypass the per-actor policy. The
+     * authorization to reach it is enforced at the controller layer
+     * ({@code @PreAuthorize("hasRole('ADMIN')")} on {@link RagSearchController#searchAdmin}).
+     * The service itself does NOT perform any actor resolution, which means a null / blank
+     * username MUST NOT reach this method; the controller passes no username.
      */
-    private List<Long> getAuthorizedDepartmentIds(String username) {
-        if (username == null || username.isBlank()) {
-            return List.of();
-        }
-
-        UserAccount user = userAccountRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            return List.of();
-        }
-
-        // ADMIN and GIAM_DOC can see all departments (return null to skip filter)
-        if (user.isAdmin() || user.isGiamDoc()) {
-            return null; // Signal for no filter
-        }
-
-        // TRUONG_PHONG and NHAN_VIEN: only their department
-        if (user.getDepartment() != null) {
-            return List.of(user.getDepartment().getId());
-        }
-
-        // If no department, return empty list (no access)
-        return List.of();
+    public RagSearchDto.SearchResponse searchAdmin(RagSearchDto.SearchRequest request) {
+        return searchAll(request);
     }
 
     /**
-     * Fallback search using Java calculation when pgvector is not available.
+     * Search across all departments without consulting the per-actor policy.
+     *
+     * <p>This is the privileged path for {@code /api/ai/search/admin}. The controller layer
+     * guarantees the caller has the ADMIN role; the service therefore does not resolve any
+     * actor. No department filter is applied at the SQL boundary.
+     */
+    public RagSearchDto.SearchResponse searchAll(RagSearchDto.SearchRequest request) {
+        long startTime = System.currentTimeMillis();
+
+        if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
+            return buildEmptyResponse(request.getQuery(), startTime, "empty_query");
+        }
+
+        try {
+            float[] queryVector = embeddingService.generateEmbeddingInternal(request.getQuery());
+            if (queryVector == null || queryVector.length == 0) {
+                log.warn("Failed to generate embedding for query: {}", request.getQuery());
+                return buildEmptyResponse(request.getQuery(), startTime, "embedding_failed");
+            }
+
+            String queryVectorJson = vectorToJson(queryVector);
+
+            if (!vectorSearchRepository.isPgvectorAvailable()) {
+                log.warn("pgvector not available, falling back to Java calculation");
+                return searchAllJavaFallback(request, startTime);
+            }
+
+            List<VectorSearchRepository.TicketSimilarity> similarities = vectorSearchRepository.searchBySimilarity(
+                    queryVectorJson,
+                    request.getMinScore(),
+                    request.getLimit());
+
+            if (similarities.isEmpty()) {
+                return buildEmptyResponse(request.getQuery(), startTime, "no_results");
+            }
+
+            List<Long> ticketIds = similarities.stream()
+                    .map(VectorSearchRepository.TicketSimilarity::getTicketId)
+                    .collect(Collectors.toList());
+
+            Map<Long, Ticket> ticketMap = ticketRepository.findAllById(ticketIds).stream()
+                    .collect(Collectors.toMap(Ticket::getId, t -> t));
+
+            List<RagSearchDto.SearchResult> results = new ArrayList<>();
+            for (VectorSearchRepository.TicketSimilarity sim : similarities) {
+                Ticket ticket = ticketMap.get(sim.getTicketId());
+                if (ticket != null) {
+                    results.add(toSearchResult(ticket, sim.getSimilarity()));
+                }
+            }
+
+            return RagSearchDto.SearchResponse.builder()
+                    .query(request.getQuery())
+                    .totalResults(results.size())
+                    .results(results)
+                    .metadata(buildMetadata(startTime, results.size(), "pgvector_similarity"))
+                    .build();
+        } catch (Exception e) {
+            log.error("Admin semantic search failed: {}", e.getMessage(), e);
+            return buildEmptyResponse(request.getQuery(), startTime, "error: " + e.getMessage());
+        }
+    }
+
+    // ========================================================================
+    // Fallback paths (Java calculation when pgvector is not available)
+    // ========================================================================
+
+    /**
+     * Java fallback for the per-actor search path when pgvector is unavailable.
+     *
+     * <p>The department filter is materialized from the verdict directly, NOT from a list of
+     * ids carried into the method. This keeps the fallback in sync with the SQL-boundary
+     * logic in {@link #search(RagSearchDto.SearchRequest, String)}.
      */
     private RagSearchDto.SearchResponse searchWithJavaFallback(
-            RagSearchDto.SearchRequest request, 
+            RagSearchDto.SearchRequest request,
             long startTime,
-            String username) {
-        
-        log.warn("Using Java fallback for similarity calculation");
+            RagAuthorizationDecision decision) {
 
         List<TicketEmbedding> completedEmbeddings = embeddingRepository
                 .findByEmbeddingStatus(EmbeddingStatus.COMPLETED);
@@ -187,7 +287,6 @@ public class RagSearchService {
             return buildEmptyResponse(request.getQuery(), startTime, "no_embeddings");
         }
 
-        // Get query vector
         float[] queryVector;
         try {
             queryVector = embeddingService.generateEmbeddingInternal(request.getQuery());
@@ -195,20 +294,26 @@ public class RagSearchService {
             return buildEmptyResponse(request.getQuery(), startTime, "embedding_failed");
         }
 
-        // Get authorized department IDs
-        List<Long> allowedDeptIds = getAuthorizedDepartmentIds(username);
+        Long allowedDepartmentId = null;
+        if (decision.kind() == RagAuthorizationDecision.Kind.DEPARTMENT_SCOPED) {
+            allowedDepartmentId = resolveDepartmentId(decision.departmentCode());
+            if (allowedDepartmentId == null) {
+                log.warn("RAG Java fallback could not resolve department code={}",
+                    decision.departmentCode());
+                return buildEmptyResponse(request.getQuery(), startTime, "denied");
+            }
+        }
+        // ALLOW_ALL => allowedDepartmentId=null (no department filter in the fallback loop)
 
         List<ScoredTicket> scoredTickets = new ArrayList<>();
-
         for (TicketEmbedding embedding : completedEmbeddings) {
             try {
                 Ticket ticket = ticketRepository.findById(embedding.getTicketId()).orElse(null);
                 if (ticket == null) continue;
 
-                // Authorization filter
-                if (allowedDeptIds != null && !allowedDeptIds.isEmpty()) {
-                    if (ticket.getDepartmentId() == null || 
-                        !allowedDeptIds.contains(ticket.getDepartmentId())) {
+                if (allowedDepartmentId != null) {
+                    if (ticket.getDepartmentId() == null
+                        || !allowedDepartmentId.equals(ticket.getDepartmentId())) {
                         continue;
                     }
                 }
@@ -227,7 +332,6 @@ public class RagSearchService {
             }
         }
 
-        // Sort and limit
         scoredTickets.sort((a, b) -> Double.compare(b.similarity, a.similarity));
         int limit = Math.min(request.getLimit(), scoredTickets.size());
 
@@ -235,8 +339,6 @@ public class RagSearchService {
                 .limit(limit)
                 .map(s -> toSearchResult(s.ticket, s.similarity))
                 .toList();
-
-        long processingTime = System.currentTimeMillis() - startTime;
 
         return RagSearchDto.SearchResponse.builder()
                 .query(request.getQuery())
@@ -247,15 +349,85 @@ public class RagSearchService {
     }
 
     /**
-     * Search without authorization filter (for admin dashboard).
+     * Java fallback for the unfiltered (ADMIN) search path when pgvector is unavailable.
+     * No department filter is applied.
      */
-    public RagSearchDto.SearchResponse searchAdmin(RagSearchDto.SearchRequest request) {
-        return search(request, null);
+    private RagSearchDto.SearchResponse searchAllJavaFallback(
+            RagSearchDto.SearchRequest request, long startTime) {
+        List<TicketEmbedding> completedEmbeddings = embeddingRepository
+                .findByEmbeddingStatus(EmbeddingStatus.COMPLETED);
+
+        if (completedEmbeddings.isEmpty()) {
+            return buildEmptyResponse(request.getQuery(), startTime, "no_embeddings");
+        }
+
+        float[] queryVector;
+        try {
+            queryVector = embeddingService.generateEmbeddingInternal(request.getQuery());
+        } catch (Exception e) {
+            return buildEmptyResponse(request.getQuery(), startTime, "embedding_failed");
+        }
+
+        List<ScoredTicket> scoredTickets = new ArrayList<>();
+        for (TicketEmbedding embedding : completedEmbeddings) {
+            try {
+                Ticket ticket = ticketRepository.findById(embedding.getTicketId()).orElse(null);
+                if (ticket == null) continue;
+
+                float[] ticketVector = parseVector(embedding.getEmbedding());
+                if (ticketVector == null) continue;
+
+                double similarity = cosineSimilarity(queryVector, ticketVector);
+
+                if (similarity >= request.getMinScore()) {
+                    scoredTickets.add(new ScoredTicket(ticket, similarity));
+                }
+            } catch (Exception e) {
+                log.warn("Error processing embedding for ticket {}: {}",
+                        embedding.getTicketId(), e.getMessage());
+            }
+        }
+
+        scoredTickets.sort((a, b) -> Double.compare(b.similarity, a.similarity));
+        int limit = Math.min(request.getLimit(), scoredTickets.size());
+
+        List<RagSearchDto.SearchResult> results = scoredTickets.stream()
+                .limit(limit)
+                .map(s -> toSearchResult(s.ticket, s.similarity))
+                .toList();
+
+        return RagSearchDto.SearchResponse.builder()
+                .query(request.getQuery())
+                .totalResults(results.size())
+                .results(results)
+                .metadata(buildMetadata(startTime, results.size(), "java_fallback"))
+                .build();
     }
 
+    // ========================================================================
+    // Helpers
+    // ========================================================================
+
     /**
-     * Convert float array to JSON vector string for pgvector.
+     * Resolve a configured department code to its internal id, or {@code null} if no enabled
+     * department matches.
      */
+    private Long resolveDepartmentId(String departmentCode) {
+        if (departmentCode == null) {
+            return null;
+        }
+        return departmentRepository.findByCode(departmentCode)
+            .filter(Department::isEnabled)
+            .map(Department::getId)
+            .orElse(null);
+    }
+
+    private static String safeUsername(String username) {
+        if (username == null) return "<null>";
+        if (username.isBlank()) return "<blank>";
+        return username;
+    }
+
     private String vectorToJson(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
@@ -266,9 +438,6 @@ public class RagSearchService {
         return sb.toString();
     }
 
-    /**
-     * Parse PostgreSQL vector string to float array.
-     */
     private float[] parseVector(String vectorString) {
         if (vectorString == null || vectorString.isEmpty()) return null;
 
@@ -291,9 +460,6 @@ public class RagSearchService {
         }
     }
 
-    /**
-     * Calculate cosine similarity.
-     */
     private double cosineSimilarity(float[] a, float[] b) {
         if (a.length != b.length) return 0.0;
 

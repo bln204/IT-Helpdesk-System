@@ -10,8 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.ticketing.auth.UserAccount;
-import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.RagAuthorizationDecision;
+import com.example.ticketing.authorization.RagAuthorizationPolicy;
+import com.example.ticketing.department.Department;
+import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketEmbeddingRepository;
 import com.example.ticketing.ticket.TicketRepository;
@@ -21,23 +24,35 @@ import jakarta.persistence.PersistenceContext;
 
 /**
  * RAG Context Retrieval Service.
- * 
- * This service provides read-only context retrieval for future LLM generation.
- * It does NOT generate answers - it only retrieves and normalizes relevant context.
- * 
- * Authorization:
- * - ADMIN, GIAM_DOC: Access to all departments
- * - TRUONG_PHONG, NHAN_VIEN: Access to own department only
- * 
- * Security:
- * - Authorization is enforced at the SQL/vector-search boundary
- * - Unauthorized tickets are never loaded into the application
+ *
+ * <p>PHASE 4.1 (C-6 fix). This service provides read-only context retrieval for future LLM
+ * generation. It does NOT generate answers - it only retrieves and normalizes relevant context.
+ *
+ * <p>AUTHORIZATION (PHASE 4.1). The service delegates the actor-vs-scope decision to the
+ * canonical {@link RagAuthorizationPolicy}. There is no longer a duplicated
+ * {@code getAuthorizedDepartmentIds} method; both this service and {@link RagSearchService}
+ * read from the same policy bean, so they cannot disagree.
+ *
+ * <p>SQL BOUNDARY (SAFE PATTERN). The verdict is materialized into one of three SQL shapes:
+ * <ul>
+ *   <li>{@link RagAuthorizationDecision.Kind#ALLOW_ALL} - the unfiltered vector search path
+ *       is taken ({@code searchBySimilarity}). Used for IT operators and ADMIN/GIAM_DOC.</li>
+ *   <li>{@link RagAuthorizationDecision.Kind#DEPARTMENT_SCOPED} - the SQL filter list contains
+ *       exactly the actor's department id ({@code searchBySimilarityWithDepartmentFilter}).
+ *       Used for non-IT TRUONG_PHONG / NHAN_VIEN.</li>
+ *   <li>{@link RagAuthorizationDecision.Kind#DENY} - no vector search is invoked; the service
+ *       returns an empty response with status {@code "denied"}. This is the explicit fix for
+ *       the previous {@code null}-means-no-filter collision.</li>
+ * </ul>
+ *
+ * <p>SECURITY. Authorization is enforced at the SQL/vector-search boundary. Unauthorized
+ * tickets are never loaded into the application and never reach the LLM context.
  */
 @Service
 public class RagRetrievalService {
 
     private static final Logger log = LoggerFactory.getLogger(RagRetrievalService.class);
-    
+
     private static final int MAX_CONTENT_LENGTH = 500;
     private static final int DESCRIPTION_TRUNCATE_LENGTH = 300;
 
@@ -45,8 +60,10 @@ public class RagRetrievalService {
     private final VectorSearchRepository vectorSearchRepository;
     private final TicketRepository ticketRepository;
     private final TicketEmbeddingRepository embeddingRepository;
-    private final UserAccountRepository userAccountRepository;
     private final OllamaProperties ollamaProperties;
+    private final RagAuthorizationPolicy ragAuthorizationPolicy;
+    private final ActorContextService actorContextService;
+    private final DepartmentRepository departmentRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -56,89 +73,112 @@ public class RagRetrievalService {
             VectorSearchRepository vectorSearchRepository,
             TicketRepository ticketRepository,
             TicketEmbeddingRepository embeddingRepository,
-            UserAccountRepository userAccountRepository,
-            OllamaProperties ollamaProperties) {
+            OllamaProperties ollamaProperties,
+            RagAuthorizationPolicy ragAuthorizationPolicy,
+            ActorContextService actorContextService,
+            DepartmentRepository departmentRepository) {
         this.embeddingService = embeddingService;
         this.vectorSearchRepository = vectorSearchRepository;
         this.ticketRepository = ticketRepository;
         this.embeddingRepository = embeddingRepository;
-        this.userAccountRepository = userAccountRepository;
         this.ollamaProperties = ollamaProperties;
+        this.ragAuthorizationPolicy = ragAuthorizationPolicy;
+        this.actorContextService = actorContextService;
+        this.departmentRepository = departmentRepository;
     }
 
     /**
-     * Retrieve RAG context for a query.
-     * 
-     * This method is read-only and does not modify any data.
-     * 
+     * Retrieve RAG context for a query, scoped to the authenticated actor.
+     *
+     * <p>This method is read-only and does not modify any data.
+     *
      * @param request The retrieval request containing query and parameters
-     * @param username The authenticated username
-     * @return RAG context response with relevant sources
+     * @param username The authenticated username (from {@code Authentication.getName()})
+     * @return RAG context response with relevant sources, or an empty response if the actor is
+     *         not authorized
      */
     @Transactional(readOnly = true)
     public RagContextDto.RetrievalResponse retrieveContext(
-            RagContextDto.RetrievalRequest request, 
+            RagContextDto.RetrievalRequest request,
             String username) {
-        
+
         long startTime = System.currentTimeMillis();
-        
+
         // Validate query
         if (request.getQuery() == null || request.getQuery().trim().isEmpty()) {
             return buildEmptyResponse(request.getQuery(), startTime, "empty_query", "Query must not be blank");
         }
-        
+
+        // Phase 4.1: ask the canonical policy FIRST. DENY is enforced by short-circuiting
+        // BEFORE the vector search is ever invoked. This is the fix for the previous
+        // null-username-means-no-filter sharp edge characterized in Phase 4.0.
+        RagAuthorizationDecision decision = ragAuthorizationPolicy.decideByUsername(
+            username, actorContextService);
+
+        if (decision.kind() == RagAuthorizationDecision.Kind.DENY) {
+            if (log.isInfoEnabled()) {
+                log.info("RAG retrieval denied for username={} reason={}",
+                    safeUsername(username), decision.reason());
+            }
+            return buildEmptyResponse(request.getQuery(), startTime, "denied", null);
+        }
+
         try {
             // Generate query embedding
             float[] queryVector = embeddingService.generateEmbeddingInternal(request.getQuery());
-            
+
             if (queryVector == null || queryVector.length == 0) {
                 log.warn("Failed to generate embedding for query");
-                return buildEmptyResponse(request.getQuery(), startTime, "embedding_failed", 
+                return buildEmptyResponse(request.getQuery(), startTime, "embedding_failed",
                         "Failed to generate embedding for the query");
             }
-            
+
             // Convert to JSON string for pgvector
             String queryVectorJson = vectorToJson(queryVector);
-            
-            // Get authorized department IDs
-            List<Long> allowedDepartmentIds = getAuthorizedDepartmentIds(username);
-            
-            // Perform vector search with authorization
+
+            // Materialize the verdict into a SQL-boundary shape.
             List<VectorSearchRepository.TicketSimilarity> similarities;
             String searchType;
-            
-            if (allowedDepartmentIds != null && !allowedDepartmentIds.isEmpty()) {
-                // Department-restricted search
-                similarities = vectorSearchRepository.searchBySimilarityWithDepartmentFilter(
-                        queryVectorJson,
-                        request.getMinScore(),
-                        request.getLimit(),
-                        allowedDepartmentIds);
-                searchType = "department_filtered";
-            } else {
-                // Admin/GiamDoc - no filter
+
+            if (decision.kind() == RagAuthorizationDecision.Kind.ALLOW_ALL) {
                 if (!vectorSearchRepository.isPgvectorAvailable()) {
                     log.warn("pgvector not available for context retrieval");
                     return buildEmptyResponse(request.getQuery(), startTime, "ollama_unavailable",
                             "Vector search is temporarily unavailable");
                 }
-                
                 similarities = vectorSearchRepository.searchBySimilarity(
                         queryVectorJson,
                         request.getMinScore(),
                         request.getLimit());
                 searchType = "all_departments";
+            } else {
+                // DEPARTMENT_SCOPED: resolve the actor's department code to an id and apply the
+                // SQL filter. The policy has already verified the actor has a department.
+                Long departmentId = resolveDepartmentId(decision.departmentCode());
+                if (departmentId == null) {
+                    // The configured department for this actor is missing or disabled. Treat as
+                    // DENY rather than risk an empty/unsafe filter.
+                    log.warn("RAG retrieval could not resolve department code={} for username={}",
+                        decision.departmentCode(), safeUsername(username));
+                    return buildEmptyResponse(request.getQuery(), startTime, "denied", null);
+                }
+                similarities = vectorSearchRepository.searchBySimilarityWithDepartmentFilter(
+                        queryVectorJson,
+                        request.getMinScore(),
+                        request.getLimit(),
+                        List.of(departmentId));
+                searchType = "department_filtered";
             }
-            
+
             if (similarities.isEmpty()) {
                 return buildEmptyResponse(request.getQuery(), startTime, "no_results", null);
             }
-            
+
             // Fetch tickets maintaining similarity order
             List<RagContextDto.RagSource> sources = buildSources(similarities);
-            
+
             long processingTime = System.currentTimeMillis() - startTime;
-            
+
             return RagContextDto.RetrievalResponse.builder()
                     .query(request.getQuery())
                     .totalResults(sources.size())
@@ -147,41 +187,35 @@ public class RagRetrievalService {
                     .errorMessage(null)
                     .metadata(buildMetadata(startTime, sources.size(), searchType))
                     .build();
-            
+
         } catch (Exception e) {
             log.error("Context retrieval failed: {}", e.getMessage(), e);
-            return buildEmptyResponse(request.getQuery(), startTime, "error", 
+            return buildEmptyResponse(request.getQuery(), startTime, "error",
                     "An error occurred while retrieving context");
         }
     }
 
     /**
-     * Get authorized department IDs for a user.
-     * - ADMIN, GIAM_DOC: Access to all departments (no filter)
-     * - TRUONG_PHONG, NHAN_VIEN: Only their own department
+     * Resolve a configured department code to its internal id, or {@code null} if no enabled
+     * department matches.
      */
-    private List<Long> getAuthorizedDepartmentIds(String username) {
-        if (username == null || username.isBlank()) {
-            return List.of();
+    private Long resolveDepartmentId(String departmentCode) {
+        if (departmentCode == null) {
+            return null;
         }
+        return departmentRepository.findByCode(departmentCode)
+            .filter(Department::isEnabled)
+            .map(Department::getId)
+            .orElse(null);
+    }
 
-        UserAccount user = userAccountRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            return List.of();
-        }
-
-        // ADMIN and GIAM_DOC can see all departments (return null to skip filter)
-        if (user.isAdmin() || user.isGiamDoc()) {
-            return null; // Signal for no filter
-        }
-
-        // TRUONG_PHONG and NHAN_VIEN: only their department
-        if (user.getDepartment() != null) {
-            return List.of(user.getDepartment().getId());
-        }
-
-        // If no department, return empty list (no access)
-        return List.of();
+    /**
+     * Safe username for logging (avoids leaking PII if the principal is unexpectedly long).
+     */
+    private static String safeUsername(String username) {
+        if (username == null) return "<null>";
+        if (username.isBlank()) return "<blank>";
+        return username;
     }
 
     /**
@@ -190,16 +224,16 @@ public class RagRetrievalService {
      */
     private List<RagContextDto.RagSource> buildSources(
             List<VectorSearchRepository.TicketSimilarity> similarities) {
-        
+
         // Extract ticket IDs
         List<Long> ticketIds = similarities.stream()
                 .map(VectorSearchRepository.TicketSimilarity::getTicketId)
                 .collect(Collectors.toList());
-        
+
         // Fetch tickets into a map for O(1) lookup
         Map<Long, Ticket> ticketMap = ticketRepository.findAllById(ticketIds).stream()
                 .collect(Collectors.toMap(Ticket::getId, t -> t));
-        
+
         // Build sources in similarity order (iterate original list)
         List<RagContextDto.RagSource> sources = new ArrayList<>();
         for (VectorSearchRepository.TicketSimilarity sim : similarities) {
@@ -208,7 +242,7 @@ public class RagRetrievalService {
                 sources.add(toRagSource(ticket, sim.getSimilarity()));
             }
         }
-        
+
         return sources;
     }
 
@@ -218,7 +252,7 @@ public class RagRetrievalService {
      */
     private RagContextDto.RagSource toRagSource(Ticket ticket, double similarity) {
         String content = buildContent(ticket);
-        
+
         return RagContextDto.RagSource.builder()
                 .sourceType("TICKET")
                 .sourceRef(ticket.getTicketNumber())
@@ -240,9 +274,9 @@ public class RagRetrievalService {
      */
     private String buildContent(Ticket ticket) {
         StringBuilder sb = new StringBuilder();
-        
+
         sb.append("Title: ").append(ticket.getTitle()).append("\n\n");
-        
+
         sb.append("Category: ");
         if (ticket.getCategoryName() != null) {
             sb.append(ticket.getCategoryName());
@@ -251,32 +285,32 @@ public class RagRetrievalService {
             }
         }
         sb.append("\n");
-        
+
         sb.append("Priority: ").append(
                 ticket.getPriority() != null ? ticket.getPriority().name() : "N/A").append("\n");
-        
+
         sb.append("Status: ").append(
                 ticket.getStatus() != null ? ticket.getStatus().name() : "N/A").append("\n\n");
-        
+
         sb.append("Description:\n").append(
                 truncateDescription(ticket.getDescription(), 200)).append("\n\n");
-        
+
         sb.append("Resolution: ");
-        if (ticket.getStatus() != null && 
-            (ticket.getStatus().name().equals("RESOLVED") || 
+        if (ticket.getStatus() != null &&
+            (ticket.getStatus().name().equals("RESOLVED") ||
              ticket.getStatus().name().equals("CLOSED"))) {
             sb.append("Ticket has been resolved.");
         } else {
             sb.append("Not yet resolved.");
         }
-        
+
         String content = sb.toString();
-        
+
         // Truncate if exceeds max length
         if (content.length() > MAX_CONTENT_LENGTH) {
             content = content.substring(0, MAX_CONTENT_LENGTH - 3) + "...";
         }
-        
+
         return content;
     }
 
@@ -307,9 +341,9 @@ public class RagRetrievalService {
      */
     private RagContextDto.RetrievalMetadata buildMetadata(
             long startTime, int resultCount, String searchType) {
-        
+
         long totalEmbeddings = embeddingRepository.count();
-        
+
         return RagContextDto.RetrievalMetadata.builder()
                 .processingTimeMs(System.currentTimeMillis() - startTime)
                 .embeddingModel(ollamaProperties.getEmbeddingModel())
@@ -323,7 +357,7 @@ public class RagRetrievalService {
      */
     private RagContextDto.RetrievalResponse buildEmptyResponse(
             String query, long startTime, String status, String errorMessage) {
-        
+
         return RagContextDto.RetrievalResponse.builder()
                 .query(query)
                 .totalResults(0)
