@@ -1,0 +1,636 @@
+/* ==================== Floating AI Assistant ==================== */
+/* Floating trigger button */
+.ai-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent, #ff7a59);
+  color: #fff;
+  border: none;
+  font-size: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(215, 107, 45, 0.35);
+  z-index: 900;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ai-fab:hover,
+.ai-fab:focus {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(215, 107, 45, 0.45);
+  outline: none;
+}
+
+.ai-fab:focus-visible {
+  outline: 2px solid var(--teal, #1c8d88);
+  outline-offset: 2px;
+}
+
+.ai-fab.hidden {
+  display: none !important;
+}
+
+/* Chat panel */
+.ai-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: 520px;
+  max-height: calc(100vh - 120px);
+  background: var(--panel, #fff);
+  color: var(--ink, #1c1f2a);
+  border-radius: var(--radius, 16px);
+  box-shadow: 0 18px 40px rgba(31, 35, 50, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 950;
+  border: 1px solid var(--border, rgba(30, 27, 22, 0.1));
+}
+
+.ai-panel.hidden {
+  display: none !important;
+}
+
+.ai-panel.minimized .ai-panel-body,
+.ai-panel.minimized .ai-panel-footer {
+  display: none;
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, var(--accent, #ff7a59), var(--accent-dark, #d95d3f));
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ai-panel-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-panel-header-text strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.ai-panel-header-text span {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.ai-panel-header-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ai-panel-header-actions button {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ai-panel-header-actions button:hover,
+.ai-panel-header-actions button:focus-visible {
+  background: rgba(255, 255, 255, 0.32);
+  outline: none;
+}
+
+.ai-panel-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--surface, #f9fafc);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Empty / intro state */
+.ai-intro {
+  background: var(--panel, #fff);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  border: 1px solid var(--border, rgba(30, 27, 22, 0.1));
+}
+
+.ai-intro p {
+  margin: 0 0 8px 0;
+}
+
+.ai-intro p:last-child {
+  margin-bottom: 0;
+}
+
+/* PHASE 7.7 hotfix-22: .ai-suggestions and
+   .ai-suggestion-btn removed. Chat-box suggestion
+   buttons are no longer rendered for any role. */
+
+/* Messages */
+.ai-msg {
+  max-width: 90%;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-msg-user {
+  align-self: flex-end;
+  background: var(--accent, #ff7a59);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.ai-msg-ai {
+  align-self: flex-start;
+  background: var(--panel, #fff);
+  color: var(--ink, #1c1f2a);
+  border: 1px solid var(--border, rgba(30, 27, 22, 0.1));
+  border-bottom-left-radius: 4px;
+}
+
+.ai-msg-meta {
+  font-size: 0.7rem;
+  color: #475569;            /* slate-600 trên nền trắng ~ 7.2:1 */
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+.ai-msg-sources {
+  margin-top: 10px;
+  border-top: 1px solid var(--border, rgba(30, 27, 22, 0.08));
+  padding-top: 8px;
+}
+
+.ai-msg-sources summary {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #334155;            /* slate-700 — dễ đọc hơn #6c6f80 */
+  cursor: pointer;
+  list-style: none;
+}
+
+.ai-msg-sources summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-msg-sources ul {
+  list-style: none;
+  margin: 8px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-msg-sources li {
+  background: var(--surface, #f9fafc);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  color: #1c1f2a;            /* text đậm cho items nguồn */
+}
+
+.ai-msg-sources .ai-source-number {
+  font-weight: 700;
+  color: #c2410c;            /* orange-700 — nổi bật hơn #ff7a59 trên nền sáng */
+  margin-right: 6px;
+}
+
+.ai-msg-sources .ai-source-score {
+  display: inline-block;
+  margin-left: 6px;
+  color: #475569;            /* slate-600 ~ 7.2:1 */
+  font-weight: 500;
+}
+
+.ai-no-context {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #475569;            /* slate-600 thay vì #6c6f80 mờ */
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Loading placeholder */
+.ai-msg-ai.ai-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-style: italic;
+}
+
+.ai-msg-ai.ai-loading::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border, rgba(30, 27, 22, 0.15));
+  border-top-color: var(--accent, #ff7a59);
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error message */
+.ai-msg-error {
+  align-self: flex-start;
+  background: #fde8e8;
+  color: #a12626;
+  border: 1px solid rgba(161, 38, 38, 0.2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-width: 90%;
+}
+
+/* Footer (input) */
+.ai-panel-footer {
+  padding: 10px 12px;
+  background: var(--panel, #fff);
+  border-top: 1px solid var(--border, rgba(30, 27, 22, 0.08));
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.ai-input-row textarea {
+  flex: 1;
+  min-height: 38px;
+  max-height: 120px;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid var(--border, rgba(30, 27, 22, 0.15));
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--surface, #f9fafc);
+  color: var(--ink, #1c1f2a);
+}
+
+.ai-input-row textarea:focus-visible {
+  outline: 2px solid var(--accent, #ff7a59);
+  outline-offset: -1px;
+  border-color: var(--accent, #ff7a59);
+}
+
+.ai-input-row textarea:disabled {
+  background: var(--surface, #f9fafc);
+  color: var(--muted, #6c6f80);
+  cursor: not-allowed;
+}
+
+.ai-send-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  padding: 0;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-send-btn:disabled {
+  background: var(--muted, #6c6f80);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ai-send-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.ai-hint {
+  font-size: 0.7rem;
+  color: var(--muted, #6c6f80);
+}
+
+/* "Ask about this ticket" entry point inside ticket detail */
+.ai-ask-ticket {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--lavender, #eef0ff);
+  border: 1px solid rgba(31, 111, 120, 0.25);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.ai-ask-ticket strong {
+  color: var(--teal, #1c8d88);
+}
+
+.ai-ask-ticket button {
+  background: var(--teal, #1c8d88);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.ai-ask-ticket button:hover,
+.ai-ask-ticket button:focus-visible {
+  background: #167a74;
+  outline: none;
+}
+
+.ai-ask-ticket.hidden {
+  display: none !important;
+}
+
+/* Dark mode tweaks */
+body.dark .ai-msg-ai {
+  background: #1f2632;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark .ai-intro {
+  background: #1f2632;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: var(--ink, #f3f5f8);
+}
+
+/* PHASE 7.7 hotfix-22: body.dark .ai-suggestion-btn
+   rule removed (selector no longer exists). */
+
+body.dark .ai-panel-footer {
+  background: #1f2632;
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+body.dark .ai-input-row textarea {
+  background: #151b24;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--ink, #f3f5f8);
+}
+
+body.dark .ai-msg-sources li {
+  background: #151b24;
+}
+
+body.dark .ai-msg-error {
+  background: rgba(161, 38, 38, 0.15);
+  color: #f3a4a4;
+  border-color: rgba(161, 38, 38, 0.4);
+}
+
+body.dark .ai-ask-ticket {
+  background: rgba(31, 111, 120, 0.15);
+  border-color: rgba(123, 214, 207, 0.25);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .ai-fab {
+    right: 14px;
+    bottom: 14px;
+  }
+  .ai-panel {
+    right: 8px;
+    left: 8px;
+    width: auto;
+    bottom: 78px;
+    height: calc(100vh - 110px);
+    max-height: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .ai-panel {
+    width: 360px;
+  }
+}
+
+/* ============================================================
+   Phase 7: structured-action UI
+   (TicketDraft preview, missing-field hint).
+   Thứ tự cascade: light-mode defaults → dark-mode overrides.
+   Dark mode dùng cùng selector `body.dark .xxx` để specificity
+   (0,2,0) cao hơn (0,1,0) của light mode, đảm bảo override.
+   ============================================================ */
+
+/* ----- Light mode (defaults) ----- */
+.ai-draft-preview {
+  border: 1px solid #1e3a8a;
+  background: #1e3a8a;        /* blue-800 */
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 4px 0;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(30, 58, 138, 0.25);
+}
+
+.ai-draft-preview strong {
+  display: block;
+  font-size: 13px;
+  color: #ffffff;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.ai-draft-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  margin: 4px 0;
+  line-height: 1.5;
+  align-items: baseline;
+}
+
+.ai-draft-key {
+  color: #cbd5e1;              /* slate-300 trên #1e3a8a ~ 8.2:1 */
+  min-width: 70px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ai-draft-val {
+  color: #ffffff;              /* trắng trên #1e3a8a ~ 14.5:1 */
+  word-break: break-word;
+  flex: 1;
+  font-weight: 500;
+}
+
+.ai-draft-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.ai-draft-confirm,
+.ai-draft-cancel {
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+/* Nút primary "Tạo ticket": nền xanh lá đậm, trắng trên #15803d ~ 4.84:1 */
+.ai-draft-confirm {
+  background: #15803d;
+  color: #ffffff;
+  border-color: #166534;
+}
+
+.ai-draft-confirm:hover {
+  background: #166534;
+  border-color: #14532d;
+}
+
+/* Nút secondary "Hủy": nền trắng, chữ đậm */
+.ai-draft-cancel {
+  background: #ffffff;
+  color: #1c1f2a;              /* gần như đen, tương phản cao */
+  border-color: #ffffff;
+}
+
+.ai-draft-cancel:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+/* Missing-field hint */
+.ai-missing-field {
+  border-left: 3px solid #b45309;
+  background: #fef3c7;          /* amber-100 */
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 12px;
+  color: #78350f;               /* amber-900 trên #fef3c7 ~ 9.1:1 */
+  border-radius: 0 6px 6px 0;
+}
+
+/* ----- Dark mode (overrides) -----
+   Specificity (0,2,0) > (0,1,0) của light mode → luôn thắng. */
+body.dark .ai-draft-preview {
+  background: #1e293b;          /* slate-800 */
+  border-color: #475569;
+  color: #f8fafc;               /* slate-50 — gần trắng, dễ đọc */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+body.dark .ai-draft-preview strong {
+  color: #f8fafc;               /* slate-50 trên #1e293b ~ 14:1 */
+}
+
+body.dark .ai-draft-key {
+  color: #cbd5e1;               /* slate-300 trên #1e293b ~ 8.5:1 */
+  font-weight: 600;
+}
+
+body.dark .ai-draft-val {
+  color: #ffffff;               /* trắng thuần, nổi bật nhất */
+  font-weight: 500;
+}
+
+body.dark .ai-draft-actions {
+  border-top-color: rgba(248, 250, 252, 0.18);
+}
+
+/* Nút primary trong dark: green-700 #15803d có thêm text-shadow
+   để nổi bật. White on #15803d ~ 4.84:1 (đạt AA). */
+body.dark .ai-draft-confirm {
+  background: #15803d;
+  color: #ffffff;
+  border-color: #22c55e;
+}
+
+body.dark .ai-draft-confirm:hover {
+  background: #166534;
+  border-color: #16a34a;
+}
+
+/* Nút secondary: slate-700 nền + trắng chữ */
+body.dark .ai-draft-cancel {
+  background: #334155;          /* slate-700 */
+  color: #f8fafc;               /* slate-50 — ~7:1 */
+  border-color: #475569;
+}
+
+body.dark .ai-draft-cancel:hover {
+  background: #475569;
+  border-color: #64748b;
+}
+
+/* Missing-field: amber-950 nền + amber-200 chữ */
+body.dark .ai-missing-field {
+  background: #451a03;          /* amber-950 */
+  color: #fde68a;               /* amber-200 trên #451a03 ~ 9:1 */
+  border-left-color: #fbbf24;
+  font-weight: 500;
+}
+
+/* Meta + sources + no-context dark */
+body.dark .ai-msg-meta,
+body.dark .ai-no-context,
+body.dark .ai-msg-sources .ai-source-score {
+  color: #e2e8f0;               /* slate-200 trên nền tối ~ 12:1 */
+}
+
+body.dark .ai-msg-sources summary {
+  color: #f1f5f9;
+}
+
+body.dark .ai-msg-sources li {
+  color: #f1f5f9;
+}
+
+body.dark .ai-msg-sources .ai-source-number {
+  color: #fb923c;               /* orange-400 — nổi trên nền tối */
+}
+

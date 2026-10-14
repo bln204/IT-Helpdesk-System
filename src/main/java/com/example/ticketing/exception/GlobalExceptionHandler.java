@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.example.ticketing.ai.LlmGenerationException;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -423,25 +425,94 @@ public class GlobalExceptionHandler {
             .body(error);
     }
     
+    // ==================== LLM Generation Exceptions ====================
+
+    /**
+     * Handle LlmGenerationException - AI/LLM service errors.
+     *
+     * Maps LLM/embedding error codes to appropriate HTTP status codes:
+     * - LLM_UNAVAILABLE -> 503 Service Unavailable
+     * - LLM_TIMEOUT -> 504 Gateway Timeout
+     * - LLM_ERROR_RESPONSE -> 502 Bad Gateway
+     * - LLM_MALFORMED_RESPONSE -> 502 Bad Gateway
+     * - LLM_EMPTY_RESPONSE -> 502 Bad Gateway
+     * - EMBEDDING_TIMEOUT -> 504 Gateway Timeout
+     * - EMBEDDING_UNAVAILABLE -> 503 Service Unavailable
+     * - EMBEDDING_MALFORMED_RESPONSE -> 502 Bad Gateway
+     * - Other/unknown -> 500 Internal Server Error
+     *
+     * The exception message is already user-friendly and safe to display.
+     * Internal details (cause, stack trace) are NOT exposed to the client.
+     */
+    @ExceptionHandler(LlmGenerationException.class)
+    public ResponseEntity<ErrorResponse> handleLlmGeneration(
+            LlmGenerationException ex,
+            HttpServletRequest request) {
+
+        // Log safe error information (no stack trace, no internal details)
+        log.warn("LLM generation error: code={}, path={}",
+                ex.getErrorCode(),
+                request.getRequestURI());
+
+        // Map error code to HTTP status
+        HttpStatus status = mapLlmErrorCodeToStatus(ex.getErrorCode());
+
+        // Build safe error response with user-friendly message from exception
+        ErrorResponse error = new ErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage(), // Already sanitized in LlmGenerationException
+                request.getRequestURI()
+        );
+
+        return ResponseEntity.status(status).body(error);
+    }
+
+    /**
+     * Map LLM error code to HTTP status.
+     *
+     * <p>Embedding-side codes (EMBEDDING_TIMEOUT, EMBEDDING_UNAVAILABLE,
+     * EMBEDDING_MALFORMED_RESPONSE) are mapped symmetrically with their chat-side
+     * counterparts so that {@code /api/ai/ask} exposes the embedding half of the
+     * AI pipeline as a 504 / 503 / 502 instead of letting a timeout or connection
+     * failure cascade into a generic 500.
+     */
+    private HttpStatus mapLlmErrorCodeToStatus(String errorCode) {
+        if (errorCode == null) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        return switch (errorCode) {
+            case "LLM_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "LLM_TIMEOUT" -> HttpStatus.GATEWAY_TIMEOUT;
+            case "LLM_ERROR_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            case "LLM_MALFORMED_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            case "LLM_EMPTY_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            case "EMBEDDING_TIMEOUT" -> HttpStatus.GATEWAY_TIMEOUT;
+            case "EMBEDDING_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "EMBEDDING_MALFORMED_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            default -> HttpStatus.INTERNAL_SERVER_ERROR;
+        };
+    }
+
     // ==================== Generic Exception Handler ====================
-    
+
     /**
      * Handle all other uncaught exceptions
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(
-            Exception ex, 
+            Exception ex,
             HttpServletRequest request) {
-        
-        log.error("Unhandled exception on path: {}: {}", 
+
+        log.error("Unhandled exception on path: {}: {}",
             request.getRequestURI(), ex.getMessage(), ex);
-        
+
         ErrorResponse error = new ErrorResponse(
             "INTERNAL_ERROR",
             "Đã xảy ra lỗi nội bộ. Vui lòng thử lại sau.",
             request.getRequestURI()
         );
-        
+
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(error);

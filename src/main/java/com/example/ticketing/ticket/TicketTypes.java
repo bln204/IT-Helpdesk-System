@@ -69,6 +69,10 @@ public final class TicketTypes {
         CATEGORY_CHANGED,       // Category thay đổi
         COMMENT_ADDED,          // Có bình luận mới
         
+        // Content Changes (for embedding re-trigger)
+        TITLE_CHANGED,          // Title thay đổi
+        DESCRIPTION_CHANGED,    // Description thay đổi
+        
         // Phase 2 Actions
         ESCALATED,              // Ticket được escalate
         REOPENED,               // Ticket được mở lại

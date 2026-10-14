@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -59,7 +58,20 @@ public class ProblemController {
     @GetMapping("/{id}")
     public ResponseEntity<ProblemDto> getProblemById(@PathVariable Long id) {
         Problem problem = problemService.getProblemById(id);
-        return ResponseEntity.ok(ProblemDto.fromEntity(problem));
+        ProblemDto dto = ProblemDto.fromEntity(problem);
+        if (problem.getKnownErrorId() != null) {
+            // PHASE 6.6.3 - enrich with KE summary for the detail UI.
+            // Wrapped in a try-catch so a missing KE (drift) does not 500 the
+            // entire Problem detail endpoint; the FE will just see no link info.
+            try {
+                KnownError ke = problemService.getKnownErrorById(problem.getKnownErrorId());
+                dto.enrichWithKnownError(ke);
+            } catch (Exception ex) {
+                // Drift detected: Problem.known_error_id points to a non-existent row.
+                // Surface the id but no metadata. The reconciliation helper can fix it.
+            }
+        }
+        return ResponseEntity.ok(dto);
     }
 
     @PostMapping
@@ -124,7 +136,8 @@ public class ProblemController {
 
     @PostMapping("/{id}/incidents")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<IncidentLinkDto> linkIncident(@PathVariable Long id, @RequestBody IncidentLinkRequest request) {
+    public ResponseEntity<IncidentLinkDto> linkIncident(@PathVariable Long id,
+            @RequestBody IncidentLinkRequest request) {
         ProblemIncidentLink link = problemService.linkIncident(id, request.getIncidentId(), "admin");
         return ResponseEntity.status(HttpStatus.CREATED).body(IncidentLinkDto.fromEntity(link));
     }
@@ -162,7 +175,7 @@ public class ProblemController {
         try {
             String rawQueryString = request.getQueryString();
             log.info("Raw query string: {}", rawQueryString);
-            
+
             String keyword;
             if (rawQueryString != null && rawQueryString.startsWith("q=")) {
                 String encoded = rawQueryString.substring(2);
@@ -172,12 +185,12 @@ public class ProblemController {
             } else {
                 keyword = q;
             }
-            
+
             log.info("Search known errors with keyword: '{}' (length: {})", keyword, keyword.length());
-            
+
             List<KnownError> errors = problemService.searchKnownErrors(keyword);
-            log.info("Found {} known errors. Titles: {}", errors.size(), 
-                errors.stream().map(KnownError::getTitle).toList());
+            log.info("Found {} known errors. Titles: {}", errors.size(),
+                    errors.stream().map(KnownError::getTitle).toList());
             return ResponseEntity.ok(errors.stream().map(KnownErrorDto::fromEntity).toList());
         } catch (Exception e) {
             log.error("Error searching known errors: {}", e.getMessage(), e);
@@ -193,7 +206,7 @@ public class ProblemController {
     }
 
     @PostMapping("/known-errors")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<KnownErrorDto> createKnownError(@RequestBody KnownErrorRequest request) {
         KnownError error = new KnownError();
         error.setTitle(request.getTitle());
@@ -209,8 +222,9 @@ public class ProblemController {
     }
 
     @PutMapping("/known-errors/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<KnownErrorDto> updateKnownError(@PathVariable Long id, @RequestBody KnownErrorRequest request) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    public ResponseEntity<KnownErrorDto> updateKnownError(@PathVariable Long id,
+            @RequestBody KnownErrorRequest request) {
         KnownError updates = new KnownError();
         updates.setTitle(request.getTitle());
         updates.setDescription(request.getDescription());
@@ -232,7 +246,7 @@ public class ProblemController {
     }
 
     @PostMapping("/known-errors/{id}/workaround")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<KnownErrorDto> addWorkaround(@PathVariable Long id, @RequestBody WorkaroundRequest request) {
         KnownError updated = problemService.addWorkaround(id, request.getWorkaround(), request.getAuthor(), "admin");
         return ResponseEntity.ok(KnownErrorDto.fromEntity(updated));
@@ -250,6 +264,96 @@ public class ProblemController {
                 request != null ? request.getDescription() : null,
                 "admin");
         return ResponseEntity.status(HttpStatus.CREATED).body(ProblemDto.fromEntity(problem));
+    }
+
+    // ==================== Problem <-> Known Error (PHASE 6.6.3)
+    // ====================
+    // Authorization: ADMIN, GIAM_DOC, TRUONG_PHONG only (NHAN_VIEN excluded).
+    // These endpoints replace the broken "create detached KE then leave
+    // Problem.knownErrorId = NULL" pattern documented in PHASE 6.6.2.2.
+
+    /**
+     * Create a new Known Error AND link it to the Problem in one
+     * transaction. The Problem must not be CLOSED. The new KE is
+     * created with status ACTIVE.
+     *
+     * <p>
+     * POST /api/problems/{id}/known-error
+     */
+    @PostMapping("/{id}/known-error")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    public ResponseEntity<KnownErrorDto> createKnownErrorForProblem(
+            @PathVariable Long id,
+            @RequestBody CreateKnownErrorForProblemRequest request) {
+        log.info("POST /api/problems/{}/known-error - create and link", id);
+        if (request == null || request.getTitle() == null || request.getTitle().isBlank()) {
+            throw new IllegalArgumentException("title is required");
+        }
+        KnownError payload = new KnownError();
+        payload.setTitle(request.getTitle());
+        payload.setDescription(request.getDescription());
+        payload.setSymptoms(request.getSymptoms());
+        payload.setRootCause(request.getRootCause());
+        payload.setRootCauseCategory(request.getRootCauseCategory());
+        payload.setWorkaround(request.getWorkaround());
+        payload.setResolution(request.getResolution());
+        payload.setFixSteps(request.getFixSteps());
+        payload.setImpactDescription(request.getImpactDescription());
+        payload.setAffectedSystems(request.getAffectedSystems());
+
+        KnownError created = problemService.createKnownErrorForProblem(id, payload, "admin");
+        return ResponseEntity.status(HttpStatus.CREATED).body(KnownErrorDto.fromEntity(created));
+    }
+
+    /**
+     * Link an existing Known Error to the Problem. Idempotent.
+     * The KE must not be OBSOLETE. The Problem must not be CLOSED.
+     *
+     * <p>
+     * POST /api/problems/{id}/known-error/link
+     */
+    @PostMapping("/{id}/known-error/link")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    public ResponseEntity<KnownErrorDto> linkKnownErrorToProblem(
+            @PathVariable Long id,
+            @RequestBody LinkKnownErrorRequest request) {
+        log.info("POST /api/problems/{}/known-error/link - knownErrorId={}", id, request.getKnownErrorId());
+        if (request == null || request.getKnownErrorId() == null) {
+            throw new IllegalArgumentException("knownErrorId is required");
+        }
+        KnownError ke = problemService.linkExistingKnownError(id, request.getKnownErrorId(), "admin");
+        return ResponseEntity.ok(KnownErrorDto.fromEntity(ke));
+    }
+
+    /**
+     * Unlink the Known Error from the Problem. Idempotent.
+     *
+     * <p>
+     * DELETE /api/problems/{id}/known-error
+     */
+    @DeleteMapping("/{id}/known-error")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    public ResponseEntity<Void> unlinkKnownErrorFromProblem(@PathVariable Long id) {
+        log.info("DELETE /api/problems/{}/known-error", id);
+        problemService.unlinkKnownError(id, "admin");
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * List all Problems currently linked to a Known Error.
+     * Read-only, available to every authenticated role.
+     *
+     * <p>
+     * GET /api/problems/known-error/{knownErrorId}/problems
+     */
+    @GetMapping("/known-error/{knownErrorId}/problems")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public ResponseEntity<List<ProblemDto>> getProblemsForKnownError(@PathVariable Long knownErrorId) {
+        log.info("GET /api/problems/known-error/{}/problems", knownErrorId);
+        List<Problem> problems = problemService.getProblemsForKnownError(knownErrorId);
+        return ResponseEntity.ok(problems.stream()
+                .map(ProblemDto::fromEntity)
+                .toList());
     }
 
     // ==================== Notes ====================
@@ -299,11 +403,32 @@ public class ProblemController {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("BAD_REQUEST", ex.getMessage()));
     }
 
+    /**
+     * PHASE 6.6.3 - @PreAuthorize failures must surface as 403, not 500.
+     * Spring Security throws {@code AuthorizationDeniedException} (or the
+     * legacy {@code AccessDeniedException}) when the method-level check
+     * fails. Without this handler the catch-all below would wrap it as a
+     * 500 INTERNAL_ERROR, which hides the real authorization signal from
+     * the browser. We translate both for forward compatibility across
+     * Spring Security versions.
+     */
+    @ExceptionHandler({
+            org.springframework.security.authorization.AuthorizationDeniedException.class,
+            org.springframework.security.access.AccessDeniedException.class
+    })
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex) {
+        log.warn("Access denied on Problem controller: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("ACCESS_DENIED", "Forbidden"));
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
         log.error("Internal server error: {}", ex.getMessage(), ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi nội bộ: " + ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi nội bộ: " + ex.getMessage()));
     }
 
     // ==================== DTOs ====================
@@ -311,9 +436,19 @@ public class ProblemController {
     public static class ErrorResponse {
         private String code;
         private String message;
-        public ErrorResponse(String code, String message) { this.code = code; this.message = message; }
-        public String getCode() { return code; }
-        public String getMessage() { return message; }
+
+        public ErrorResponse(String code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public String getMessage() {
+            return message;
+        }
     }
 
     public static class ProblemRequest {
@@ -326,30 +461,66 @@ public class ProblemController {
         private String rootCauseCategory;
         private String workaround;
         private String resolution;
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getCategory() { return category; }
-        public Problem.Priority getPriority() { return priority; }
-        public Problem.ImpactLevel getImpactLevel() { return impactLevel; }
-        public String getRootCause() { return rootCause; }
-        public String getRootCauseCategory() { return rootCauseCategory; }
-        public String getWorkaround() { return workaround; }
-        public String getResolution() { return resolution; }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+
+        public Problem.Priority getPriority() {
+            return priority;
+        }
+
+        public Problem.ImpactLevel getImpactLevel() {
+            return impactLevel;
+        }
+
+        public String getRootCause() {
+            return rootCause;
+        }
+
+        public String getRootCauseCategory() {
+            return rootCauseCategory;
+        }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public String getResolution() {
+            return resolution;
+        }
     }
 
     public static class StatusUpdateRequest {
         private String status;
-        public String getStatus() { return status; }
+
+        public String getStatus() {
+            return status;
+        }
     }
 
     public static class AssignRequest {
         private String assignee;
-        public String getAssignee() { return assignee; }
+
+        public String getAssignee() {
+            return assignee;
+        }
     }
 
     public static class IncidentLinkRequest {
         private Long incidentId;
-        public Long getIncidentId() { return incidentId; }
+
+        public Long getIncidentId() {
+            return incidentId;
+        }
     }
 
     public static class KnownErrorRequest {
@@ -360,27 +531,60 @@ public class ProblemController {
         private String workaround;
         private String fixSteps;
         private KnownError.KnownErrorStatus status;
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getSymptoms() { return symptoms; }
-        public String getRootCause() { return rootCause; }
-        public String getWorkaround() { return workaround; }
-        public String getFixSteps() { return fixSteps; }
-        public KnownError.KnownErrorStatus getStatus() { return status; }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getSymptoms() {
+            return symptoms;
+        }
+
+        public String getRootCause() {
+            return rootCause;
+        }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public String getFixSteps() {
+            return fixSteps;
+        }
+
+        public KnownError.KnownErrorStatus getStatus() {
+            return status;
+        }
     }
 
     public static class WorkaroundRequest {
         private String workaround;
         private String author;
-        public String getWorkaround() { return workaround; }
-        public String getAuthor() { return author; }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public String getAuthor() {
+            return author;
+        }
     }
 
     public static class ProblemFromIncidentRequest {
         private String title;
         private String description;
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
     }
 
     public static class NoteRequest {
@@ -389,11 +593,133 @@ public class ProblemController {
         private String authorUsername;
         private String noteType;
         private Integer effectivenessRating;
-        public String getBody() { return body; }
-        public String getAuthorName() { return authorName; }
-        public String getAuthorUsername() { return authorUsername; }
-        public String getNoteType() { return noteType; }
-        public Integer getEffectivenessRating() { return effectivenessRating; }
+
+        public String getBody() {
+            return body;
+        }
+
+        public String getAuthorName() {
+            return authorName;
+        }
+
+        public String getAuthorUsername() {
+            return authorUsername;
+        }
+
+        public String getNoteType() {
+            return noteType;
+        }
+
+        public Integer getEffectivenessRating() {
+            return effectivenessRating;
+        }
+    }
+
+    // PHASE 6.6.3 - Request DTOs for the Problem <-> Known Error relationship.
+
+    public static class CreateKnownErrorForProblemRequest {
+        private String title;
+        private String description;
+        private String symptoms;
+        private String rootCause;
+        private String rootCauseCategory;
+        private String workaround;
+        private String resolution;
+        private String fixSteps;
+        private String impactDescription;
+        private String affectedSystems;
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getSymptoms() {
+            return symptoms;
+        }
+
+        public void setSymptoms(String symptoms) {
+            this.symptoms = symptoms;
+        }
+
+        public String getRootCause() {
+            return rootCause;
+        }
+
+        public void setRootCause(String rootCause) {
+            this.rootCause = rootCause;
+        }
+
+        public String getRootCauseCategory() {
+            return rootCauseCategory;
+        }
+
+        public void setRootCauseCategory(String rootCauseCategory) {
+            this.rootCauseCategory = rootCauseCategory;
+        }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public void setWorkaround(String workaround) {
+            this.workaround = workaround;
+        }
+
+        public String getResolution() {
+            return resolution;
+        }
+
+        public void setResolution(String resolution) {
+            this.resolution = resolution;
+        }
+
+        public String getFixSteps() {
+            return fixSteps;
+        }
+
+        public void setFixSteps(String fixSteps) {
+            this.fixSteps = fixSteps;
+        }
+
+        public String getImpactDescription() {
+            return impactDescription;
+        }
+
+        public void setImpactDescription(String impactDescription) {
+            this.impactDescription = impactDescription;
+        }
+
+        public String getAffectedSystems() {
+            return affectedSystems;
+        }
+
+        public void setAffectedSystems(String affectedSystems) {
+            this.affectedSystems = affectedSystems;
+        }
+    }
+
+    public static class LinkKnownErrorRequest {
+        private Long knownErrorId;
+
+        public Long getKnownErrorId() {
+            return knownErrorId;
+        }
+
+        public void setKnownErrorId(Long knownErrorId) {
+            this.knownErrorId = knownErrorId;
+        }
     }
 
     public static class ProblemDto {
@@ -414,6 +740,12 @@ public class ProblemController {
         private java.time.LocalDateTime resolutionDate;
         private java.time.LocalDateTime createdAt;
         private java.time.LocalDateTime updatedAt;
+        // PHASE 6.6.3 - Known Error relationship fields. The UI uses these
+        // to decide which action to show (Create / Link / View / Unlink).
+        private Long knownErrorId;
+        private String knownErrorCode;
+        private String knownErrorStatus;
+        private Integer knownErrorRelatedProblemsCount;
 
         public static ProblemDto fromEntity(Problem p) {
             ProblemDto dto = new ProblemDto();
@@ -434,26 +766,107 @@ public class ProblemController {
             dto.resolutionDate = p.getResolutionDate();
             dto.createdAt = p.getCreatedAt();
             dto.updatedAt = p.getUpdatedAt();
+            dto.knownErrorId = p.getKnownErrorId();
             return dto;
         }
 
-        public Long getId() { return id; }
-        public String getProblemNumber() { return problemNumber; }
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getCategory() { return category; }
-        public String getImpactLevel() { return impactLevel; }
-        public String getPriority() { return priority; }
-        public String getStatus() { return status; }
-        public String getStatusLabel() { return statusLabel; }
-        public String getRootCause() { return rootCause; }
-        public String getWorkaround() { return workaround; }
-        public String getResolution() { return resolution; }
-        public Integer getTotalIncidentsLinked() { return totalIncidentsLinked; }
-        public String getAssignedTo() { return assignedTo; }
-        public java.time.LocalDateTime getResolutionDate() { return resolutionDate; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
-        public java.time.LocalDateTime getUpdatedAt() { return updatedAt; }
+        /**
+         * Enriches the DTO with Known Error metadata. Used by the controller
+         * to avoid fetching the KE in the hot path of list endpoints.
+         * The fields default to null when no link exists.
+         */
+        public void enrichWithKnownError(KnownError ke) {
+            if (ke == null)
+                return;
+            this.knownErrorId = ke.getId();
+            this.knownErrorCode = ke.getErrorCode();
+            this.knownErrorStatus = ke.getStatus() != null ? ke.getStatus().name() : null;
+            this.knownErrorRelatedProblemsCount = ke.getRelatedProblemsCount();
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public String getProblemNumber() {
+            return problemNumber;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+
+        public String getImpactLevel() {
+            return impactLevel;
+        }
+
+        public String getPriority() {
+            return priority;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public String getStatusLabel() {
+            return statusLabel;
+        }
+
+        public String getRootCause() {
+            return rootCause;
+        }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public String getResolution() {
+            return resolution;
+        }
+
+        public Integer getTotalIncidentsLinked() {
+            return totalIncidentsLinked;
+        }
+
+        public String getAssignedTo() {
+            return assignedTo;
+        }
+
+        public java.time.LocalDateTime getResolutionDate() {
+            return resolutionDate;
+        }
+
+        public java.time.LocalDateTime getCreatedAt() {
+            return createdAt;
+        }
+
+        public java.time.LocalDateTime getUpdatedAt() {
+            return updatedAt;
+        }
+
+        public Long getKnownErrorId() {
+            return knownErrorId;
+        }
+
+        public String getKnownErrorCode() {
+            return knownErrorCode;
+        }
+
+        public String getKnownErrorStatus() {
+            return knownErrorStatus;
+        }
+
+        public Integer getKnownErrorRelatedProblemsCount() {
+            return knownErrorRelatedProblemsCount;
+        }
     }
 
     public static class KnownErrorDto {
@@ -489,19 +902,57 @@ public class ProblemController {
             return dto;
         }
 
-        public Long getId() { return id; }
-        public String getErrorCode() { return errorCode; }
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getSymptoms() { return symptoms; }
-        public String getRootCause() { return rootCause; }
-        public String getWorkaround() { return workaround; }
-        public String getFixSteps() { return fixSteps; }
-        public String getStatus() { return status; }
-        public String getStatusLabel() { return statusLabel; }
-        public String getManagedBy() { return managedBy; }
-        public Integer getOccurrenceCount() { return occurrenceCount; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
+        public Long getId() {
+            return id;
+        }
+
+        public String getErrorCode() {
+            return errorCode;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getSymptoms() {
+            return symptoms;
+        }
+
+        public String getRootCause() {
+            return rootCause;
+        }
+
+        public String getWorkaround() {
+            return workaround;
+        }
+
+        public String getFixSteps() {
+            return fixSteps;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public String getStatusLabel() {
+            return statusLabel;
+        }
+
+        public String getManagedBy() {
+            return managedBy;
+        }
+
+        public Integer getOccurrenceCount() {
+            return occurrenceCount;
+        }
+
+        public java.time.LocalDateTime getCreatedAt() {
+            return createdAt;
+        }
     }
 
     public static class IncidentLinkDto {
@@ -519,10 +970,21 @@ public class ProblemController {
             return dto;
         }
 
-        public Long getId() { return id; }
-        public Long getIncidentId() { return incidentId; }
-        public String getLinkedBy() { return linkedBy; }
-        public java.time.LocalDateTime getLinkedAt() { return linkedAt; }
+        public Long getId() {
+            return id;
+        }
+
+        public Long getIncidentId() {
+            return incidentId;
+        }
+
+        public String getLinkedBy() {
+            return linkedBy;
+        }
+
+        public java.time.LocalDateTime getLinkedAt() {
+            return linkedAt;
+        }
     }
 
     public static class NoteDto {
@@ -544,11 +1006,28 @@ public class ProblemController {
             return dto;
         }
 
-        public Long getId() { return id; }
-        public String getBody() { return body; }
-        public String getAuthorName() { return authorName; }
-        public String getNoteType() { return noteType; }
-        public Integer getEffectivenessRating() { return effectivenessRating; }
-        public java.time.LocalDateTime getCreatedAt() { return createdAt; }
+        public Long getId() {
+            return id;
+        }
+
+        public String getBody() {
+            return body;
+        }
+
+        public String getAuthorName() {
+            return authorName;
+        }
+
+        public String getNoteType() {
+            return noteType;
+        }
+
+        public Integer getEffectivenessRating() {
+            return effectivenessRating;
+        }
+
+        public java.time.LocalDateTime getCreatedAt() {
+            return createdAt;
+        }
     }
 }

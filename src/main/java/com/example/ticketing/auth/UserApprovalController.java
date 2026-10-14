@@ -15,30 +15,27 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.example.ticketing.auth.UserAccount;
-import com.example.ticketing.auth.UserAccountRepository;
-
 import jakarta.validation.Valid;
 
 /**
  * Controller for user approval management.
  * - ADMIN: full access (approve, reject, view all pending)
- * - TRUONG_PHONG: can view pending users in their department (cannot approve/reject)
+ * - TRUONG_PHONG: can view pending users in their department (cannot
+ * approve/reject)
  */
 @RestController
 @RequestMapping("/api/admin/users")
 @Validated
 public class UserApprovalController {
-    
+
     private final UserAdminService userAdminService;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
 
     public UserApprovalController(
-        UserAdminService userAdminService,
-        UserAccountRepository userAccountRepository,
-        NotificationService notificationService
-    ) {
+            UserAdminService userAdminService,
+            UserAccountRepository userAccountRepository,
+            NotificationService notificationService) {
         this.userAdminService = userAdminService;
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
@@ -57,14 +54,14 @@ public class UserApprovalController {
         // TRUONG_PHONG can only see pending users in their department
         if ("TRUONG_PHONG".equals(actor.getRole().name())) {
             return userAdminService.listPendingApprovalByDepartment(actor.getDepartmentId()).stream()
-                .map(UserDtos.UserResponse::from)
-                .toList();
+                    .map(UserDtos.UserResponse::from)
+                    .toList();
         }
 
         // ADMIN can see all pending users
         return userAdminService.listPendingApproval().stream()
-            .map(UserDtos.UserResponse::from)
-            .toList();
+                .map(UserDtos.UserResponse::from)
+                .toList();
     }
 
     /**
@@ -86,8 +83,8 @@ public class UserApprovalController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<UserDtos.UserResponse> getPendingUsersByDepartment(@PathVariable Long departmentId) {
         return userAdminService.listPendingApprovalByDepartment(departmentId).stream()
-            .map(UserDtos.UserResponse::from)
-            .toList();
+                .map(UserDtos.UserResponse::from)
+                .toList();
     }
 
     // ============ Delete Request Endpoints ============
@@ -105,13 +102,13 @@ public class UserApprovalController {
 
         if ("ADMIN".equals(actor.getRole().name())) {
             return userAdminService.listPendingDeleteRequests().stream()
-                .map(UserDtos.UserResponse::from)
-                .toList();
+                    .map(UserDtos.UserResponse::from)
+                    .toList();
         } else {
             // TRUONG_PHONG can only see their department's pending delete requests
             return userAdminService.listPendingDeleteRequestsByDepartment(actor.getDepartmentId()).stream()
-                .map(UserDtos.UserResponse::from)
-                .toList();
+                    .map(UserDtos.UserResponse::from)
+                    .toList();
         }
     }
 
@@ -135,31 +132,28 @@ public class UserApprovalController {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse approveUser(
-        @PathVariable Long id,
-        @Valid @RequestBody(required = false) UserDtos.ApproveUserRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) UserDtos.ApproveUserRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
 
         // Get user before approval for notification
         UserAccount userBefore = userAdminService.getUser(id);
         String creatorUsername = userBefore.getCreatedBy();
-        
+
         UserAccount user = userAdminService.approveUser(
-            id,
-            actor.getUsername(),
-            actor.getRole().name()
-        );
+                id,
+                actor.getUsername(),
+                actor.getRole().name());
 
         // Send notification to creator if exists
         if (creatorUsername != null && !creatorUsername.isBlank()) {
             notificationService.notifyCreatorOfApproval(
-                user.getId(),
-                creatorUsername,
-                user.getUsername(),
-                user.getDisplayName(),
-                actor.getUsername()
-            );
+                    user.getId(),
+                    creatorUsername,
+                    user.getUsername(),
+                    user.getDisplayName(),
+                    actor.getUsername());
         }
 
         return UserDtos.UserResponse.from(user);
@@ -173,34 +167,31 @@ public class UserApprovalController {
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse rejectUser(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.RejectUserRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.RejectUserRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
 
         // Get user before rejection for notification
         UserAccount userBefore = userAdminService.getUser(id);
         String creatorUsername = userBefore.getCreatedBy();
         String rejectionReason = request.getReason();
-        
+
         UserAccount user = userAdminService.rejectUser(
-            id,
-            rejectionReason,
-            actor.getUsername(),
-            actor.getRole().name()
-        );
+                id,
+                rejectionReason,
+                actor.getUsername(),
+                actor.getRole().name());
 
         // Send notification to creator if exists
         if (creatorUsername != null && !creatorUsername.isBlank()) {
             notificationService.notifyCreatorOfRejection(
-                user.getId(),
-                creatorUsername,
-                user.getUsername(),
-                user.getDisplayName(),
-                actor.getUsername(),
-                rejectionReason
-            );
+                    user.getId(),
+                    creatorUsername,
+                    user.getUsername(),
+                    user.getDisplayName(),
+                    actor.getUsername(),
+                    rejectionReason);
         }
 
         return UserDtos.UserResponse.from(user);
@@ -214,18 +205,16 @@ public class UserApprovalController {
     @PostMapping("/{id}/enable")
     @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse enableUser(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
 
         UserAccount user = userAdminService.updateEnabled(
-            id,
-            true, // enabled = true
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                true, // enabled = true
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
 
         return UserDtos.UserResponse.from(user);
     }
@@ -238,18 +227,16 @@ public class UserApprovalController {
     @PostMapping("/{id}/disable")
     @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse disableUser(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
 
         UserAccount user = userAdminService.updateEnabled(
-            id,
-            false, // enabled = false
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                false, // enabled = false
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
 
         return UserDtos.UserResponse.from(user);
     }
@@ -262,33 +249,29 @@ public class UserApprovalController {
     @PostMapping("/{id}/request-delete")
     @PreAuthorize("hasRole('TRUONG_PHONG')")
     public ResponseEntity<DeleteRequestResponse> requestDeleteUser(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         UserAccount targetUser = userAdminService.getUser(id);
 
         // TRUONG_PHONG can only request delete for NHAN_VIEN in their department
         if (!"NHAN_VIEN".equals(targetUser.getRole().name())) {
             throw new ResponseStatusException(
-                org.springframework.http.HttpStatus.FORBIDDEN,
-                "Chỉ có thể yêu cầu xóa tài khoản nhân viên."
-            );
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Chỉ có thể yêu cầu xóa tài khoản nhân viên.");
         }
         if (!actor.getDepartmentId().equals(targetUser.getDepartmentId())) {
             throw new ResponseStatusException(
-                org.springframework.http.HttpStatus.FORBIDDEN,
-                "Chỉ có thể yêu cầu xóa tài khoản trong phòng ban của bạn."
-            );
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Chỉ có thể yêu cầu xóa tài khoản trong phòng ban của bạn.");
         }
 
         // Mark user as pending deletion - admin will review and delete
         userAdminService.requestDeleteUser(
-            id,
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
 
         // Notification is already sent inside requestDeleteUser() to avoid duplication
 
@@ -303,9 +286,8 @@ public class UserApprovalController {
     @DeleteMapping("/{id}/delete-request")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> approveDeleteRequest(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         UserAccount targetUser = userAdminService.getUser(id);
 
@@ -315,12 +297,11 @@ public class UserApprovalController {
         // Notify the TRUONG_PHONG who requested the deletion
         if (targetUser.getCreatedBy() != null) {
             notificationService.notifyUserDeleted(
-                targetUser.getId(),
-                targetUser.getCreatedBy(),
-                targetUser.getUsername(),
-                targetUser.getDisplayName(),
-                actor.getUsername()
-            );
+                    targetUser.getId(),
+                    targetUser.getCreatedBy(),
+                    targetUser.getUsername(),
+                    targetUser.getDisplayName(),
+                    actor.getUsername());
         }
 
         return ResponseEntity.noContent().build();
@@ -335,17 +316,15 @@ public class UserApprovalController {
     @PostMapping("/{id}/cancel-delete-request")
     @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
     public UserDtos.UserResponse cancelDeleteRequest(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
 
         UserAccount user = userAdminService.cancelDeleteRequest(
-            id,
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
 
         return UserDtos.UserResponse.from(user);
     }
@@ -379,9 +358,8 @@ public class UserApprovalController {
     @GetMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.AccountStatusResponse getUserStatus(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = userAdminService.getUser(id);
         return UserDtos.AccountStatusResponse.from(user);
     }
@@ -403,9 +381,8 @@ public class UserApprovalController {
 
     private UserAccount getCurrentUser(Authentication authentication) {
         return userAccountRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new ResponseStatusException(
-                org.springframework.http.HttpStatus.UNAUTHORIZED,
-                "User not found."
-            ));
+                .orElseThrow(() -> new ResponseStatusException(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED,
+                        "User not found."));
     }
 }

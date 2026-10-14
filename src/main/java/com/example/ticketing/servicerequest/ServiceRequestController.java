@@ -73,8 +73,7 @@ public class ServiceRequestController {
             requests = serviceRequestService.searchRequests(search, pageable);
         } else if (status != null && !status.isBlank()) {
             ServiceRequest.ServiceStatus serviceStatus = ServiceRequest.ServiceStatus.valueOf(status);
-            requests = serviceRequestService.getAllRequests(pageable);
-            // Filter by status in memory for simplicity
+            requests = serviceRequestService.getRequestsByStatus(serviceStatus, pageable);
         } else {
             requests = serviceRequestService.getAllRequests(pageable);
         }

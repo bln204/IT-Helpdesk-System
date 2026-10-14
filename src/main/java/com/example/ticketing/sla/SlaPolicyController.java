@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.ticketing.ticket.TicketTypes.TicketPriority;
@@ -76,11 +77,12 @@ public class SlaPolicyController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SlaPolicyDtos.SlaPolicyResponse> createPolicy(
-            @RequestBody SlaPolicyDtos.SlaPolicyRequest request) {
+            @RequestBody SlaPolicyDtos.SlaPolicyRequest request,
+            Authentication authentication) {
         log.info("POST /api/sla-policies - Creating new SLA policy: {}", request.getName());
 
         SlaPolicy policy = mapRequestToEntity(request);
-        SlaPolicy created = slaPolicyService.createPolicy(policy, "admin"); // TODO: Get actual user
+        SlaPolicy created = slaPolicyService.createPolicy(policy, authentication.getName());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(SlaPolicyDtos.SlaPolicyResponse.fromEntity(created));
@@ -94,11 +96,12 @@ public class SlaPolicyController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<SlaPolicyDtos.SlaPolicyResponse> updatePolicy(
             @PathVariable Long id,
-            @RequestBody SlaPolicyDtos.SlaPolicyRequest request) {
+            @RequestBody SlaPolicyDtos.SlaPolicyRequest request,
+            Authentication authentication) {
         log.info("PUT /api/sla-policies/{}", id);
 
         SlaPolicy updates = mapRequestToEntity(request);
-        SlaPolicy updated = slaPolicyService.updatePolicy(id, updates, "admin"); // TODO: Get actual user
+        SlaPolicy updated = slaPolicyService.updatePolicy(id, updates, authentication.getName());
 
         return ResponseEntity.ok(SlaPolicyDtos.SlaPolicyResponse.fromEntity(updated));
     }

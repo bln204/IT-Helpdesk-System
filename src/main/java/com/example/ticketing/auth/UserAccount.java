@@ -21,6 +21,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import com.example.ticketing.department.Department;
+import com.example.ticketing.department.ItDepartmentSupport;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -340,23 +341,33 @@ public class UserAccount implements UserDetails {
     }
 
     /**
-     * Kiểm tra có phải Trưởng phòng IT không (có quyền assign tickets)
+     * Kiểm tra có phải Trưởng phòng IT không (có quyền assign tickets).
+     *
+     * <p>Phase 1 compatibility wrapper. The IT-department portion is delegated to the centralized
+     * {@link com.example.ticketing.department.ItDepartmentResolver} so all callers converge on a
+     * single configured source of truth. The role portion is unchanged.
      */
     public boolean isTruongPhongIT() {
-        return role == UserRole.Role.TRUONG_PHONG 
-            && department != null 
-            && "IT".equals(department.getCode());
+        return role == UserRole.Role.TRUONG_PHONG
+            && ItDepartmentSupport.isITDepartment(department);
     }
 
     /**
-     * Kiểm tra có thuộc department IT không
+     * Kiểm tra có thuộc department IT không.
+     *
+     * <p>Phase 1 compatibility wrapper. Delegates to the centralized
+     * {@link com.example.ticketing.department.ItDepartmentResolver} so all callers converge on a
+     * single configured source of truth.
      */
     public boolean isInITDepartment() {
-        return department != null && "IT".equals(department.getCode());
+        return ItDepartmentSupport.isITDepartment(department);
     }
 
     /**
-     * Kiểm tra có thuộc EXEC (Ban Giám đốc) không
+     * Kiểm tra có thuộc EXEC (Ban Giám đốc) không.
+     *
+     * <p>Not part of Phase 1's IT-department centralization; this checks a separate business
+     * department code.
      */
     public boolean isInExecDepartment() {
         return department != null && "EXEC".equals(department.getCode());

@@ -21,17 +21,14 @@ public class ChangeRequestService {
     private static final Logger log = LoggerFactory.getLogger(ChangeRequestService.class);
 
     private final ChangeRequestRepository changeRepository;
-    private final ChangeApprovalRepository approvalRepository;
     private final ChangeTimelineRepository timelineRepository;
     private final ChangeTaskRepository taskRepository;
 
     public ChangeRequestService(
             ChangeRequestRepository changeRepository,
-            ChangeApprovalRepository approvalRepository,
             ChangeTimelineRepository timelineRepository,
             ChangeTaskRepository taskRepository) {
         this.changeRepository = changeRepository;
-        this.approvalRepository = approvalRepository;
         this.timelineRepository = timelineRepository;
         this.taskRepository = taskRepository;
     }

@@ -1,6 +1,7 @@
 package com.example.ticketing.problem;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,7 +13,7 @@ import java.util.Optional;
  * Repository cho KnownError entity.
  */
 @Repository
-public interface KnownErrorRepository extends JpaRepository<KnownError, Long> {
+public interface KnownErrorRepository extends JpaRepository<KnownError, Long>, JpaSpecificationExecutor<KnownError> {
 
     Optional<KnownError> findByErrorCode(String errorCode);
 

@@ -69,6 +69,10 @@ window.AssetManagement = AssetManagement;
 import { AssetLinkModule } from './modules/assetLink.js';
 window.AssetLinkModule = AssetLinkModule;
 
+// Import AI Assistant module (Phase 6.6)
+import { init as initAIAssistant } from './modules/ai-assistant.js';
+window.AIAssistantInit = initAIAssistant;
+
 // Import Analytics module
 import { AnalyticsModule } from './modules/analytics.js';
 window.AnalyticsModule = AnalyticsModule;
@@ -436,6 +440,18 @@ const themeKey = 'ticketing.theme';
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   init();
+
+  // Phase 6.6 — initialize the floating AI Assistant. The module is
+  // self-contained and re-evaluates the role gate on every DOM mutation
+  // (login/logout, ticket selection, etc.), so it can be initialized
+  // exactly once at boot.
+  try {
+    if (typeof window.AIAssistantInit === 'function') {
+      window.AIAssistantInit();
+    }
+  } catch (e) {
+    console.error('[app.js] AI Assistant init failed:', e);
+  }
 });
 
 // Export for debugging

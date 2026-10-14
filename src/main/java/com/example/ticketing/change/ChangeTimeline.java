@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Change Timeline Entity - Audit trail cho Change Requests.
@@ -33,7 +35,15 @@ public class ChangeTimeline {
     @Column(name = "actor_role", length = 50)
     private String actorRole;
 
-    @Column(name = "event_data", columnDefinition = "TEXT")
+    // CP-3.3.7: the column is JSONB in the schema (V50) and must
+    // round-trip structured payloads. Without @JdbcTypeCode(SqlTypes.JSON)
+    // Hibernate binds the parameter as varchar, which PostgreSQL rejects
+    // with SQLSTATE 42804 ("column is of type jsonb but expression is
+    // of type character varying"). This annotation matches the proven
+    // AiMessage.metadata mapping used in production for ai_message.metadata
+    // (which is also JSONB in V50).
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "event_data", columnDefinition = "jsonb")
     private String eventData;
 
     @Column(columnDefinition = "TEXT")

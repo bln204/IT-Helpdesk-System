@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,7 +15,7 @@ import com.example.ticketing.ticket.TicketTypes.TicketPriority;
  * Repository cho EscalationRule entity.
  */
 @Repository
-public interface EscalationRuleRepository extends JpaRepository<EscalationRule, Long> {
+public interface EscalationRuleRepository extends JpaRepository<EscalationRule, Long>, JpaSpecificationExecutor<EscalationRule> {
 
     /**
      * Tìm tất cả rule đang enabled, sắp xếp theo priority giảm dần.

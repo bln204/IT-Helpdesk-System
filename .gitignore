@@ -36,9 +36,15 @@ AGENTS.md
 
 
 # Project documentation
-docs/
+docs/*
+!docs/architecture/
+docs/architecture/*
+!docs/architecture/jsonb-mapping-inventory.md
 WORKING_RULES.md
 
 .env
 
 uploads/
+
+.claude/
+graphify-out/

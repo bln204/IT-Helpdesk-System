@@ -11,6 +11,7 @@ import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.department.Department;
 import com.example.ticketing.department.DepartmentRepository;
+import com.example.ticketing.department.ItDepartmentResolver;
 
 /**
  * Service cho Team operations.
@@ -23,16 +24,19 @@ public class TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final UserAccountRepository userAccountRepository;
     private final DepartmentRepository departmentRepository;
-    
+    private final ItDepartmentResolver itDepartmentResolver;
+
     public TeamService(
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
             UserAccountRepository userAccountRepository,
-            DepartmentRepository departmentRepository) {
+            DepartmentRepository departmentRepository,
+            ItDepartmentResolver itDepartmentResolver) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.userAccountRepository = userAccountRepository;
         this.departmentRepository = departmentRepository;
+        this.itDepartmentResolver = itDepartmentResolver;
     }
     
     // ============================================================
@@ -58,11 +62,15 @@ public class TeamService {
     }
     
     /**
-     * Lấy IT teams (department code = 'IT').
+     * Lấy các teams đang được kích hoạt theo department code được cấu hình.
+     *
+     * <p>Phase 1.1: department code comes from {@code ItDepartmentResolver} instead of a
+     * hardcoded {@code 'IT'} literal in the repository. The default code ({@code IT}) preserves
+     * the previous behavior exactly.
      */
     @Transactional(readOnly = true)
     public List<Team> getITTeams() {
-        return teamRepository.findActiveITTeams();
+        return teamRepository.findActiveByDepartmentCode(itDepartmentResolver.getItDepartmentCode());
     }
     
     /**
@@ -223,6 +231,18 @@ public class TeamService {
     @Transactional(readOnly = true)
     public List<TeamMember> getTeamMembers(Long teamId) {
         return teamMemberRepository.findByTeamIdAndEnabledTrue(teamId);
+    }
+
+    /**
+     * Lấy tất cả thành viên đang được kích hoạt theo department code được cấu hình.
+     *
+     * <p>Phase 1.1: department code comes from {@code ItDepartmentResolver} instead of a
+     * hardcoded {@code 'IT'} literal in the repository. The default code ({@code IT}) preserves
+     * the previous behavior exactly.
+     */
+    @Transactional(readOnly = true)
+    public List<TeamMember> getITTeamMembers() {
+        return teamMemberRepository.findAllByDepartmentCode(itDepartmentResolver.getItDepartmentCode());
     }
     
     /**

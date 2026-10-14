@@ -3,6 +3,7 @@ package com.example.ticketing.asset;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,7 +16,7 @@ import java.util.Optional;
  * Repository cho Asset entity.
  */
 @Repository
-public interface AssetRepository extends JpaRepository<Asset, Long> {
+public interface AssetRepository extends JpaRepository<Asset, Long>, JpaSpecificationExecutor<Asset> {
 
     Optional<Asset> findByAssetNumber(String assetNumber);
 
@@ -39,6 +40,63 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
            "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<Asset> searchAssets(@Param("search") String search, Pageable pageable);
+
+    /**
+     * Phase: AI System-Wide Access. Token-aware search. The full query
+     * string is broken into whitespace-separated tokens, and the asset
+     * matches if ANY token (not necessarily all) appears in any of the
+     * searchable fields. This is more forgiving than the strict
+     * substring match in {@link #searchAssets} when the question
+     * contains extra words that do not appear in the database, e.g.
+     * "asset MacBook Pro" should still surface "MacBook Pro 16".
+     */
+    @Query("SELECT DISTINCT a FROM Asset a WHERE " +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :t1, '%')) OR " +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :t2, '%')) OR " +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :t3, '%')) OR " +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :t4, '%')) OR " +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :t5, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :t1, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :t2, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :t3, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :t4, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :t5, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :t1, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :t2, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :t3, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :t4, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :t5, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :t1, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :t2, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :t3, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :t4, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :t5, '%'))")
+    Page<Asset> searchAssetsByTokens(@Param("t1") String t1,
+                                     @Param("t2") String t2,
+                                     @Param("t3") String t3,
+                                     @Param("t4") String t4,
+                                     @Param("t5") String t5,
+                                     Pageable pageable);
+
+    /**
+     * Phase: AI System-Wide Access. Same search as {@link #searchAssets}
+     * but additionally restricted to a single department via
+     * {@code assigned_department}. Used by the AI assistant to enforce
+     * the DEPARTMENT_SCOPED RAG verdict for non-IT operators.
+     *
+     * <p>The {@code :deptCode} parameter is matched case-sensitively
+     * because the canonical department codes stored in
+     * {@code departments.code} are always uppercase (IT, HR, FIN, ...).
+     */
+    @Query("SELECT a FROM Asset a WHERE " +
+           "a.assignedDepartment = :deptCode AND (" +
+           "LOWER(a.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(a.assetNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(a.serialNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(a.ipAddress) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Asset> searchAssetsByDepartment(@Param("search") String search,
+                                          @Param("deptCode") String deptCode,
+                                          Pageable pageable);
 
     // Assets with expiring warranty (within 30 days)
     @Query("SELECT a FROM Asset a WHERE a.warrantyExpiryDate IS NOT NULL " +
@@ -67,6 +125,10 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
 
     // Count by health status
     long countByHealthStatus(Asset.HealthStatus healthStatus);
+
+    // Phase: AI System-Wide Access. Count assets in a department
+    // for DEPARTMENT_SCOPED counting questions.
+    long countByAssignedDepartment(String deptCode);
 
     // Assets needing maintenance
     @Query("SELECT a FROM Asset a WHERE a.nextMaintenanceDate IS NOT NULL " +

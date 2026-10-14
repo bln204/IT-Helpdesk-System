@@ -19,6 +19,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import org.springframework.http.HttpStatus;
 
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.TicketAuthorization;
+
 @Service
 public class TicketAttachmentService {
 
@@ -35,14 +39,20 @@ public class TicketAttachmentService {
 
     private final TicketAttachmentRepository attachmentRepository;
     private final TicketRepository ticketRepository;
+    private final ActorContextService actorContextService;
+    private final TicketAuthorization ticketAuthorization;
     private final Path uploadDir;
 
     public TicketAttachmentService(
             TicketAttachmentRepository attachmentRepository,
             TicketRepository ticketRepository,
+            ActorContextService actorContextService,
+            TicketAuthorization ticketAuthorization,
             @Value("${app.upload.dir:uploads}") String uploadDirPath) {
         this.attachmentRepository = attachmentRepository;
         this.ticketRepository = ticketRepository;
+        this.actorContextService = actorContextService;
+        this.ticketAuthorization = ticketAuthorization;
         this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadDir);
@@ -98,12 +108,12 @@ public class TicketAttachmentService {
     public Resource downloadAttachment(Long attachmentId) {
         TicketAttachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
-        
+
         Path filePath = Paths.get(attachment.getStoragePath());
         if (!Files.exists(filePath)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found on disk");
         }
-        
+
         try {
             Resource resource = new UrlResource(filePath.toUri());
             if (resource.exists() && resource.isReadable()) {
@@ -114,6 +124,30 @@ public class TicketAttachmentService {
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not read file");
         }
+    }
+
+    /**
+     * PHASE 5.1 (C-7): actor-aware download. Resolves the attachment, resolves the
+     * parent ticket, and consults {@link TicketAuthorization#canReadTicket} before
+     * returning the binary resource. The parent-ticket lookup is the seam that closes
+     * the C-7 attack surface for the {@code /attachments/{attachmentId}/download}
+     * endpoint, which contains no ticket id in its URL.
+     */
+    public Resource downloadAttachment(Long attachmentId, String actorUsername) {
+        TicketAttachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment not found"));
+        if (attachment.getTicket() == null) {
+            // Defensive: orphaned attachment. Treat as not-found.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Attachment is not associated with a ticket.");
+        }
+        Ticket parentTicket = ticketRepository.findById(attachment.getTicket().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parent ticket not found."));
+        ActorContext actor = actorContextService.fromUsername(actorUsername);
+        if (!ticketAuthorization.canReadTicket(actor, parentTicket)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "You don't have permission to download this attachment.");
+        }
+        return downloadAttachment(attachmentId);
     }
 
     public TicketAttachment getAttachment(Long attachmentId) {

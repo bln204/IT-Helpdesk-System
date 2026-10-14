@@ -16,7 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.core.io.Resource;
@@ -35,7 +34,9 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
-import com.example.ticketing.ticket.TicketTypes.TicketStatus;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.TicketAuthorization;
 
 import jakarta.validation.Valid;
 
@@ -46,25 +47,39 @@ public class TicketController {
     private final TicketService ticketService;
     private final TicketAttachmentService attachmentService;
     private final UserAccountRepository userAccountRepository;
+    private final ActorContextService actorContextService;
+    private final TicketAuthorization ticketAuthorization;
 
     public TicketController(
             TicketService ticketService,
             TicketAttachmentService attachmentService,
-            UserAccountRepository userAccountRepository) {
+            UserAccountRepository userAccountRepository,
+            ActorContextService actorContextService,
+            TicketAuthorization ticketAuthorization) {
         this.ticketService = ticketService;
         this.attachmentService = attachmentService;
         this.userAccountRepository = userAccountRepository;
+        this.actorContextService = actorContextService;
+        this.ticketAuthorization = ticketAuthorization;
     }
 
     // ============================================================
     // TICKET CREATION
     // ============================================================
-    
+
+    /**
+     * Create a ticket. PHASE 3 (H-3 fix): the create-time assignee is no longer
+     * trusted
+     * from client input. The authorization decision is made from the canonical
+     * {@link ActorContext} (via {@link TicketAuthorization}). Only TRUONG_PHONG +
+     * IT may
+     * supply an assignee during creation, and only when the target is a valid
+     * enabled NHAN_VIEN in the configured IT department.
+     */
     @PostMapping
     public ResponseEntity<TicketDtos.TicketResponse> createTicket(
-        @Valid @RequestBody TicketDtos.TicketCreateRequest request,
-        Authentication authentication
-    ) {
+            @Valid @RequestBody TicketDtos.TicketCreateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         UserRole.Role actorRole = user.getRole();
 
@@ -75,6 +90,14 @@ public class TicketController {
         ticket.setCategory(request.getCategory());
         ticket.setRequesterName(request.getRequesterName());
         ticket.setRequesterEmail(request.getRequesterEmail());
+        // PHASE 3 (H-3): the controller forwards the client-supplied assignee string to
+        // the
+        // service exactly as before. Authorization is decided by the service from the
+        // authenticated ActorContext, not from this field. This intentionally preserves
+        // the
+        // existing wire format (the frontend may still send the field) so the rejection
+        // is
+        // server-authoritative and the client cannot bypass the policy.
         ticket.setAssigneeName(request.getAssigneeName());
 
         Ticket created = ticketService.createTicket(ticket, authentication.getName(), actorRole);
@@ -84,18 +107,17 @@ public class TicketController {
     // ============================================================
     // TICKET LISTING
     // ============================================================
-    
+
     @GetMapping
     public Page<TicketDtos.TicketResponse> listTickets(
-        @RequestParam(required = false) String assignee,
-        @RequestParam(required = false) TicketTypes.TicketStatus status,
-        @RequestParam(required = false) String search,
-        @RequestParam(defaultValue = "false") boolean excludeClosed,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size,
-        @RequestParam(defaultValue = "createdAt,desc") String sort,
-        Authentication authentication
-    ) {
+            @RequestParam(required = false) String assignee,
+            @RequestParam(required = false) TicketTypes.TicketStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "false") boolean excludeClosed,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
 
         String[] parts = sort.split(",", 2);
@@ -104,37 +126,45 @@ public class TicketController {
         Sort.Direction direction = Sort.Direction.fromOptionalString(sortDirection).orElse(Sort.Direction.ASC);
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortField));
 
+        // PHASE 5.1 (C-7): the read scope is decided inside the service from the actor
+        // context. The controller no longer needs to compute the scope itself.
         return ticketService.listTickets(
-            assignee,
-            status,
-            search,
-            excludeClosed,
-            pageRequest,
-            user.getRole().name(),
-            user.getDepartmentId()
-        ).map(TicketDtos.TicketResponse::from);
+                assignee,
+                status,
+                search,
+                excludeClosed,
+                pageRequest,
+                user.getRole().name(),
+                user.getDepartmentId(),
+                authentication.getName()).map(TicketDtos.TicketResponse::from);
     }
 
     @GetMapping("/{id}")
-    public TicketDtos.TicketResponse getTicket(@PathVariable Long id) {
-        return TicketDtos.TicketResponse.from(ticketService.getTicket(id));
+    public TicketDtos.TicketResponse getTicket(
+            @PathVariable Long id,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): the actor-aware getTicket enforces the canonical
+        // object-level
+        // read policy. Unauthenticated / unauthorized callers receive 403; an unknown
+        // id
+        // still produces 404 (TicketNotFoundException).
+        return TicketDtos.TicketResponse.from(ticketService.getTicket(id, authentication.getName()));
     }
 
     @GetMapping("/{id}/valid-transitions")
     public ResponseEntity<Set<TicketTypes.TicketStatus>> getValidTransitions(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Set<TicketTypes.TicketStatus> validStatuses = ticketService.getValidNextStatuses(id);
-        
+
         // Filter CANCELLED cho non-admin users
         if (user.getRole() != UserRole.Role.ADMIN) {
             validStatuses = validStatuses.stream()
-                .filter(s -> s != TicketTypes.TicketStatus.CANCELLED)
-                .collect(java.util.stream.Collectors.toSet());
+                    .filter(s -> s != TicketTypes.TicketStatus.CANCELLED)
+                    .collect(java.util.stream.Collectors.toSet());
         }
-        
+
         return ResponseEntity.ok(validStatuses);
     }
 
@@ -142,366 +172,367 @@ public class TicketController {
     public List<TicketDtos.TicketResponse> unassignedQueue(Authentication authentication) {
         requireStaff(authentication);
         return ticketService.listUnassignedQueue().stream()
-            .map(TicketDtos.TicketResponse::from)
-            .toList();
+                .map(TicketDtos.TicketResponse::from)
+                .toList();
     }
 
     // ============================================================
     // ASSIGNMENT ENDPOINTS
     // ============================================================
-    
+
     @PostMapping("/{id}/assign/me")
     public TicketDtos.TicketResponse assignToMe(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanReceiveTicket(user, authentication);
 
         Ticket updated = ticketService.assignTicket(
-            id,
-            authentication.getName(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                authentication.getName(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     @PostMapping("/{id}/unassign")
     public TicketDtos.TicketResponse unassignTicket(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanAssignOthers(user, authentication);
 
         Ticket updated = ticketService.unassignTicket(
-            id,
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
 
     @PatchMapping("/{id}/assignee")
     public TicketDtos.TicketResponse updateAssignee(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketAssigneeUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketAssigneeUpdateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
-        requireAssignPermission(user);
+        requireCanAssignOthers(user, authentication);
 
         Ticket updated = ticketService.assignTicket(
-            id,
-            request.getAssigneeName(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                request.getAssigneeName(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
 
     // ============================================================
     // STATUS MANAGEMENT ENDPOINTS (Phase 2.2)
     // ============================================================
-    
+
     @PatchMapping("/{id}/status")
     public TicketDtos.TicketResponse updateStatus(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketStatusUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketStatusUpdateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.updateStatus(
-            id,
-            request.getStatus(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            authentication.getName(),
-            request.getComment()
-        );
+                id,
+                request.getStatus(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName(),
+                authentication.getName(),
+                request.getComment());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Bắt đầu xử lý ticket (chuyển sang IN_PROGRESS).
      * POST /api/tickets/{id}/start
      */
     @PostMapping("/{id}/start")
     public TicketDtos.TicketResponse startProgress(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.startProgress(
-            id,
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Yêu cầu thông tin từ user (chuyển sang WAITING_FOR_USER).
      * POST /api/tickets/{id}/request-info
      */
     @PostMapping("/{id}/request-info")
     public TicketDtos.TicketResponse requestUserInfo(
-        @PathVariable Long id,
-        @RequestParam(required = false) String message,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @RequestParam(required = false) String message,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.requestUserInfo(
-            id,
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            message
-        );
+                id,
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName(),
+                message);
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * User cung cấp thông tin (chuyển từ WAITING_FOR_USER về IN_PROGRESS).
      * POST /api/tickets/{id}/provide-info
      */
     @PostMapping("/{id}/provide-info")
     public TicketDtos.TicketResponse provideUserInfo(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.provideUserInfo(
-            id,
-            user.getRole(),
-            authentication.getName()
-        );
+                id,
+                user.getRole(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Resolve ticket.
      * POST /api/tickets/{id}/resolve
      */
     @PostMapping("/{id}/resolve")
     public TicketDtos.TicketResponse resolveTicket(
-        @PathVariable Long id,
-        @RequestParam(required = false) String resolution,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @RequestParam(required = false) String resolution,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.resolveTicket(
-            id,
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            resolution
-        );
+                id,
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName(),
+                resolution);
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Close ticket (user confirm resolution).
      * POST /api/tickets/{id}/close
      */
     @PostMapping("/{id}/close")
     public TicketDtos.TicketResponse closeTicket(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.closeTicket(
-            id,
-            authentication.getName(),
-            user.getRole()
-        );
+                id,
+                authentication.getName(),
+                user.getRole());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Reopen ticket.
      * POST /api/tickets/{id}/reopen
      */
     @PostMapping("/{id}/reopen")
     public TicketDtos.TicketResponse reopenTicket(
-        @PathVariable Long id,
-        @RequestParam(required = false) String reason,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.reopenTicket(
-            id,
-            authentication.getName(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            reason
-        );
+                id,
+                authentication.getName(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName(),
+                reason);
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Escalate ticket.
      * POST /api/tickets/{id}/escalate
      */
     @PostMapping("/{id}/escalate")
     public TicketDtos.TicketResponse escalateTicket(
-        @PathVariable Long id,
-        @RequestParam(required = false) String reason,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.escalateTicket(
-            id,
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName(),
-            reason
-        );
+                id,
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName(),
+                reason);
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     /**
      * Cancel ticket (Admin only).
      * POST /api/tickets/{id}/cancel
      */
     @PostMapping("/{id}/cancel")
     public TicketDtos.TicketResponse cancelTicket(
-        @PathVariable Long id,
-        @RequestParam(required = false) String reason,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.cancelTicket(
-            id,
-            user.getRole(),
-            authentication.getName(),
-            reason
-        );
+                id,
+                user.getRole(),
+                authentication.getName(),
+                reason);
         return TicketDtos.TicketResponse.from(updated);
     }
 
     // ============================================================
     // PRIORITY ENDPOINT
     // ============================================================
-    
+
     @PatchMapping("/{id}/priority")
     public TicketDtos.TicketResponse updatePriority(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketPriorityUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketPriorityUpdateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.updatePriority(
-            id,
-            request.getPriority(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                request.getPriority(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
-    
+
     // ============================================================
     // CATEGORY ENDPOINT
     // ============================================================
-    
+
     @PatchMapping("/{id}/category")
     public TicketDtos.TicketResponse updateCategory(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketCategoryUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketCategoryUpdateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         Ticket updated = ticketService.updateCategory(
-            id,
-            request.getCategoryId(),
-            request.getSubcategoryId(),
-            user.getRole(),
-            user.getDepartmentId(),
-            authentication.getName()
-        );
+                id,
+                request.getCategoryId(),
+                request.getSubcategoryId(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
+        return TicketDtos.TicketResponse.from(updated);
+    }
+
+    // ============================================================
+    // CONTENT UPDATE ENDPOINT
+    // ============================================================
+
+    @PatchMapping("/{id}/content")
+    public TicketDtos.TicketResponse updateContent(
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketContentUpdateRequest request,
+            Authentication authentication) {
+        UserAccount user = getCurrentUser(authentication);
+        Ticket updated = ticketService.updateContent(
+                id,
+                request.getTitle(),
+                request.getDescription(),
+                user.getRole(),
+                user.getDepartmentId(),
+                authentication.getName());
         return TicketDtos.TicketResponse.from(updated);
     }
 
     // ============================================================
     // COMMENTS ENDPOINTS
     // ============================================================
-    
+
     @GetMapping("/{id}/assignments")
-    public List<TicketDtos.TicketAssignmentResponse> listAssignments(@PathVariable Long id) {
-        return ticketService.listAssignments(id).stream()
-            .map(TicketDtos.TicketAssignmentResponse::from)
-            .toList();
+    public List<TicketDtos.TicketAssignmentResponse> listAssignments(
+            @PathVariable Long id,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): nested resource is gated by the canonical ticket read
+        // policy.
+        return ticketService.listAssignments(id, authentication.getName()).stream()
+                .map(TicketDtos.TicketAssignmentResponse::from)
+                .toList();
     }
 
     @PostMapping("/{id}/comments")
     public ResponseEntity<TicketDtos.TicketCommentResponse> addComment(
-        @PathVariable Long id,
-        @Valid @RequestBody TicketDtos.TicketCommentCreateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody TicketDtos.TicketCommentCreateRequest request,
+            Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
         TicketComment comment = ticketService.addComment(
-            id,
-            request.getVisibility(),
-            request.getBody(),
-            user.getRole(),
-            authentication.getName()
-        );
+                id,
+                request.getVisibility(),
+                request.getBody(),
+                user.getRole(),
+                authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(TicketDtos.TicketCommentResponse.from(comment));
+                .body(TicketDtos.TicketCommentResponse.from(comment));
     }
 
     @GetMapping("/{id}/comments")
     public List<TicketDtos.TicketCommentResponse> listComments(
-        @PathVariable Long id,
-        @RequestParam(required = false) TicketTypes.CommentVisibility visibility,
-        Authentication authentication
-    ) {
-        UserAccount user = getCurrentUser(authentication);
-        return ticketService.listComments(id, user.getRole(), visibility).stream()
-            .map(TicketDtos.TicketCommentResponse::from)
-            .toList();
+            @PathVariable Long id,
+            @RequestParam(required = false) TicketTypes.CommentVisibility visibility,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): nested resource is gated by the canonical ticket read
+        // policy.
+        // The Phase 2.1 INTERNAL-visibility gate is preserved as an additional filter.
+        return ticketService.listComments(id, authentication.getName(), visibility).stream()
+                .map(TicketDtos.TicketCommentResponse::from)
+                .toList();
     }
 
     // ============================================================
     // AUDIT ENDPOINTS
     // ============================================================
-    
+
     @GetMapping("/{id}/audit")
-    public List<TicketDtos.TicketAuditResponse> listAudit(@PathVariable Long id) {
-        return ticketService.listAudit(id).stream()
-            .map(TicketDtos.TicketAuditResponse::from)
-            .toList();
+    public List<TicketDtos.TicketAuditResponse> listAudit(
+            @PathVariable Long id,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): audit data is gated by the canonical ticket read policy.
+        return ticketService.listAudit(id, authentication.getName()).stream()
+                .map(TicketDtos.TicketAuditResponse::from)
+                .toList();
     }
 
     @GetMapping("/{id}/audit/export")
-    public ResponseEntity<String> exportAudit(@PathVariable Long id) {
-        List<TicketAudit> entries = ticketService.listAudit(id);
+    public ResponseEntity<String> exportAudit(
+            @PathVariable Long id,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): audit export is gated by the canonical ticket read policy.
+        List<TicketAudit> entries = ticketService.listAudit(id, authentication.getName());
         StringBuilder csv = new StringBuilder();
         csv.append("created_at,action,field,old_value,new_value,actor_role,actor_name\n");
         for (TicketAudit entry : entries) {
             csv.append(escapeCsv(entry.getCreatedAt()))
-                .append(',')
-                .append(escapeCsv(entry.getAction()))
-                .append(',')
-                .append(escapeCsv(entry.getFieldName()))
-                .append(',')
-                .append(escapeCsv(entry.getOldValue()))
-                .append(',')
-                .append(escapeCsv(entry.getNewValue()))
-                .append(',')
-                .append(escapeCsv(entry.getActorRole()))
-                .append(',')
-                .append(escapeCsv(entry.getActorName()))
-                .append('\n');
+                    .append(',')
+                    .append(escapeCsv(entry.getAction()))
+                    .append(',')
+                    .append(escapeCsv(entry.getFieldName()))
+                    .append(',')
+                    .append(escapeCsv(entry.getOldValue()))
+                    .append(',')
+                    .append(escapeCsv(entry.getNewValue()))
+                    .append(',')
+                    .append(escapeCsv(entry.getActorRole()))
+                    .append(',')
+                    .append(escapeCsv(entry.getActorName()))
+                    .append('\n');
         }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.valueOf("text/csv"));
@@ -515,47 +546,48 @@ public class TicketController {
 
     @PostMapping("/{id}/attachments")
     public ResponseEntity<TicketDtos.TicketAttachmentResponse> uploadAttachment(
-        @PathVariable Long id,
-        @RequestPart("file") MultipartFile file,
-        Authentication authentication
-    ) {
-        ticketService.getTicket(id);
-        UserAccount user = getCurrentUser(authentication);
-        
+            @PathVariable Long id,
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): upload is gated by the canonical ticket read policy.
+        ticketService.getTicket(id, authentication.getName());
         TicketAttachment attachment = attachmentService.uploadAttachment(
-            id,
-            file,
-            authentication.getName()
-        );
-        
+                id,
+                file,
+                authentication.getName());
+
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(TicketDtos.TicketAttachmentResponse.from(attachment));
+                .body(TicketDtos.TicketAttachmentResponse.from(attachment));
     }
 
     @GetMapping("/{id}/attachments")
     public List<TicketDtos.TicketAttachmentResponse> listAttachments(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
-        ticketService.getTicket(id);
+            @PathVariable Long id,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): list is gated by the canonical ticket read policy.
+        ticketService.getTicket(id, authentication.getName());
         return attachmentService.getAttachmentsByTicketId(id).stream()
-            .map(TicketDtos.TicketAttachmentResponse::from)
-            .toList();
+                .map(TicketDtos.TicketAttachmentResponse::from)
+                .toList();
     }
 
     @GetMapping("/attachments/{attachmentId}/download")
     public ResponseEntity<Resource> downloadAttachment(
-        @PathVariable Long attachmentId,
-        Authentication authentication
-    ) {
+            @PathVariable Long attachmentId,
+            Authentication authentication) {
+        // PHASE 5.1 (C-7): the URL contains only the attachmentId. The endpoint MUST
+        // resolve the parent ticket and consult TicketAuthorization.canReadTicket
+        // before
+        // returning the binary resource. The actor-aware downloadAttachment enforces
+        // that policy; a second call returns the Resource once the gate has passed.
         TicketAttachment attachment = attachmentService.getAttachment(attachmentId);
-        Resource resource = attachmentService.downloadAttachment(attachmentId);
-        
+        Resource resource = attachmentService.downloadAttachment(attachmentId, authentication.getName());
+
         String contentDisposition = "attachment; filename=\"" + attachment.getOriginalName() + "\"";
         return ResponseEntity.ok()
-            .contentType(MediaType.parseMediaType(attachment.getContentType()))
-            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
-            .body(resource);
+                .contentType(MediaType.parseMediaType(attachment.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .body(resource);
     }
 
     // ============================================================
@@ -564,25 +596,24 @@ public class TicketController {
 
     @GetMapping("/reports/status-counts")
     public List<TicketDtos.TicketStatusCountResponse> statusCounts(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         Map<TicketTypes.TicketStatus, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+                null, null, null, false, Pageable.unpaged(),
+                user.getRole().name(), user.getDepartmentId(),
+                authentication.getName())) {
             if (!withinRange(ticket.getCreatedAt(), from, to)) {
                 continue;
             }
             counts.merge(ticket.getStatus(), 1L, Long::sum);
         }
         return counts.entrySet().stream()
-            .map(entry -> new TicketDtos.TicketStatusCountResponse(entry.getKey(), entry.getValue()))
-            .toList();
+                .map(entry -> new TicketDtos.TicketStatusCountResponse(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     @GetMapping("/reports/ticket-counts")
@@ -593,35 +624,30 @@ public class TicketController {
 
     @GetMapping("/reports/dashboard")
     public TicketDtos.DashboardSummary dashboardSummary(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         UserAccount user = getCurrentUser(authentication);
-        String requesterUsername = user.getRole() == UserRole.Role.NHAN_VIEN 
-            ? authentication.getName() : null;
+        String requesterUsername = user.getRole() == UserRole.Role.NHAN_VIEN
+                ? authentication.getName()
+                : null;
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildDashboardSummary(requesterUsername, range[0], range[1]);
     }
 
     @GetMapping("/reports/assignee-workload")
     public List<TicketDtos.TicketAssigneeWorkloadResponse> assigneeWorkload(
-        Authentication authentication,
-        @RequestParam(required = false) TicketTypes.TicketStatus status,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) TicketTypes.TicketStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         Map<String, Long> counts = new HashMap<>();
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+                null, null, null, false, Pageable.unpaged(),
+                user.getRole().name(), user.getDepartmentId(),
+                authentication.getName())) {
             if (status != null && ticket.getStatus() != status) {
                 continue;
             }
@@ -635,24 +661,23 @@ public class TicketController {
             counts.merge(assignee, 1L, Long::sum);
         }
         return counts.entrySet().stream()
-            .map(entry -> new TicketDtos.TicketAssigneeWorkloadResponse(entry.getKey(), entry.getValue()))
-            .toList();
+                .map(entry -> new TicketDtos.TicketAssigneeWorkloadResponse(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     @GetMapping("/reports/resolution-time")
     public TicketDtos.TicketResolutionTimeResponse resolutionTime(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
+        UserAccount user = getCurrentUser(authentication);
         long resolvedCount = 0;
         long totalSeconds = 0;
-        for (Ticket ticket : ticketService.listTickets(null, null, null, false, Pageable.unpaged(), "ADMIN", null)) {
+        for (Ticket ticket : ticketService.listTickets(
+                null, null, null, false, Pageable.unpaged(),
+                user.getRole().name(), user.getDepartmentId(),
+                authentication.getName())) {
             if (ticket.getResolvedAt() != null && ticket.getCreatedAt() != null) {
                 if (!withinRange(ticket.getResolvedAt(), from, to)) {
                     continue;
@@ -665,23 +690,17 @@ public class TicketController {
         double averageMinutes = averageSeconds / 60.0;
         double averageHours = averageMinutes / 60.0;
         return new TicketDtos.TicketResolutionTimeResponse(
-            resolvedCount,
-            averageSeconds,
-            averageMinutes,
-            averageHours
-        );
+                resolvedCount,
+                averageSeconds,
+                averageMinutes,
+                averageHours);
     }
 
     @GetMapping("/reports/engineer-summary")
     public List<TicketDtos.EngineerReportRow> engineerSummary(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildEngineerReport(range[0], range[1]);
@@ -689,14 +708,9 @@ public class TicketController {
 
     @GetMapping("/reports/requester-summary")
     public List<TicketDtos.RequesterReportRow> requesterSummary(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildRequesterReport(range[0], range[1]);
@@ -704,14 +718,9 @@ public class TicketController {
 
     @GetMapping("/reports/backlog-aging")
     public List<TicketDtos.BacklogAgingRow> backlogAging(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildBacklogAging(range[0], range[1]);
@@ -719,14 +728,9 @@ public class TicketController {
 
     @GetMapping("/reports/sla-buckets")
     public List<TicketDtos.SlaBucketRow> slaBuckets(
-        Authentication authentication,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime from,
-        @RequestParam(required = false)
-        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-        LocalDateTime to
-    ) {
+            Authentication authentication,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireStaff(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
         return ticketService.buildSlaBuckets(range[0], range[1]);
@@ -738,7 +742,7 @@ public class TicketController {
 
     private UserAccount getCurrentUser(Authentication authentication) {
         return userAccountRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 
     private void requireStaff(Authentication authentication) {
@@ -748,17 +752,39 @@ public class TicketController {
         }
     }
 
-    private void requireAssignPermission(UserAccount user) {
-        boolean canAssign = switch (user.getRole()) {
-            case ADMIN, GIAM_DOC -> true;
-            case TRUONG_PHONG -> user.isTruongPhongIT();
-            case NHAN_VIEN -> user.isInITDepartment();
-        };
+    // PHASE 2.1: controller-level authorization gates. These do NOT duplicate the
+    // service-level
+    // policy; they delegate to the canonical TicketAuthorization via
+    // ActorContextService and
+    // produce a 403 (per the brief \u00a724 / existing controller convention). The
+    // service-level
+    // gate produces a TicketRuleViolationException (400) on top of this
+    // defense-in-depth check,
+    // but the user-facing response is determined here.
 
-        if (!canAssign) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
-                "You don't have permission to assign tickets. Only IT Staff or IT Manager can assign tickets.");
+    private void requireCanReceiveTicket(UserAccount user, Authentication authentication) {
+        ActorContext actor = resolveActor(authentication, user);
+        if (!ticketAuthorization.canReceiveTicket(actor)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You don't have permission to receive this ticket. Only IT Helpdesk operators can self-receive.");
         }
+    }
+
+    private void requireCanAssignOthers(UserAccount user, Authentication authentication) {
+        ActorContext actor = resolveActor(authentication, user);
+        if (!ticketAuthorization.canAssignOthers(actor)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You don't have permission to assign other users. Only an IT Helpdesk manager can assign.");
+        }
+    }
+
+    private ActorContext resolveActor(Authentication authentication, UserAccount user) {
+        // Authentication.getName() is the canonical identity source (brief \u00a75).
+        // The user object
+        // is what the controller already loaded, but the canonical policy consumes an
+        // ActorContext, so we resolve it via ActorContextService which is the single
+        // seam.
+        return actorContextService.fromAuthentication(authentication);
     }
 
     private boolean withinRange(LocalDateTime value, LocalDateTime from, LocalDateTime to) {
