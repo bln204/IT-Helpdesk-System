@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.ticketing.ai.EmbeddingService;
 import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole.Role;
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.change.ChangeRequest;
@@ -47,6 +48,7 @@ class OtherDomainAdaptersTest {
     @Autowired private DepartmentQueryAdapter departmentAdapter;
     @Autowired private TeamQueryAdapter teamAdapter;
     @Autowired private UserQueryAdapter userAdapter;
+    @Autowired private UserAccountRepository userAccounts;
 
     private ActorContext actor(UserAccount u) {
         return ActorContext.of(u, itDepartmentResolver.isITDepartment(u.getDepartment()));
@@ -185,6 +187,21 @@ class OtherDomainAdaptersTest {
     }
 
     @Test
+    void businessLeadSeesOwnDepartmentAndItStaffOnly() {
+        UserAccount lead = fixtures.truongPhongMkt();
+        fixtures.nhanVienMkt();
+        fixtures.nhanVienIT();
+        UserAccount outsider = new UserAccount();
+        outsider.setUsername("no_dept_user");
+        outsider.setPasswordHash("x");
+        outsider.setRole(Role.NHAN_VIEN);
+        outsider.setEnabled(true);
+        userAccounts.save(outsider);
+        QueryResult r = userAdapter.execute(list(UserQueryAdapter.DEF), actor(lead));
+        assertThat(r.rows()).extracting(Row::id).contains("nv_mkt", "nv_it").doesNotContain("no_dept_user");
+    }
+
+    @Test
     void nhanVienSeesOnlyEnabledItStaff() {
         fixtures.nhanVienIT();
         fixtures.truongPhongMkt();
@@ -195,13 +212,13 @@ class OtherDomainAdaptersTest {
     }
 
     @Test
-    void truongPhongSeesAllUsersByRole() {
+    void truongPhongFiltersByRoleWithinScope() {
         fixtures.nhanVienIT();
         fixtures.truongPhongMkt();
         DomainDef d = UserQueryAdapter.DEF;
         QueryResult r = userAdapter.execute(list(d, filter(d, "role", FilterOp.EQ, Role.TRUONG_PHONG)),
                 actor(fixtures.truongPhongMkt()));
         assertThat(r.rows()).extracting(Row::id).contains("tp_mkt").doesNotContain("nv_it");
-        assertThat(r.scopeNote()).isNull();
+        assertThat(r.scopeNote()).contains("phòng bạn");
     }
 }

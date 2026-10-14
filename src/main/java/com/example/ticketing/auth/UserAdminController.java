@@ -90,7 +90,9 @@ public class UserAdminController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String search) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("username").ascending());
-        return userAdminService.listUsers(pageRequest, search).map(UserDtos.UserResponse::from);
+        UserAccount actor = getCurrentUser(authentication);
+        return userAdminService.listUsers(pageRequest, search, actor.getRole().name(), actor.getDepartmentId())
+                .map(UserDtos.UserResponse::from);
     }
 
     /**

@@ -157,8 +157,18 @@ public class UserAdminService {
         return userAccountRepository.save(user);
     }
 
+    /** TRUONG_PHONG chỉ thấy user cùng phòng (spec phase1-rbac-hardening §4.8). */
     @Transactional(readOnly = true)
-    public Page<UserAccount> listUsers(Pageable pageable, String search) {
+    public Page<UserAccount> listUsers(Pageable pageable, String search, String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)) {
+            String like = search == null || search.isBlank() ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+            return userAccountRepository.findAll((root, q, cb) -> {
+                var sameDept = actorDepartmentId == null
+                        ? cb.disjunction()
+                        : cb.equal(root.get("department").get("id"), actorDepartmentId);
+                return like == null ? sameDept : cb.and(sameDept, cb.like(cb.lower(root.get("username")), like));
+            }, pageable);
+        }
         if (search != null && !search.isBlank()) {
             return userAccountRepository.findByUsernameContainingIgnoreCase(search.trim(), pageable);
         }
@@ -233,20 +243,39 @@ public class UserAdminService {
     /**
      * Lấy audit log.
      * - ADMIN/GIAM_DOC: xem tất cả audit log
-     * - TRUONG_PHONG: xem tất cả audit log (nhưng chỉ quản lý users trong phòng ban)
+     * - TRUONG_PHONG: chỉ audit log của user cùng phòng
      */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit(String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)) {
+            java.util.Set<String> sameDept = departmentUsernames(actorDepartmentId);
+            return userAuditService.listAll().stream()
+                    .filter(a -> a.getTargetUsername() != null && sameDept.contains(a.getTargetUsername().toLowerCase(java.util.Locale.ROOT)))
+                    .toList();
+        }
         return userAuditService.listAll();
+    }
+
+    private java.util.Set<String> departmentUsernames(Long departmentId) {
+        if (departmentId == null) {
+            return java.util.Set.of();
+        }
+        return listUsersByDepartment(departmentId).stream()
+                .map(u -> u.getUsername().toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**
      * Lấy audit log theo target username.
      * - ADMIN/GIAM_DOC: xem audit log của bất kỳ user nào
-     * - TRUONG_PHONG: xem audit log của bất kỳ user nào (nhưng chỉ quản lý users trong phòng ban)
+     * - TRUONG_PHONG: chỉ audit log của user cùng phòng
      */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit(String targetUsername, String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)
+                && !departmentUsernames(actorDepartmentId).contains(targetUsername.toLowerCase(java.util.Locale.ROOT))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Trưởng phòng chỉ xem được audit của tài khoản cùng phòng.");
+        }
         return userAuditService.listForTarget(targetUsername);
     }
 
