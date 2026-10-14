@@ -196,7 +196,6 @@ export let selectedUser = null;
 export let userAuditPage = 0;
 export const userAuditPageSize = 5;
 export let userAuditEntries = [];
-export let userAvatarMap = new Map();
 export let userAvatarReady = false;
 
 // State Variables for Department Management

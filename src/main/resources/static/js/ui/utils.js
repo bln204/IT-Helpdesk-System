@@ -70,6 +70,8 @@ export const formatFieldName = (field) => {
     status: 'trạng thái',
     priority: 'độ ưu tiên',
     assignee: 'người phân công',
+    assigneename: 'người xử lý',
+    ticket: 'phiếu',
     comment: 'bình luận',
   };
   return map[field.toLowerCase()] || field;
@@ -277,24 +279,6 @@ export const populateAssigneeSelect = async (
   if (current) {
     select.value = current;
   }
-};
-
-// ==================== User Avatar Map ====================
-let userAvatarMap = new Map();
-let userAvatarReady = false;
-
-export const getUserAvatarMap = () => userAvatarMap;
-export const setUserAvatarMap = (map) => { userAvatarMap = map; };
-export const isUserAvatarReady = () => userAvatarReady;
-export const setUserAvatarReady = (ready) => { userAvatarReady = ready; };
-
-export const getDisplayName = (value) => {
-  if (!value) return '';
-  const entry = userAvatarMap.get(value.toLowerCase());
-  if (entry && entry.displayName) {
-    return entry.displayName;
-  }
-  return formatName(value);
 };
 
 // ==================== Auto Refresh ====================
@@ -514,9 +498,14 @@ export const initTabs = () => {
       const tab = btn.dataset.tab;
       if (!tab) return;
       
-      // Update active tab
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      // Only this tab group changes: ticket-detail tabs and admin tabs share .tab-btn
+      btn.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+
+      // Ticket-detail tabs switch [data-tab-panel] panels, not the admin .tab-content blocks
+      if (btn.closest('.ticket-tabs')) {
+        document.querySelectorAll('[data-tab-panel]').forEach(p => p.classList.toggle('active', p.dataset.tabPanel === tab));
+        return;
+      }
       
       // Show/hide content
       document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));

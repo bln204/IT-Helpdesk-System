@@ -1,5 +1,6 @@
 package com.example.ticketing.ticket;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -69,6 +70,12 @@ class TicketServicePhase3IntegrationTest {
 
     @Autowired
     private TicketRepository ticketRepository;
+
+    @Autowired
+    private TicketAuditRepository ticketAuditRepository;
+
+    @Autowired
+    private TicketAssignmentRepository ticketAssignmentRepository;
 
     @Autowired
     private TicketAuthorizationFixtures fixtures;
@@ -191,6 +198,28 @@ class TicketServicePhase3IntegrationTest {
             assertNotNull(created.getAssignee());
             assertEquals(staff.getId(), created.getAssignee().getId(),
                     "create-time assignee_id and assigneeName must refer to the same user");
+        }
+
+        @Test
+        @DisplayName("create-time assignee is recorded in audit and assignment history")
+        void createWithAssigneeIsAudited() {
+            UserAccount manager = fixtures.truongPhongIT();
+            UserAccount staff = fixtures.nhanVienIT2();
+            Ticket ticket = fixtures.mktRequestedTicket("Audited assign on create", TicketPriority.HIGH);
+            ticket.setAssigneeName(staff.getUsername());
+
+            Ticket created = ticketService.createTicket(ticket, manager.getUsername(), manager.getRole());
+
+            assertThat(ticketAuditRepository.findByTicketIdOrderByCreatedAtDesc(created.getId()))
+                    .anySatisfy(a -> {
+                        assertEquals(TicketTypes.AuditAction.ASSIGNEE_CHANGED, a.getAction());
+                        assertNull(a.getOldValue());
+                        assertEquals(staff.getUsername(), a.getNewValue());
+                        assertEquals(manager.getUsername(), a.getActorName());
+                    });
+            assertThat(ticketAssignmentRepository.findByTicketIdOrderByCreatedAtDesc(created.getId()))
+                    .singleElement()
+                    .satisfies(r -> assertEquals(staff.getUsername(), r.getNewAssignee()));
         }
 
         @Test

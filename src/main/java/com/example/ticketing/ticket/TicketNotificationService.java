@@ -72,8 +72,18 @@ public class TicketNotificationService {
             );
             notificationRepository.save(notification);
             log.info("Sent assignment notification to {}", assigneeUsername);
+
+            // Người tạo phiếu cần biết ai đang xử lý; bỏ qua khi họ tự nhận hoặc tự phân công.
+            String requester = ticket.getRequesterUsername();
+            if (requester != null && !requester.equalsIgnoreCase(assigneeUsername)
+                    && !requester.equalsIgnoreCase(assignedBy)) {
+                String assigneeName = ticket.getAssignee().getDisplayName() != null
+                        ? ticket.getAssignee().getDisplayName() : assigneeUsername;
+                notificationRepository.save(Notification.forRequesterTicketAssigned(
+                        requester, ticket.getId(), ticket.getTicketNumber(), assigneeName, assignedBy));
+            }
         }
-        
+
         // Nếu được gán cho team, notify team members
         if (ticket.getTeam() != null) {
             notifyTeamMembers(ticket, NotificationType.TICKET_ASSIGNED_TO_TEAM,

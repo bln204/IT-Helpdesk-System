@@ -51,8 +51,8 @@ export const updatePendingBadge = (count) => {
 export const loadUserAvatarMap = async () => {
   userAvatarMap.clear();
   userAvatarReady = false;
-  // Load for IT Staff and users who can manage users
-  const { isITStaff, canManageUsers } = await import('../core/auth.js');
+  // Load for IT Staff and users who can manage users. auth.js does not export canManageUsers,
+  // so importing it from there threw and silently aborted the startup name loading in app.js.
   if (!canManageUsers() && !isITStaff()) return;
   try {
     const data = await request('/api/users?page=0&size=200');

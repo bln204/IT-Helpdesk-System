@@ -345,6 +345,20 @@ public class TicketService {
         // Gửi notification
         ticketNotificationService.notifyTicketCreated(created);
 
+        // Người xử lý chọn sẵn lúc tạo cũng là một lần phân công: ghi audit, lịch sử và báo cho họ.
+        if (created.getAssignee() != null) {
+            TicketAssignment assignment = new TicketAssignment();
+            assignment.setTicketId(created.getId());
+            assignment.setPreviousAssignee(null);
+            assignment.setNewAssignee(created.getAssigneeName());
+            assignment.setActorRole(actorRole.name());
+            assignment.setActorName(actorUsername);
+            ticketAssignmentRepository.save(assignment);
+            logAudit(created.getId(), TicketTypes.AuditAction.ASSIGNEE_CHANGED, "assigneeName",
+                    null, created.getAssigneeName(), actorRole, actorUsername);
+            ticketNotificationService.notifyTicketAssigned(created, actorUsername);
+        }
+
         // Create embedding record for async processing
         try {
             embeddingService.createEmbedding(created.getId());
