@@ -94,11 +94,13 @@ public class IncidentController {
      */
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<IncidentDto> createIncident(@RequestBody IncidentRequest request) {
+    public ResponseEntity<IncidentDto> createIncident(@RequestBody IncidentRequest request,
+                                                      Authentication authentication) {
         log.info("POST /api/incidents - Creating: {}", request.getTitle());
 
         Incident incident = mapRequestToEntity(request);
-        Incident created = incidentService.createIncident(incident, request.getReportedByUsername());
+        // Người báo cáo luôn là user đã đăng nhập, không lấy từ body.
+        Incident created = incidentService.createIncident(incident, authentication.getName());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(IncidentDto.fromEntity(created));
