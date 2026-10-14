@@ -194,7 +194,7 @@ public class UserAdminController {
      * - TRUONG_PHONG: không được đổi
      */
     @PatchMapping("/{id}/role")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
+    @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse updateRole(
             @PathVariable Long id,
             @Valid @RequestBody UserDtos.UserRoleUpdateRequest request,

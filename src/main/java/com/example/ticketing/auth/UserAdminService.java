@@ -450,9 +450,8 @@ public class UserAdminService {
 
     /**
      * Cập nhật role.
-     * - ADMIN: có thể đổi tất cả
-     * - GIAM_DOC: có thể đổi tất cả (trừ ADMIN)
-     * - TRUONG_PHONG: không được đổi role
+     * - Chỉ ADMIN được đổi role (USER_MANAGEMENT_PLAN 1.1)
+     * - Không tự đổi role của chính mình, không gán ADMIN
      */
     public UserAccount updateRole(
         Long id,
@@ -460,34 +459,37 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
-        UserAccount user = getUser(id);
-
-        // Permission check
-        if ("TRUONG_PHONG".equals(actorRole) || "NHAN_VIEN".equals(actorRole)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN and GIAM_DOC can change roles.");
+        if (!"ADMIN".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ ADMIN được thay đổi vai trò.");
         }
 
-        // Cannot change ADMIN role
+        UserAccount user = getUser(id);
+
+        if (user.getUsername().equals(actorUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể tự thay đổi vai trò của chính mình.");
+        }
         if (user.getRole() == UserRole.Role.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot change ADMIN role.");
         }
-        
-        // Cannot change role of unapproved users to ADMIN or GIAM_DOC
-        if (!user.isApproved() && (role == UserRole.Role.ADMIN || role == UserRole.Role.GIAM_DOC)) {
+        if (role == UserRole.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể gán vai trò ADMIN qua chức năng này.");
+        }
+        if (!user.isApproved() && role == UserRole.Role.GIAM_DOC) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Không thể phân quyền ADMIN hoặc GIAM_DOC cho tài khoản chưa được phê duyệt.");
+                "Không thể phân quyền GIAM_DOC cho tài khoản chưa được phê duyệt.");
         }
 
+        UserRole.Role oldRole = user.getRole();
         user.setRole(role);
         userAuditService.log(
             UserAuditAction.ROLE_CHANGED,
             actorUsername,
             actorRole,
             user.getUsername(),
-            user.getRole().name(),
+            oldRole.name(),
             role.name()
         );
-        
+
         return userAccountRepository.save(user);
     }
 
