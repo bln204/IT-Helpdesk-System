@@ -405,13 +405,14 @@ public class NotificationService {
      * Mark a single notification as read.
      */
     @Transactional
-    public Notification markAsRead(Long notificationId) {
-        Notification notification = notificationRepository.findById(notificationId).orElse(null);
-        if (notification != null) {
-            notification.setRead(true);
-            return notificationRepository.save(notification);
-        }
-        return null;
+    public Notification markAsRead(Long notificationId, String username) {
+        return notificationRepository.findById(notificationId)
+                .filter(n -> username != null && username.equalsIgnoreCase(n.getRecipientUsername()))
+                .map(n -> {
+                    n.setRead(true);
+                    return notificationRepository.save(n);
+                })
+                .orElse(null);
     }
     
     /**
@@ -426,10 +427,14 @@ public class NotificationService {
      * Delete a single notification.
      */
     @Transactional
-    public void deleteNotification(Long notificationId) {
-        if (notificationRepository.existsById(notificationId)) {
-            notificationRepository.deleteById(notificationId);
-        }
+    public boolean deleteNotification(Long notificationId, String username) {
+        return notificationRepository.findById(notificationId)
+                .filter(n -> username != null && username.equalsIgnoreCase(n.getRecipientUsername()))
+                .map(n -> {
+                    notificationRepository.delete(n);
+                    return true;
+                })
+                .orElse(false);
     }
     
     /**

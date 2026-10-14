@@ -155,6 +155,7 @@ public class TicketController {
     public ResponseEntity<Set<TicketTypes.TicketStatus>> getValidTransitions(
             @PathVariable Long id,
             Authentication authentication) {
+        ticketService.getTicket(id, authentication.getName()); // gate canReadTicket
         UserAccount user = getCurrentUser(authentication);
         Set<TicketTypes.TicketStatus> validStatuses = ticketService.getValidNextStatuses(id);
 

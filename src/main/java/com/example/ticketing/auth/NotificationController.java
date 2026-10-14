@@ -32,14 +32,17 @@ public class NotificationController {
     private final NotificationService notificationService;
     private final NotificationPreferencesRepository preferencesRepository;
     private final com.example.ticketing.ticket.SlaSchedulerService slaSchedulerService;
+    private final com.example.ticketing.ticket.TicketService ticketService;
 
     public NotificationController(
             NotificationService notificationService,
             NotificationPreferencesRepository preferencesRepository,
-            com.example.ticketing.ticket.SlaSchedulerService slaSchedulerService) {
+            com.example.ticketing.ticket.SlaSchedulerService slaSchedulerService,
+            com.example.ticketing.ticket.TicketService ticketService) {
         this.notificationService = notificationService;
         this.preferencesRepository = preferencesRepository;
         this.slaSchedulerService = slaSchedulerService;
+        this.ticketService = ticketService;
     }
 
     // ============================================================
@@ -111,8 +114,8 @@ public class NotificationController {
      * Mark a single notification as read.
      */
     @PostMapping("/{id}/read")
-    public ResponseEntity<Map<String, String>> markAsRead(@PathVariable Long id) {
-        Notification notification = notificationService.markAsRead(id);
+    public ResponseEntity<Map<String, String>> markAsRead(@PathVariable Long id, Authentication authentication) {
+        Notification notification = notificationService.markAsRead(id, authentication.getName());
         if (notification != null) {
             return ResponseEntity.ok(Map.of("message", "Đã đánh dấu thông báo là đã đọc"));
         }
@@ -123,9 +126,10 @@ public class NotificationController {
      * Delete a single notification.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteNotification(@PathVariable Long id) {
-        notificationService.deleteNotification(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> deleteNotification(@PathVariable Long id, Authentication authentication) {
+        return notificationService.deleteNotification(id, authentication.getName())
+                ? ResponseEntity.noContent().build()
+                : ResponseEntity.notFound().build();
     }
 
     /**
@@ -198,7 +202,9 @@ public class NotificationController {
      * Get SLA status for a ticket.
      */
     @GetMapping("/sla/{ticketId}")
-    public ResponseEntity<SlaSchedulerService.SlaStatus> getTicketSlaStatus(@PathVariable Long ticketId) {
+    public ResponseEntity<SlaSchedulerService.SlaStatus> getTicketSlaStatus(@PathVariable Long ticketId,
+                                                                            Authentication authentication) {
+        ticketService.getTicket(ticketId, authentication.getName()); // ném 403/404 nếu không được đọc
         SlaSchedulerService.SlaStatus status = slaSchedulerService.checkTicketSla(ticketId);
         return ResponseEntity.ok(status);
     }
@@ -232,6 +238,7 @@ public class NotificationController {
                 type = Notification.NotificationType.ACCOUNT_APPROVED;
         }
 
+        // Người nhận luôn là actor; request.userId chỉ là relatedUserId.
         Notification notification = notificationService.sendNotification(
                 username,
                 type,
