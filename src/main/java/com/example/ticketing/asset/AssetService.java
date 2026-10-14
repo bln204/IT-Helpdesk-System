@@ -267,9 +267,12 @@ public class AssetService {
         }
         if (search != null && !search.isBlank()) {
             String like = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            // Cùng các trường với AssetRepository.searchAssets.
             parts.add((root, q, cb) -> cb.or(
                     cb.like(cb.lower(root.get("name")), like),
-                    cb.like(cb.lower(root.get("assetNumber")), like)));
+                    cb.like(cb.lower(root.get("assetNumber")), like),
+                    cb.like(cb.lower(root.get("serialNumber")), like),
+                    cb.like(cb.lower(root.get("ipAddress")), like)));
         }
         return assetRepository.findAll(Specification.allOf(parts), pageable);
     }
