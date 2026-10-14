@@ -42,18 +42,11 @@ public class UserAdminController {
      * - NHAN_VIEN: không được tạo
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
     public ResponseEntity<UserDtos.UserResponse> createUser(
             @Valid @RequestBody UserDtos.UserCreateRequest request,
             Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
-
-        // GIAM_DOC chỉ được tạo user, không được tự động duyệt
-        // (Admin duyệt giúp)
-        if ("GIAM_DOC".equals(actor.getRole().name())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Giám đốc không có quyền tạo tài khoản người dùng.");
-        }
 
         // TRUONG_PHONG: tự động gán department của họ cho user mới
         // Bỏ qua hoàn toàn departmentId từ request để đảm bảo tính toàn vẹn dữ liệu
@@ -125,6 +118,10 @@ public class UserAdminController {
     public List<UserDtos.UserResponse> listUsersByDepartment(
             @PathVariable Long departmentId,
             Authentication authentication) {
+        UserAccount actor = getCurrentUser(authentication);
+        if (actor.getRole() == UserRole.Role.TRUONG_PHONG && !departmentId.equals(actor.getDepartmentId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Trưởng phòng chỉ xem được tài khoản cùng phòng.");
+        }
         return userAdminService.listUsersByDepartment(departmentId).stream()
                 .map(UserDtos.UserResponse::from)
                 .toList();
@@ -162,17 +159,23 @@ public class UserAdminController {
     public UserDtos.UserResponse getUser(
             @PathVariable Long id,
             Authentication authentication) {
-        return UserDtos.UserResponse.from(userAdminService.getUser(id));
+        UserAccount actor = getCurrentUser(authentication);
+        UserAccount target = userAdminService.getUser(id);
+        if (actor.getRole() == UserRole.Role.TRUONG_PHONG
+                && (target.getDepartment() == null
+                    || !target.getDepartment().getId().equals(actor.getDepartmentId()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Trưởng phòng chỉ xem được tài khoản cùng phòng.");
+        }
+        return UserDtos.UserResponse.from(target);
     }
 
     /**
      * Cập nhật enabled status.
      * - ADMIN: enable/disable tất cả
-     * - GIAM_DOC: enable/disable tất cả (trừ ADMIN)
      * - TRUONG_PHONG: không được thay đổi trực tiếp
      */
     @PatchMapping("/{id}/enabled")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
+    @PreAuthorize("hasRole('ADMIN')")
     public UserDtos.UserResponse updateEnabled(
             @PathVariable Long id,
             @Valid @RequestBody UserDtos.UserEnabledRequest request,
@@ -239,7 +242,7 @@ public class UserAdminController {
      * - TRUONG_PHONG: reset password NHAN_VIEN trong phòng ban của mình
      */
     @PatchMapping("/{id}/password")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRUONG_PHONG')")
     public ResponseEntity<Void> resetPassword(
             @PathVariable Long id,
             @Valid @RequestBody UserDtos.UserPasswordResetRequest request,
@@ -289,7 +292,7 @@ public class UserAdminController {
      * - TRUONG_PHONG: xóa NHAN_VIEN trong phòng mình
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteUser(
             @PathVariable Long id,
             Authentication authentication) {
