@@ -332,41 +332,27 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
-        // #region agent debug log
-        org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserAdminService.class);
-        log.info("[DEBUG] rejectUser called - id={}, reason='{}', actorUsername={}, actorRole={}", 
-            id, reason, actorUsername, actorRole);
-        // #endregion
-
         // Only ADMIN can reject
         if (!"ADMIN".equals(actorRole)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Chỉ Admin mới có quyền từ chối tài khoản.");
         }
 
-        // #region agent debug log
-        log.info("[DEBUG] rejectUser - actorRole check passed: {}", actorRole);
-        // #endregion
-
         if (reason == null || reason.isBlank()) {
-            // #region agent debug log
-            log.info("[DEBUG] rejectUser - reason validation failed: reason='{}'", reason);
-            // #endregion
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Lý do từ chối không được để trống.");
         }
 
         UserAccount user = getUser(id);
 
-        // #region agent debug log
-        log.info("[DEBUG] rejectUser - user found: id={}, username={}, approved={}", 
-            user.getId(), user.getUsername(), user.isApproved());
-        // #endregion
-
         // Check if already approved
         if (user.isApproved()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Không thể từ chối tài khoản đã được phê duyệt.");
+        }
+        if (user.getRejectionReason() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Tài khoản này đã bị từ chối trước đó.");
         }
 
         user.setApproved(false);
