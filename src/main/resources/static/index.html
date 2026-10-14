@@ -60,15 +60,15 @@
         </div>
       </div>
       <nav class="nav-links">
-        <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Dashboard</a>
+        <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Bảng điều khiển</a>
         <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
         <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
-        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Incidents</a>
-        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Problems</a>
-        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Changes</a>
-        <a href="#/assets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Assets</a>
-        <a href="#/analytics" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Analytics</a>
-        <a href="#/service-requests" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF,ROLE_USER">Service Requests</a>
+        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Sự cố lớn</a>
+        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Vấn đề</a>
+        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Thay đổi</a>
+        <a href="#/assets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Thiết bị</a>
+        <a href="#/analytics" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Phân tích</a>
+        <a href="#/service-requests" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF,ROLE_USER">Yêu cầu dịch vụ</a>
         <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">
           Quản lý<span id="pending-users-badge-nav" class="pending-badge hidden"></span>
         </a>
@@ -140,7 +140,7 @@
             <option value="priority,desc">Độ ưu tiên (cao → thấp)</option>
             <option value="priority,asc">Độ ưu tiên (thấp → cao)</option>
             <option value="status,asc">Trạng thái</option>
-            <option value="assigneeDisplay,asc">Chuyển phụ trách (A → Z)</option>
+            <option value="assigneeDisplay,asc">Người xử lý (A → Z)</option>
           </select>
         </div>
         <button id="refresh-btn" class="secondary" type="button">Làm mới</button>
@@ -273,7 +273,7 @@
         </div>
         <div class="header-actions">
           <button id="new-report-btn" class="btn primary" type="button">
-            <span class="btn-icon">📊</span> Tạo Báo Cáo Mới
+            Tạo báo cáo mới
           </button>
         </div>
       </header>
@@ -314,10 +314,10 @@
           Phòng ban
         </button>
         <button class="tab-btn" data-tab="sla-policies" data-role="ROLE_ADMIN">
-          SLA Policies
+          Chính sách SLA
         </button>
         <button class="tab-btn" data-tab="escalation" data-role="ROLE_ADMIN">
-          Escalation
+          Chuyển cấp
         </button>
       </div>
       
@@ -430,7 +430,7 @@
       <div id="tab-sla-policies" class="tab-content hidden">
         <div class="sla-policy-header">
           <div>
-            <h4>📋 SLA Policies</h4>
+            <h4>📋 Chính sách SLA</h4>
             <p class="muted">Cấu hình thời gian phản hồi và giải quyết cho từng mức ưu tiên</p>
           </div>
           <button id="open-sla-policy-modal" class="secondary" type="button">
@@ -447,7 +447,7 @@
                 <th>Phản hồi</th>
                 <th>Giải quyết</th>
                 <th>Ngưỡng cảnh báo</th>
-                <th>Business Hours</th>
+                <th>Giờ hành chính</th>
               </tr>
             </thead>
             <tbody id="sla-summary-tbody">
@@ -466,8 +466,8 @@
       <div id="tab-escalation" class="tab-content hidden">
         <div class="escalation-header">
           <div>
-            <h4>📈 Escalation Rules</h4>
-            <p class="muted">Cấu hình tự động escalate ticket khi SLA sắp hết hạn hoặc bị vi phạm</p>
+            <h4>📈 Quy tắc chuyển cấp</h4>
+            <p class="muted">Cấu hình tự động chuyển cấp phiếu hỗ trợ khi SLA sắp hết hạn hoặc bị vi phạm</p>
           </div>
           <button id="open-escalation-modal" class="secondary" type="button">
             + Tạo Rule mới
@@ -485,17 +485,17 @@
     <section class="panel view" id="incidents-panel" data-view="incidents">
       <header class="panel-header">
         <div>
-          <h3>Incidents</h3>
-          <p>Quản lý các sự cố và gom ticket liên quan vào incident</p>
+          <h3>Sự cố lớn</h3>
+          <p>Quản lý sự cố lớn và gom các phiếu hỗ trợ liên quan vào một sự cố</p>
         </div>
-        <button id="open-incident-modal" class="icon-btn" type="button" aria-label="Tạo incident">
+        <button id="open-incident-modal" class="icon-btn" type="button" aria-label="Tạo sự cố lớn">
           +
         </button>
       </header>
       
       <!-- Filters -->
       <div class="toolbar">
-        <input id="incident-search" placeholder="Tìm kiếm incident..." />
+        <input id="incident-search" placeholder="Tìm kiếm sự cố lớn..." />
         <div class="custom-select">
           <select id="incident-status-filter">
             <option value="">Tất cả trạng thái</option>
@@ -519,15 +519,15 @@
     <section class="panel view" id="service-requests-panel" data-view="service-requests">
       <header class="panel-header">
         <div>
-          <h3>Service Requests</h3>
+          <h3>Yêu cầu dịch vụ</h3>
           <p>Danh mục dịch vụ IT và yêu cầu của bạn</p>
         </div>
       </header>
       
       <!-- Tabs: Catalog / My Requests -->
       <div class="sr-tabs">
-        <button class="sr-tab-btn active" data-sr-tab="catalog">📋 Danh mục dịch vụ</button>
-        <button class="sr-tab-btn" data-sr-tab="my-requests">📝 Yêu cầu của tôi</button>
+        <button class="sr-tab-btn active" data-sr-tab="catalog">Danh mục dịch vụ</button>
+        <button class="sr-tab-btn" data-sr-tab="my-requests">Yêu cầu của tôi</button>
       </div>
       
       <!-- Service Catalog -->
@@ -557,22 +557,22 @@
     <section class="panel view" id="problems-panel" data-view="problems">
       <header class="panel-header">
         <div>
-          <h3>Problem Management</h3>
+          <h3>Quản lý vấn đề</h3>
           <p>Theo dõi nguyên nhân gốc rễ của các sự cố</p>
         </div>
-        <button class="primary problem-create-btn" type="button">+ Tạo Problem</button>
+        <button class="primary problem-create-btn" type="button">+ Tạo vấn đề</button>
       </header>
       
       <!-- Tabs -->
       <div class="problem-tabs">
-        <button class="problem-tab-btn active" data-problem-tab="problems">🔍 Problems</button>
-        <button class="problem-tab-btn" data-problem-tab="known-errors">📚 Known Errors (KEDB)</button>
+        <button class="problem-tab-btn active" data-problem-tab="problems">Vấn đề</button>
+        <button class="problem-tab-btn" data-problem-tab="known-errors">Lỗi đã biết (KEDB)</button>
       </div>
       
       <!-- Problems List -->
       <div id="problem-list-section" class="problem-list-section">
         <div class="toolbar">
-          <input id="problem-search" placeholder="Tìm kiếm problem..." />
+          <input id="problem-search" placeholder="Tìm kiếm vấn đề..." />
           <button id="problem-search-btn" class="secondary" type="button">Tìm kiếm</button>
           <div class="custom-select">
             <select id="problem-status-filter">
@@ -592,7 +592,7 @@
       <!-- Known Errors List -->
       <div id="known-error-section" class="known-error-section hidden">
         <div class="toolbar">
-          <input id="known-error-search-input" placeholder="Tìm kiếm Known Errors..." style="flex: 1;" />
+          <input id="known-error-search-input" placeholder="Tìm kiếm lỗi đã biết..." style="flex: 1;" />
           <button class="secondary known-error-search-btn" type="button">Tìm kiếm</button>
         </div>
         <div id="known-error-list" class="known-error-list"></div>
@@ -603,41 +603,41 @@
     <section class="panel view" id="changes-panel" data-view="changes">
       <header class="panel-header">
         <div>
-          <h3>Change Management</h3>
-          <p>Schedule and manage infrastructure changes</p>
+          <h3>Quản lý thay đổi</h3>
+          <p>Lên lịch và quản lý các thay đổi hạ tầng</p>
         </div>
-        <button class="primary change-create-btn" type="button">+ New Change</button>
+        <button class="primary change-create-btn" type="button">+ Tạo thay đổi</button>
       </header>
       
       <!-- Tabs -->
       <div class="change-tabs">
-        <button class="change-tab-btn active" data-change-tab="changes">🔄 Changes</button>
-        <button class="change-tab-btn" data-change-tab="calendar">📅 Calendar</button>
+        <button class="change-tab-btn active" data-change-tab="changes">Thay đổi</button>
+        <button class="change-tab-btn" data-change-tab="calendar">Lịch</button>
       </div>
       
       <!-- Changes List -->
       <div id="change-list-section" class="change-list-section">
         <div class="toolbar">
-          <input id="change-search" placeholder="Search changes..." />
+          <input id="change-search" placeholder="Tìm kiếm thay đổi..." />
           <div class="custom-select">
             <select id="change-status-filter">
-              <option value="">All statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PENDING_APPROVAL">Pending Approval</option>
-              <option value="APPROVED">Approved</option>
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="COMPLETED">Completed</option>
+              <option value="">Tất cả trạng thái</option>
+              <option value="DRAFT">Nháp</option>
+              <option value="PENDING_APPROVAL">Chờ phê duyệt</option>
+              <option value="APPROVED">Đã phê duyệt</option>
+              <option value="SCHEDULED">Đã lên lịch</option>
+              <option value="IN_PROGRESS">Đang thực hiện</option>
+              <option value="COMPLETED">Hoàn thành</option>
             </select>
           </div>
-          <button id="refresh-change-btn" class="secondary" type="button">Refresh</button>
+          <button id="refresh-change-btn" class="secondary" type="button">Làm mới</button>
         </div>
         <div id="change-list" class="change-list"></div>
       </div>
       
       <!-- Calendar Section -->
       <div id="change-calendar-section" class="change-calendar-section hidden">
-        <p style="color: var(--muted); text-align: center; padding: 48px;">Calendar view coming soon</p>
+        <p style="color: var(--muted); text-align: center; padding: 48px;">Chế độ xem lịch sẽ sớm ra mắt</p>
       </div>
     </section>
 
@@ -645,10 +645,10 @@
     <section class="panel view" id="assets-panel" data-view="assets">
       <header class="panel-header">
         <div>
-          <h3>Asset Management</h3>
-          <p>Track and manage IT hardware and software assets</p>
+          <h3>Quản lý thiết bị</h3>
+          <p>Theo dõi và quản lý phần cứng, phần mềm IT</p>
         </div>
-        <button class="primary asset-create-btn" type="button" onclick="window.AssetManagement && window.AssetManagement.openCreateModal()">+ Add Asset</button>
+        <button class="primary asset-create-btn" type="button" onclick="window.AssetManagement && window.AssetManagement.openCreateModal()">+ Thêm thiết bị</button>
       </header>
       
       <!-- Statistics -->
@@ -656,41 +656,41 @@
       
       <!-- Tabs -->
       <div class="asset-tabs">
-        <button class="asset-tab-btn active" data-asset-tab="assets">🖥️ Assets</button>
-        <button class="asset-tab-btn" data-asset-tab="alerts">⚠️ Alerts</button>
+        <button class="asset-tab-btn active" data-asset-tab="assets">Thiết bị</button>
+        <button class="asset-tab-btn" data-asset-tab="alerts">Cảnh báo</button>
       </div>
       
       <!-- Assets List -->
       <div id="asset-list-section" class="asset-list-section">
         <div class="toolbar">
-          <input id="asset-search" placeholder="Search assets..." />
+          <input id="asset-search" placeholder="Tìm kiếm thiết bị..." />
           <button id="asset-search-btn" class="btn-ghost">Tìm kiếm</button>
           <div class="custom-select">
             <select id="asset-type-filter">
-              <option value="">All types</option>
-              <option value="SERVER">Server</option>
-              <option value="WORKSTATION">Workstation</option>
+              <option value="">Tất cả loại</option>
+              <option value="SERVER">Máy chủ</option>
+              <option value="WORKSTATION">Máy trạm</option>
               <option value="LAPTOP">Laptop</option>
-              <option value="NETWORK_DEVICE">Network</option>
-              <option value="SOFTWARE_LICENSE">Software</option>
+              <option value="NETWORK_DEVICE">Mạng</option>
+              <option value="SOFTWARE_LICENSE">Phần mềm</option>
             </select>
           </div>
           <div class="custom-select">
             <select id="asset-health-filter">
-              <option value="">All health</option>
-              <option value="HEALTHY">Healthy</option>
-              <option value="WARNING">Warning</option>
-              <option value="CRITICAL">Critical</option>
+              <option value="">Mọi tình trạng</option>
+              <option value="HEALTHY">Tốt</option>
+              <option value="WARNING">Cảnh báo</option>
+              <option value="CRITICAL">Nghiêm trọng</option>
             </select>
           </div>
-          <button id="refresh-asset-btn" class="secondary" type="button">Refresh</button>
+          <button id="refresh-asset-btn" class="secondary" type="button">Làm mới</button>
         </div>
         <div id="asset-list" class="asset-list"></div>
       </div>
       
       <!-- Alerts Section -->
       <div id="asset-alerts-section" class="asset-alerts-section hidden">
-        <p style="color: var(--muted); text-align: center; padding: 48px;">Warranty and maintenance alerts will appear here</p>
+        <p style="color: var(--muted); text-align: center; padding: 48px;">Cảnh báo bảo hành và bảo trì sẽ hiển thị tại đây</p>
       </div>
     </section>
 
@@ -698,17 +698,17 @@
     <section class="panel view" id="analytics-panel" data-view="analytics">
       <header class="panel-header">
         <div>
-          <h3>Analytics Dashboard</h3>
-          <p>IT operations metrics and reporting</p>
+          <h3>Phân tích</h3>
+          <p>Số liệu vận hành IT và báo cáo</p>
         </div>
-        <button id="refresh-analytics-btn" class="secondary" type="button">Refresh</button>
+        <button id="refresh-analytics-btn" class="secondary" type="button">Làm mới</button>
       </header>
       
       <!-- Tabs -->
       <div class="analytics-tabs">
-        <button class="analytics-tab-btn active" data-analytics-tab="overview">📊 Overview</button>
-        <button class="analytics-tab-btn" data-analytics-tab="reports">📋 Reports</button>
-        <button class="analytics-tab-btn" data-analytics-tab="tickets">🎫 Tickets</button>
+        <button class="analytics-tab-btn active" data-analytics-tab="overview">Tổng quan</button>
+        <button class="analytics-tab-btn" data-analytics-tab="reports">Báo cáo</button>
+        <button class="analytics-tab-btn" data-analytics-tab="tickets">Phiếu hỗ trợ</button>
       </div>
       
       <!-- Overview Section -->
@@ -723,21 +723,21 @@
         <div class="analytics-charts-grid">
           <div class="chart-card">
             <div class="chart-header">
-              <h4 class="chart-title">Ticket Volume (Last 14 Days)</h4>
+              <h4 class="chart-title">Số phiếu hỗ trợ (14 ngày qua)</h4>
             </div>
             <div id="ticket-volume-chart" class="bar-chart"></div>
           </div>
           
           <div class="chart-card">
             <div class="chart-header">
-              <h4 class="chart-title">Asset Health Distribution</h4>
+              <h4 class="chart-title">Phân bố tình trạng thiết bị</h4>
             </div>
             <div id="asset-health-chart" class="donut-chart-container"></div>
           </div>
           
           <div class="chart-card">
             <div class="chart-header">
-              <h4 class="chart-title">Change Status</h4>
+              <h4 class="chart-title">Trạng thái thay đổi</h4>
             </div>
             <div id="change-status-chart" class="horizontal-bar-chart-container"></div>
           </div>
@@ -747,78 +747,73 @@
       <!-- Reports Section -->
       <div id="analytics-reports-section" class="analytics-reports-section hidden">
         <div class="analytics-reports-header">
-          <h4>Report Templates</h4>
+          <h4>Mẫu báo cáo</h4>
           <button id="analytics-new-report-btn" class="btn primary btn-sm">
-            <span class="btn-icon">+</span> Tạo Báo Cáo Mới
+            Tạo báo cáo mới
           </button>
         </div>
         <div class="reports-list">
-          <div class="report-card" data-report-type="tickets">
-            <div class="report-icon">📊</div>
-            <h4 class="report-name">Ticket Volume Report</h4>
-            <p class="report-description">Overview of ticket volume over time</p>
+          <div class="report-card" data-report-type="tickets">
+            <h4 class="report-name">Báo cáo số lượng phiếu hỗ trợ</h4>
+            <p class="report-description">Số lượng phiếu hỗ trợ theo thời gian</p>
             <div class="report-meta">
-              <span>Service Desk</span>
-              <span class="report-type">Volume</span>
+              <span>Bộ phận hỗ trợ</span>
+              <span class="report-type">Số lượng</span>
             </div>
             <div class="report-actions-card">
-              <button class="btn btn-sm secondary preview-report-btn" data-type="tickets">Preview</button>
+              <button class="btn btn-sm secondary preview-report-btn" data-type="tickets">Xem trước</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="tickets" data-format="csv">CSV</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="tickets" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="sla">
-            <div class="report-icon">📈</div>
-            <h4 class="report-name">SLA Compliance</h4>
-            <p class="report-description">Track SLA compliance rates</p>
+          <div class="report-card" data-report-type="sla">
+            <h4 class="report-name">Tuân thủ SLA</h4>
+            <p class="report-description">Theo dõi tỷ lệ tuân thủ SLA</p>
             <div class="report-meta">
-              <span>Operations</span>
+              <span>Vận hành</span>
               <span class="report-type">SLA</span>
             </div>
             <div class="report-actions-card">
-              <button class="btn btn-sm secondary preview-report-btn" data-type="sla">Preview</button>
+              <button class="btn btn-sm secondary preview-report-btn" data-type="sla">Xem trước</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="sla" data-format="csv">CSV</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="sla" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="assets">
-            <div class="report-icon">🖥️</div>
-            <h4 class="report-name">Asset Health Overview</h4>
-            <p class="report-description">Summary of asset health status</p>
+          <div class="report-card" data-report-type="assets">
+            <h4 class="report-name">Tổng quan tình trạng thiết bị</h4>
+            <p class="report-description">Tóm tắt tình trạng thiết bị</p>
             <div class="report-meta">
-              <span>Infrastructure</span>
-              <span class="report-type">Assets</span>
+              <span>Hạ tầng</span>
+              <span class="report-type">Thiết bị</span>
             </div>
             <div class="report-actions-card">
-              <button class="btn btn-sm secondary preview-report-btn" data-type="assets">Preview</button>
+              <button class="btn btn-sm secondary preview-report-btn" data-type="assets">Xem trước</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="assets" data-format="csv">CSV</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="assets" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="agent">
-            <div class="report-icon">👤</div>
-            <h4 class="report-name">Agent Performance</h4>
-            <p class="report-description">Track response and resolution times</p>
+          <div class="report-card" data-report-type="agent">
+            <h4 class="report-name">Hiệu suất nhân viên</h4>
+            <p class="report-description">Theo dõi thời gian phản hồi và giải quyết</p>
             <div class="report-meta">
-              <span>Service Desk</span>
-              <span class="report-type">Performance</span>
+              <span>Bộ phận hỗ trợ</span>
+              <span class="report-type">Hiệu suất</span>
             </div>
             <div class="report-actions-card">
-              <button class="btn btn-sm secondary preview-report-btn" data-type="agent">Preview</button>
+              <button class="btn btn-sm secondary preview-report-btn" data-type="agent">Xem trước</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="agent" data-format="csv">CSV</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="agent" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="changes">
-            <div class="report-icon">🔄</div>
-            <h4 class="report-name">Change Success Rate</h4>
-            <p class="report-description">Track change implementation success</p>
+          <div class="report-card" data-report-type="changes">
+            <h4 class="report-name">Tỷ lệ thay đổi thành công</h4>
+            <p class="report-description">Theo dõi kết quả triển khai thay đổi</p>
             <div class="report-meta">
-              <span>Operations</span>
-              <span class="report-type">Changes</span>
+              <span>Vận hành</span>
+              <span class="report-type">Thay đổi</span>
             </div>
             <div class="report-actions-card">
-              <button class="btn btn-sm secondary preview-report-btn" data-type="changes">Preview</button>
+              <button class="btn btn-sm secondary preview-report-btn" data-type="changes">Xem trước</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="changes" data-format="csv">CSV</button>
               <button class="btn btn-sm ghost export-report-btn" data-type="changes" data-format="excel">Excel</button>
             </div>
@@ -828,11 +823,11 @@
         <!-- Report Preview Area -->
         <div id="analytics-report-preview" class="report-preview hidden">
           <div class="preview-header">
-            <h4 id="preview-report-title">Report Preview</h4>
+            <h4 id="preview-report-title">Xem trước báo cáo</h4>
             <div class="preview-actions">
-              <button class="btn btn-sm secondary" id="preview-download-csv">📥 CSV</button>
-              <button class="btn btn-sm secondary" id="preview-download-excel">📊 Excel</button>
-              <button class="btn btn-sm ghost preview-close-btn">✕ Close</button>
+              <button class="btn btn-sm secondary" id="preview-download-csv">CSV</button>
+              <button class="btn btn-sm secondary" id="preview-download-excel">Excel</button>
+              <button class="btn btn-sm ghost preview-close-btn">Đóng</button>
             </div>
           </div>
           <div id="preview-report-content" class="preview-content"></div>
@@ -841,7 +836,7 @@
       
       <!-- Tickets Section -->
       <div id="analytics-tickets-section" class="analytics-tickets-section hidden">
-        <p style="color: var(--muted); text-align: center; padding: 48px;">Detailed ticket analytics coming soon</p>
+        <p style="color: var(--muted); text-align: center; padding: 48px;">Phân tích chi tiết phiếu hỗ trợ sẽ sớm ra mắt</p>
       </div>
     </section>
   </section>
@@ -1246,7 +1241,7 @@
               <select id="sla-policy-priority" required>
                 <option value="CRITICAL">Nghiêm trọng (Critical)</option>
                 <option value="URGENT">Khẩn cấp (Urgent)</option>
-                <option value="HIGH">Cao (High)</option>
+                <option value="HIGH">Cao</option>
                 <option value="MEDIUM">Trung bình (Medium)</option>
                 <option value="LOW">Thấp (Low)</option>
               </select>
@@ -1281,7 +1276,7 @@
             <input type="number" id="sla-policy-warning-threshold" min="0" max="100" value="75" />
           </label>
           <label class="toggle-row">
-            <span class="toggle-label">Business Hours Only</span>
+            <span class="toggle-label">Chỉ tính giờ hành chính</span>
             <label class="toggle-switch">
               <input type="checkbox" id="sla-policy-business-hours" />
               <span class="toggle-slider"></span>
@@ -1319,8 +1314,8 @@
     <div class="modal-content" style="max-width: 600px;">
       <header class="panel-header">
         <div>
-          <h3 id="escalation-modal-title">Tạo Escalation Rule</h3>
-          <p>Cấu hình tự động escalate ticket</p>
+          <h3 id="escalation-modal-title">Tạo quy tắc chuyển cấp</h3>
+          <p>Cấu hình tự động chuyển cấp phiếu hỗ trợ</p>
         </div>
         <button id="close-escalation-modal" class="ghost" type="button">Đóng</button>
       </header>
@@ -1329,7 +1324,7 @@
         
         <label>
           Tên Rule
-          <input type="text" id="escalation-rule-name" maxlength="100" required placeholder="VD: SLA Response Breached - Alert Team Lead" />
+          <input type="text" id="escalation-rule-name" maxlength="100" required placeholder="VD: Vi phạm SLA phản hồi - báo trưởng nhóm" />
         </label>
         
         <label>
@@ -1339,14 +1334,14 @@
         
         <div class="escalation-form-row">
           <label>
-            Trigger Type
+            Điều kiện kích hoạt
             <div class="custom-select">
               <select id="escalation-trigger-type" required>
-                <option value="SLA_RESPONSE_WARNING">SLA Response Warning (75%)</option>
-                <option value="SLA_RESPONSE_BREACHED">SLA Response Breached</option>
-                <option value="SLA_RESOLUTION_WARNING">SLA Resolution Warning (75%)</option>
-                <option value="SLA_RESOLUTION_BREACHED">SLA Resolution Breached</option>
-                <option value="CRITICAL_TICKET">Critical Ticket mới</option>
+                <option value="SLA_RESPONSE_WARNING">Sắp hết SLA phản hồi (75%)</option>
+                <option value="SLA_RESPONSE_BREACHED">Vi phạm SLA phản hồi</option>
+                <option value="SLA_RESOLUTION_WARNING">Sắp hết SLA giải quyết (75%)</option>
+                <option value="SLA_RESOLUTION_BREACHED">Vi phạm SLA giải quyết</option>
+                <option value="CRITICAL_TICKET">Phiếu hỗ trợ nghiêm trọng mới</option>
               </select>
             </div>
           </label>
@@ -1366,22 +1361,22 @@
         
         <div class="escalation-form-row">
           <label>
-            Escalation Level
+            Cấp chuyển
             <div class="custom-select">
               <select id="escalation-level" required>
-                <option value="LEVEL_1">Level 1 - Team Lead</option>
-                <option value="LEVEL_2">Level 2 - IT Manager</option>
-                <option value="LEVEL_3">Level 3 - Director</option>
+                <option value="LEVEL_1">Cấp 1 - Trưởng nhóm</option>
+                <option value="LEVEL_2">Cấp 2 - Trưởng phòng IT</option>
+                <option value="LEVEL_3">Cấp 3 - Giám đốc</option>
               </select>
             </div>
           </label>
           <label>
-            Action Type
+            Hành động
             <div class="custom-select">
               <select id="escalation-action-type" required>
                 <option value="NOTIFY">Gửi thông báo</option>
-                <option value="REASSIGN">Gán lại cho escalation target</option>
-                <option value="ESCALATE_STATUS">Đổi trạng thái thành ESCALATED</option>
+                <option value="REASSIGN">Gán lại cho người nhận chuyển cấp</option>
+                <option value="ESCALATE_STATUS">Đổi trạng thái thành Đã chuyển cấp</option>
               </select>
             </div>
           </label>
@@ -1389,7 +1384,7 @@
         
         <div class="escalation-form-row">
           <label>
-            Số lần escalation tối đa
+            Số lần chuyển cấp tối đa
             <input type="number" id="escalation-max-escalations" min="1" max="10" value="3" />
           </label>
           <label class="toggle-row">
@@ -1414,8 +1409,8 @@
     <div class="modal-content incident-modal-content">
       <header class="panel-header">
         <div>
-          <h3 id="incident-modal-title">Tạo Incident</h3>
-          <p>Tạo incident để gom các ticket liên quan</p>
+          <h3 id="incident-modal-title">Tạo sự cố lớn</h3>
+          <p>Tạo sự cố lớn để gom các phiếu hỗ trợ liên quan</p>
         </div>
         <button id="close-incident-modal" class="ghost" type="button">Đóng</button>
       </header>
@@ -1424,7 +1419,7 @@
         
         <label>
           Tiêu đề
-          <input type="text" id="incident-title" maxlength="200" required placeholder="VD: Internet Office Down" />
+          <input type="text" id="incident-title" maxlength="200" required placeholder="VD: Mất Internet toàn văn phòng" />
         </label>
         
         <label>
@@ -1434,18 +1429,18 @@
         
         <div class="incident-form-row">
           <label>
-            Priority
+            Độ ưu tiên
             <div class="custom-select">
               <select id="incident-priority" required>
                 <option value="CRITICAL">Critical - Nghiêm trọng</option>
-                <option value="HIGH" selected>High - Cao</option>
+                <option value="HIGH" selected>Cao</option>
                 <option value="MEDIUM">Medium - Trung bình</option>
                 <option value="LOW">Low - Thấp</option>
               </select>
             </div>
           </label>
           <label>
-            Impact Level
+            Mức ảnh hưởng
             <div class="custom-select">
               <select id="incident-impact" required>
                 <option value="LOW">Low - Ảnh hưởng một vài người</option>
@@ -1463,7 +1458,7 @@
         </label>
         
         <div class="incident-form-section">
-          <h4>Root Cause Analysis (Khi đã xác định)</h4>
+          <h4>Phân tích nguyên nhân gốc (khi đã xác định)</h4>
           
           <label>
             Nguyên nhân gốc rễ
@@ -1482,7 +1477,7 @@
         </div>
         
         <div class="button-row">
-          <button type="submit" id="incident-submit-btn">Tạo Incident</button>
+          <button type="submit" id="incident-submit-btn">Tạo sự cố lớn</button>
           <button type="button" id="cancel-incident-btn" class="secondary">Hủy</button>
         </div>
       </form>
@@ -1494,7 +1489,7 @@
     <div class="modal-content incident-modal-content">
       <header class="panel-header">
         <div>
-          <h3>Chi tiết Incident</h3>
+          <h3>Chi tiết sự cố lớn</h3>
         </div>
         <button class="close-btn" id="close-incident-detail-modal" aria-label="Đóng">&times;</button>
       </header>
@@ -1507,7 +1502,7 @@
     <div class="modal-content sr-modal-content">
       <header class="panel-header">
         <div>
-          <h3 id="sr-modal-title">Tạo Service Request</h3>
+          <h3 id="sr-modal-title">Tạo yêu cầu dịch vụ</h3>
           <p id="sr-service-name">Yêu cầu dịch vụ IT</p>
         </div>
         <button id="close-sr-modal" class="ghost" type="button">Đóng</button>
@@ -1538,7 +1533,7 @@
     <div class="modal-content problem-modal-content">
       <header class="panel-header">
         <div>
-          <h3 id="problem-modal-title">Tạo Problem</h3>
+          <h3 id="problem-modal-title">Tạo vấn đề</h3>
         </div>
         <button id="close-problem-modal" class="ghost" type="button">Đóng</button>
       </header>
@@ -1551,7 +1546,7 @@
     <div class="modal-content known-error-modal-content">
       <header class="panel-header">
         <div>
-          <h3>Chi tiết Known Error</h3>
+          <h3>Chi tiết lỗi đã biết</h3>
         </div>
         <div style="display: flex; gap: 8px;">
           <button id="known-error-delete-btn" class="danger btn-sm" type="button" style="display: none;">🗑️ Xóa</button>
@@ -1567,9 +1562,9 @@
     <div class="modal-content change-modal-content">
       <header class="panel-header">
         <div>
-          <h3 id="change-modal-title">New Change Request</h3>
+          <h3 id="change-modal-title">Tạo yêu cầu thay đổi</h3>
         </div>
-        <button id="close-change-modal" class="ghost" type="button">Close</button>
+        <button id="close-change-modal" class="ghost" type="button">Đóng</button>
       </header>
       <form id="change-form" class="change-form"></form>
     </div>
@@ -1580,9 +1575,9 @@
     <div class="modal-content asset-modal-content">
       <header class="panel-header">
         <div>
-          <h3 id="asset-modal-title">Add Asset</h3>
+          <h3 id="asset-modal-title">Thêm thiết bị</h3>
         </div>
-        <button id="close-asset-modal" class="ghost" type="button">Close</button>
+        <button id="close-asset-modal" class="ghost" type="button">Đóng</button>
       </header>
       <form id="asset-form" class="asset-form"></form>
     </div>

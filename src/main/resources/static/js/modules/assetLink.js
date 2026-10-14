@@ -15,17 +15,17 @@ const AssetLinkModule = (() => {
     // ==================== Link Role Config ====================
 
     const linkRoleConfig = {
-        'AFFECTED': { label: 'Affected', color: '#F59E0B', icon: '💥' },
-        'ROOT_CAUSE': { label: 'Root Cause', color: '#F43F5E', icon: '🎯' },
-        'SUSPECT': { label: 'Suspect', color: '#8B5CF6', icon: '🔍' },
-        'RESOLVED_BY': { label: 'Resolved By', color: '#10B981', icon: '✅' }
+        'AFFECTED': { label: 'Bị ảnh hưởng', color: '#F59E0B', icon: '💥' },
+        'ROOT_CAUSE': { label: 'Nguyên nhân gốc', color: '#F43F5E', icon: '🎯' },
+        'SUSPECT': { label: 'Nghi ngờ', color: '#8B5CF6', icon: '🔍' },
+        'RESOLVED_BY': { label: 'Được khắc phục bởi', color: '#10B981', icon: '✅' }
     };
 
     const healthConfig = {
-        'HEALTHY': { label: 'Healthy', color: '#10B981' },
-        'WARNING': { label: 'Warning', color: '#F59E0B' },
-        'CRITICAL': { label: 'Critical', color: '#F43F5E' },
-        'UNKNOWN': { label: 'Unknown', color: '#6B7280' }
+        'HEALTHY': { label: 'Tốt', color: '#10B981' },
+        'WARNING': { label: 'Cảnh báo', color: '#F59E0B' },
+        'CRITICAL': { label: 'Nghiêm trọng', color: '#F43F5E' },
+        'UNKNOWN': { label: 'Không rõ', color: '#6B7280' }
     };
 
     // ==================== Load Linked Assets for Incident ====================
@@ -33,7 +33,7 @@ const AssetLinkModule = (() => {
     async function loadLinkedAssets(incidentId) {
         try {
             const response = await fetch(`${API_BASE}/incident/${incidentId}`, Auth.getAuthHeaders());
-            if (!response.ok) throw new Error('Failed to load linked assets');
+            if (!response.ok) throw new Error('Không thể tải thiết bị liên kết');
             const links = await response.json();
             renderLinkedAssets(links, incidentId);
             return links;
@@ -51,9 +51,9 @@ const AssetLinkModule = (() => {
             container.innerHTML = `
                 <div class="link-empty-state">
                     <span class="link-icon">🔗</span>
-                    <p>No assets linked to this incident</p>
+                    <p>Chưa có thiết bị nào liên kết với sự cố này</p>
                     <button class="link-add-btn" data-incident="${incidentId}">
-                        + Link an asset
+                        + Liên kết thiết bị
                     </button>
                 </div>
             `;
@@ -64,7 +64,7 @@ const AssetLinkModule = (() => {
             <div class="linked-assets-header">
                 <span class="linked-count">${links.length} linked asset${links.length > 1 ? 's' : ''}</span>
                 <button class="link-add-btn small" data-incident="${incidentId}">
-                    + Link asset
+                    + Liên kết thiết bị
                 </button>
             </div>
             <div class="linked-assets-list">
@@ -100,8 +100,8 @@ const AssetLinkModule = (() => {
                     </span>
                 </div>
                 <div class="linked-asset-actions">
-                    <button class="link-unlink-btn" data-link-id="${link.id}" title="Unlink">
-                        Unlink
+                    <button class="link-unlink-btn" data-link-id="${link.id}" title="Bỏ liên kết">
+                        Bỏ liên kết
                     </button>
                 </div>
             </div>
@@ -146,7 +146,7 @@ const AssetLinkModule = (() => {
     async function loadLinkedIncidents(assetId) {
         try {
             const response = await fetch(`${API_BASE}/asset/${assetId}/incidents`, Auth.getAuthHeaders());
-            if (!response.ok) throw new Error('Failed to load linked incidents');
+            if (!response.ok) throw new Error('Không thể tải sự cố liên kết');
             const links = await response.json();
             renderLinkedIncidents(links, assetId);
             return links;
@@ -163,7 +163,7 @@ const AssetLinkModule = (() => {
         if (!links || links.length === 0) {
             container.innerHTML = `
                 <div class="link-empty-state small">
-                    <p>No incidents linked</p>
+                    <p>Chưa liên kết sự cố nào</p>
                 </div>
             `;
             return;
@@ -202,16 +202,16 @@ const AssetLinkModule = (() => {
             <div class="modal-content link-modal-content">
                 <header class="panel-header">
                     <div>
-                        <h3>Link Asset to Incident</h3>
-                        <p>Search and select an asset to link</p>
+                        <h3>Liên kết thiết bị với sự cố</h3>
+                        <p>Tìm và chọn thiết bị để liên kết</p>
                     </div>
-                    <button class="ghost link-modal-close">Close</button>
+                    <button class="ghost link-modal-close">Đóng</button>
                 </header>
                 <div class="link-search-section">
-                    <input type="text" id="asset-search-input" placeholder="Search by name, number, or IP..." />
+                    <input type="text" id="asset-search-input" placeholder="Tìm theo tên, mã hoặc IP..." />
                 </div>
                 <div id="asset-search-results" class="asset-search-results">
-                    <p class="search-hint">Start typing to search for assets</p>
+                    <p class="search-hint">Nhập để tìm thiết bị</p>
                 </div>
             </div>
         `;
@@ -240,20 +240,20 @@ const AssetLinkModule = (() => {
         const resultsContainer = modal.querySelector('#asset-search-results');
 
         if (!query || query.length < 2) {
-            resultsContainer.innerHTML = '<p class="search-hint">Start typing to search for assets</p>';
+            resultsContainer.innerHTML = '<p class="search-hint">Nhập để tìm thiết bị</p>';
             return;
         }
 
         try {
             const response = await fetch(`/api/assets?search=${encodeURIComponent(query)}&size=10`, 
                     Auth.getAuthHeaders());
-            if (!response.ok) throw new Error('Search failed');
+            if (!response.ok) throw new Error('Tìm kiếm thất bại');
             
             const data = await response.json();
             const assets = data.content || [];
 
             if (assets.length === 0) {
-                resultsContainer.innerHTML = '<p class="search-hint">No assets found</p>';
+                resultsContainer.innerHTML = '<p class="search-hint">Không tìm thấy thiết bị nào</p>';
                 return;
             }
 
@@ -270,7 +270,7 @@ const AssetLinkModule = (() => {
                             <span class="health-badge-small" style="--health-color: ${healthCfg.color}">
                                 ${healthCfg.label}
                             </span>
-                            <button class="link-select-btn" data-asset-id="${asset.id}">Select</button>
+                            <button class="link-select-btn" data-asset-id="${asset.id}">Chọn</button>
                         </div>
                     </div>
                 `;
@@ -286,7 +286,7 @@ const AssetLinkModule = (() => {
 
         } catch (error) {
             console.error('Error searching assets:', error);
-            resultsContainer.innerHTML = '<p class="search-hint">Search failed. Try again.</p>';
+            resultsContainer.innerHTML = '<p class="search-hint">Tìm kiếm thất bại. Vui lòng thử lại.</p>';
         }
     }
 
@@ -295,25 +295,25 @@ const AssetLinkModule = (() => {
         
         resultsContainer.innerHTML = `
             <div class="link-role-selector">
-                <h4>How is this asset related?</h4>
+                <h4>Thiết bị này liên quan thế nào?</h4>
                 <div class="role-options">
                     <button class="role-option-btn" data-role="AFFECTED">
                         <span class="role-icon">💥</span>
-                        <span class="role-label">Affected</span>
-                        <span class="role-desc">Asset is impacted by this incident</span>
+                        <span class="role-label">Bị ảnh hưởng</span>
+                        <span class="role-desc">Thiết bị bị ảnh hưởng bởi sự cố này</span>
                     </button>
                     <button class="role-option-btn" data-role="ROOT_CAUSE">
                         <span class="role-icon">🎯</span>
-                        <span class="role-label">Root Cause</span>
-                        <span class="role-desc">Asset is causing the incident</span>
+                        <span class="role-label">Nguyên nhân gốc</span>
+                        <span class="role-desc">Thiết bị là nguyên nhân gây sự cố</span>
                     </button>
                     <button class="role-option-btn" data-role="SUSPECT">
                         <span class="role-icon">🔍</span>
-                        <span class="role-label">Suspect</span>
-                        <span class="role-desc">Possibly related, needs investigation</span>
+                        <span class="role-label">Nghi ngờ</span>
+                        <span class="role-desc">Có thể liên quan, cần điều tra</span>
                     </button>
                 </div>
-                <button class="back-to-search-btn">← Back to search</button>
+                <button class="back-to-search-btn">← Quay lại tìm kiếm</button>
             </div>
         `;
 
@@ -323,7 +323,7 @@ const AssetLinkModule = (() => {
                 const role = btn.dataset.role;
                 await createLink(assetId, incidentId, role);
                 closeLinkModal(modal);
-                Toast.show('Asset linked successfully', 'success');
+                Toast.show('Đã liên kết thiết bị', 'success');
                 // Refresh linked assets
                 loadLinkedAssets(incidentId);
             });
@@ -350,12 +350,12 @@ const AssetLinkModule = (() => {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to link asset');
+            throw new Error(error.message || 'Không thể liên kết thiết bị');
         }
     }
 
     async function unlinkAsset(linkId, incidentId) {
-        if (!confirm('Unlink this asset from the incident?')) return;
+        if (!confirm('Bỏ liên kết thiết bị này khỏi sự cố?')) return;
 
         try {
             const response = await fetch(`${API_BASE}/incident/${incidentId}/asset/${linkId}`, {
@@ -363,13 +363,13 @@ const AssetLinkModule = (() => {
                 headers: Auth.getAuthHeaders()
             });
 
-            if (!response.ok) throw new Error('Failed to unlink');
+            if (!response.ok) throw new Error('Không thể bỏ liên kết');
 
-            Toast.show('Asset unlinked', 'success');
+            Toast.show('Đã bỏ liên kết thiết bị', 'success');
             loadLinkedAssets(incidentId);
         } catch (error) {
             console.error('Error unlinking asset:', error);
-            Toast.show('Failed to unlink asset', 'error');
+            Toast.show('Không thể bỏ liên kết thiết bị', 'error');
         }
     }
 

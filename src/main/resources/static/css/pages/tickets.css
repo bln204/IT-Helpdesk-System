@@ -359,7 +359,8 @@ body.dark .attachment-item {
 .sla-compact-label {
   color: var(--muted);
   font-size: 0.65rem;
-  min-width: 24px;
+  min-width: 52px;
+  white-space: nowrap;
 }
 
 .sla-compact-value {

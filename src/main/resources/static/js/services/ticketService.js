@@ -211,7 +211,7 @@ function renderTicketRowSla(ticket) {
   } else if (responseAt) {
     if (now > responseAt) {
       responseStatus = 'breached';
-      responseText = '✗ PR';
+      responseText = '✗ Quá hạn';
     } else {
       const remaining = responseAt - now;
       responseText = formatTimeCompact(remaining);
@@ -229,7 +229,7 @@ function renderTicketRowSla(ticket) {
   } else if (resolutionAt) {
     if (now > resolutionAt) {
       resolutionStatus = 'breached';
-      resolutionText = '✗ RS';
+      resolutionText = '✗ Quá hạn';
     } else {
       const remaining = resolutionAt - now;
       resolutionText = formatTimeCompact(remaining);
@@ -240,11 +240,11 @@ function renderTicketRowSla(ticket) {
   
   return `
     <div class="sla-compact-row">
-      <span class="sla-compact-label">PR:</span>
+      <span class="sla-compact-label">Phản hồi:</span>
       <span class="sla-compact-value ${responseStatus}">${responseText}</span>
     </div>
     <div class="sla-compact-row">
-      <span class="sla-compact-label">RS:</span>
+      <span class="sla-compact-label">Xử lý:</span>
       <span class="sla-compact-value ${resolutionStatus}">${resolutionText}</span>
     </div>
   `;
@@ -792,7 +792,7 @@ export const downloadAttachmentFile = async (attachmentId, fileName, contentType
     });
     
     if (!response.ok) {
-      throw new Error('Download failed');
+      throw new Error('Tải xuống thất bại');
     }
     
     const blob = await response.blob();

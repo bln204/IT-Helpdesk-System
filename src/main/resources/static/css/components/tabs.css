@@ -1,11 +1,4 @@
 /* ==================== Tab Styles ==================== */
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 20px;
-}
-
 .tab-btn {
   background: none;
   border: none;
@@ -75,4 +68,59 @@
 
 .tab-panel.active {
   display: block;
+}
+
+/* ==================== Page Tabs (shared, Analytics style) ==================== */
+.tabs,
+.analytics-tabs,
+.problem-tabs,
+.change-tabs,
+.asset-tabs,
+.sr-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.tabs > .tab-btn,
+.analytics-tab-btn,
+.problem-tab-btn,
+.change-tab-btn,
+.asset-tab-btn,
+.sr-tab-btn {
+  padding: 12px 20px;
+  margin: 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabs > .tab-btn:hover,
+.analytics-tab-btn:hover,
+.problem-tab-btn:hover,
+.change-tab-btn:hover,
+.asset-tab-btn:hover,
+.sr-tab-btn:hover {
+  color: var(--text);
+}
+
+.tabs > .tab-btn.active,
+.tabs > .tab-btn.active:hover,
+.analytics-tab-btn.active,
+.problem-tab-btn.active,
+.change-tab-btn.active,
+.asset-tab-btn.active,
+.sr-tab-btn.active {
+  color: #0891B2;
+  border-bottom-color: #0891B2;
+  background: transparent;
 }

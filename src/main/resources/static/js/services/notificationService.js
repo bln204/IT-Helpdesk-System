@@ -342,13 +342,13 @@ const handleNotificationClick = async (notif) => {
             if (response.ok) {
               window.Incident.viewIncident(notif.ticketId);
             } else {
-              Toast.show('Không tìm thấy incident', 'error');
+              Toast.show('Không tìm thấy sự cố', 'error');
             }
           }
         }
       } catch (error) {
         console.error('Error loading incident from notification:', error);
-        Toast.show('Không thể mở incident', 'error');
+        Toast.show('Không thể mở sự cố', 'error');
       }
     }, 500);
   } else if (category === 'account') {

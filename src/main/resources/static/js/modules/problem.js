@@ -126,13 +126,13 @@ const ProblemManagement = (() => {
             }
 
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load problems');
+            if (!response.ok) throw new Error('Không thể tải danh sách vấn đề');
             const data = await response.json();
             problems = data.content || [];
             renderProblemsList(problems);
         } catch (error) {
             console.error('Error loading problems:', error);
-            Toast.show('Lỗi khi tải danh sách Problems', 'error');
+            Toast.show('Lỗi khi tải danh sách vấn đề', 'error');
         }
     }
 
@@ -145,26 +145,26 @@ const ProblemManagement = (() => {
             console.log('Loading known errors from:', url);
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
             console.log('Response status:', response.status);
-            if (!response.ok) throw new Error('Failed to load known errors');
+            if (!response.ok) throw new Error('Không thể tải lỗi đã biết');
             const data = await response.json();
             console.log('Received data:', data);
             knownErrors = data;
             renderKnownErrors(knownErrors);
         } catch (error) {
             console.error('Error loading known errors:', error);
-            Toast.show('Lỗi khi tải Known Errors', 'error');
+            Toast.show('Lỗi khi tải lỗi đã biết', 'error');
         }
     }
 
     async function loadProblemById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load problem');
+        if (!response.ok) throw new Error('Không thể tải vấn đề');
         return await response.json();
     }
 
     async function loadKnownErrorById(id) {
         const response = await fetch(`${API_BASE}/known-errors/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load known error');
+        if (!response.ok) throw new Error('Không thể tải lỗi đã biết');
         return await response.json();
     }
 
@@ -176,7 +176,7 @@ const ProblemManagement = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create problem');
+            throw new Error(error.message || 'Không thể tạo vấn đề');
         }
         return await response.json();
     }
@@ -187,7 +187,7 @@ const ProblemManagement = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ status })
         });
-        if (!response.ok) throw new Error('Failed to update status');
+        if (!response.ok) throw new Error('Không thể cập nhật trạng thái');
         return await response.json();
     }
 
@@ -197,7 +197,7 @@ const ProblemManagement = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ incidentId })
         });
-        if (!response.ok) throw new Error('Failed to link incident');
+        if (!response.ok) throw new Error('Không thể liên kết sự cố');
         return await response.json();
     }
 
@@ -207,12 +207,12 @@ const ProblemManagement = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ 
                 workaround: workaround,
-                author: author || 'System'
+                author: author || 'Hệ thống'
             })
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to add workaround');
+            throw new Error(error.message || 'Không thể thêm cách khắc phục tạm thời');
         }
         return await response.json();
     }
@@ -225,7 +225,7 @@ const ProblemManagement = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create known error');
+            throw new Error(error.message || 'Không thể tạo lỗi đã biết');
         }
         return await response.json();
     }
@@ -277,7 +277,7 @@ const ProblemManagement = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to delete known error');
+            throw new Error(error.message || 'Không thể xóa lỗi đã biết');
         }
     }
 
@@ -288,7 +288,7 @@ const ProblemManagement = (() => {
         if (!container) return;
 
         if (!problemsList || problemsList.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>Chưa có Problem nào.</p></div>';
+            container.innerHTML = '<div class="empty-state"><p>Chưa có vấn đề nào.</p></div>';
             return;
         }
 
@@ -330,8 +330,8 @@ const ProblemManagement = (() => {
                         <span class="problem-status ${status.class}">${status.label}</span>
                         <div class="problem-card-actions">
                             ${!isClosed ? `
-                                <button class="ghost btn-sm problem-add-to-known-error-btn" data-id="${problem.id}" title="Liên kết Known Error">
-                                    ${hasKe ? '📚 Đổi Known Error' : '📚 Known Error'}
+                                <button class="ghost btn-sm problem-add-to-known-error-btn" data-id="${problem.id}" title="Liên kết lỗi đã biết">
+                                    ${hasKe ? '📚 Đổi lỗi đã biết' : '📚 Lỗi đã biết'}
                                 </button>
                             ` : ''}
                             <button class="secondary btn-sm problem-view-btn" data-id="${problem.id}">Xem</button>
@@ -347,7 +347,7 @@ const ProblemManagement = (() => {
         if (!container) return;
 
         if (!errorsList || errorsList.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>Chưa có Known Error nào.</p></div>';
+            container.innerHTML = '<div class="empty-state"><p>Chưa có lỗi đã biết nào.</p></div>';
             return;
         }
 
@@ -419,7 +419,7 @@ const ProblemManagement = (() => {
             document.getElementById('problem-modal').classList.remove('hidden');
             document.body.classList.add('modal-open');
         }).catch(err => {
-            Toast.show('Lỗi khi tải Problem', 'error');
+            Toast.show('Lỗi khi tải vấn đề', 'error');
         });
     }
 
@@ -451,7 +451,7 @@ const ProblemManagement = (() => {
             document.getElementById('known-error-modal').classList.remove('hidden');
             document.body.classList.add('modal-open');
         }).catch(err => {
-            Toast.show('Lỗi khi tải Known Error', 'error');
+            Toast.show('Lỗi khi tải lỗi đã biết', 'error');
         });
     }
 
@@ -510,7 +510,7 @@ const ProblemManagement = (() => {
                 </div>
 
                 <div class="detail-section">
-                    <h5>🔍 Root Cause Analysis</h5>
+                    <h5>🔍 Phân tích nguyên nhân gốc</h5>
                     <div class="detail-item">
                         <label>Nguyên nhân gốc rễ</label>
                         <span>${escapeHtml(problem.rootCause || 'Chưa xác định')}</span>
@@ -522,21 +522,21 @@ const ProblemManagement = (() => {
                 </div>
 
                 <div class="detail-section">
-                    <h5>⚡ Workaround & Resolution</h5>
+                    <h5>⚡ Khắc phục tạm thời và giải pháp</h5>
                     <div class="detail-item">
-                        <label>Workaround</label>
+                        <label>Cách khắc phục tạm thời</label>
                         <span>${escapeHtml(problem.workaround || 'Chưa có')}</span>
                     </div>
                     <div class="detail-item">
-                        <label>Resolution</label>
+                        <label>Giải pháp</label>
                         <span>${escapeHtml(problem.resolution || 'Chưa có')}</span>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h5>📊 Impact Metrics</h5>
+                    <h5>📊 Mức độ ảnh hưởng</h5>
                     <div class="detail-item">
-                        <label>Incidents liên quan</label>
+                        <label>Sự cố liên quan</label>
                         <span>${problem.totalIncidentsLinked || 0}</span>
                     </div>
                     <div class="detail-item">
@@ -548,7 +548,7 @@ const ProblemManagement = (() => {
 
             <!-- PHASE 6.6.3 - Known Error relationship panel -->
             <div class="problem-known-error-section detail-section">
-                <h5>📚 Known Error</h5>
+                <h5>📚 Lỗi đã biết</h5>
                 ${hasKe ? `
                     <div class="ke-linked">
                         <span>${escapeHtml(problem.knownErrorCode || ('KE #' + problem.knownErrorId))}</span>
@@ -558,15 +558,15 @@ const ProblemManagement = (() => {
                             : ''}
                     </div>
                 ` : `
-                    <p class="muted">No linked Known Error</p>
+                    <p class="muted">Chưa liên kết lỗi đã biết</p>
                 `}
                 ${(!isClosed && canManageKe) ? `
                     <div class="button-row" style="margin-top: 12px;">
                         <button class="secondary" onclick="ProblemManagement.openAddToKnownErrorModal(${problem.id})">
-                            ${hasKe ? '🔄 Đổi / Tạo mới' : '➕ Tạo Known Error'}
+                            ${hasKe ? '🔄 Đổi / Tạo mới' : '➕ Tạo lỗi đã biết'}
                         </button>
                         <button class="ghost" onclick="ProblemManagement.openLinkExistingKnownErrorModal(${problem.id})">
-                            🔗 Liên kết Known Error đã có
+                            🔗 Liên kết lỗi đã biết có sẵn
                         </button>
                         ${hasKe ? `
                             <button class="warning" onclick="ProblemManagement.confirmUnlinkKnownError(${problem.id})">
@@ -624,7 +624,7 @@ const ProblemManagement = (() => {
                 </div>
 
                 <div class="detail-section">
-                    <h5>🔍 Root Cause</h5>
+                    <h5>🔍 Nguyên nhân gốc</h5>
                     <div class="detail-item">
                         <label>Nguyên nhân gốc rễ</label>
                         <span>${escapeHtml(error.rootCause || 'Chưa xác định')}</span>
@@ -632,19 +632,19 @@ const ProblemManagement = (() => {
                 </div>
 
                 <div class="detail-section">
-                    <h5>⚡ Workaround & Fix Steps</h5>
+                    <h5>⚡ Khắc phục tạm thời và các bước sửa</h5>
                     <div class="detail-item">
-                        <label>Workaround</label>
+                        <label>Cách khắc phục tạm thời</label>
                         <span>${escapeHtml(error.workaround || 'Chưa có')}</span>
                     </div>
                     <div class="detail-item">
-                        <label>Fix Steps</label>
+                        <label>Các bước sửa</label>
                         <span>${escapeHtml(error.fixSteps || 'Chưa có')}</span>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h5>📊 Statistics</h5>
+                    <h5>📊 Thống kê</h5>
                     <div class="detail-item">
                         <label>Số lần xảy ra</label>
                         <span>${error.occurrenceCount || 0}</span>
@@ -662,12 +662,12 @@ const ProblemManagement = (() => {
 
             <!-- Add Workaround Form -->
             <div class="known-error-workaround-section">
-                <h5>➕ Thêm Workaround mới</h5>
+                <h5>➕ Thêm cách khắc phục tạm thời</h5>
                 <form id="known-error-workaround-form">
                     <input type="hidden" id="known-error-workaround-id" value="${error.id}" />
-                    <textarea id="known-error-workaround-input" rows="3" placeholder="Nhập workaround..."></textarea>
+                    <textarea id="known-error-workaround-input" rows="3" placeholder="Nhập cách khắc phục tạm thời..."></textarea>
                     <div class="button-row" style="margin-top: 8px;">
-                        <button type="submit" class="primary btn-sm">Lưu Workaround</button>
+                        <button type="submit" class="primary btn-sm">Lưu cách khắc phục</button>
                     </div>
                 </form>
             </div>
@@ -675,17 +675,17 @@ const ProblemManagement = (() => {
     }
 
     async function confirmDeleteKnownError(id) {
-        if (!confirm('Bạn có chắc muốn xóa Known Error này?')) {
+        if (!confirm('Bạn có chắc muốn xóa lỗi đã biết này?')) {
             return;
         }
 
         try {
             await deleteKnownError(id);
-            Toast.show('Đã xóa Known Error', 'success');
+            Toast.show('Đã xóa lỗi đã biết', 'success');
             closeKnownErrorModal();
             loadKnownErrors();
         } catch (error) {
-            Toast.show(error.message || 'Lỗi khi xóa Known Error', 'error');
+            Toast.show(error.message || 'Lỗi khi xóa lỗi đã biết', 'error');
         }
     }
 
@@ -721,16 +721,16 @@ const ProblemManagement = (() => {
             <div class="modal-content" style="max-width: 600px;">
                 <header class="panel-header">
                     <div>
-                        <h3>Thêm vào Known Errors Database</h3>
-                        <p>Tạo Known Error từ Problem đã resolve</p>
+                        <h3>Thêm vào cơ sở dữ liệu lỗi đã biết</h3>
+                        <p>Tạo lỗi đã biết từ vấn đề đã giải quyết</p>
                     </div>
                     <button class="ghost" onclick="ProblemManagement.closeAddToKnownErrorModal()">Đóng</button>
                 </header>
                 <form id="add-to-known-error-form" class="stack">
                     <input type="hidden" id="add-to-known-error-problem-id" value="${problemId}" />
                     <label>
-                        Tiêu đề Known Error *
-                        <input type="text" id="ke-title" required placeholder="VD: Database connection timeout on Server A" />
+                        Tiêu đề lỗi đã biết *
+                        <input type="text" id="ke-title" required placeholder="VD: Mất kết nối cơ sở dữ liệu trên máy chủ A" />
                     </label>
                     <label>
                         Mô tả
@@ -753,7 +753,7 @@ const ProblemManagement = (() => {
                         <textarea id="ke-workaround" rows="2" placeholder="Giải pháp tạm thời..."></textarea>
                     </label>
                     <label>
-                        Permanent resolution
+                        Giải pháp triệt để
                         <textarea id="ke-resolution" rows="2" placeholder="Giải pháp vĩnh viễn (nếu có)..."></textarea>
                     </label>
                     <label>
@@ -761,7 +761,7 @@ const ProblemManagement = (() => {
                         <textarea id="ke-fix-steps" rows="2" placeholder="Các bước để khắc phục vĩnh viễn..."></textarea>
                     </label>
                     <div class="button-row">
-                        <button type="submit" class="primary">Tạo Known Error</button>
+                        <button type="submit" class="primary">Tạo lỗi đã biết</button>
                         <button type="button" class="secondary" onclick="ProblemManagement.closeAddToKnownErrorModal()">Hủy</button>
                     </div>
                 </form>
@@ -812,17 +812,17 @@ const ProblemManagement = (() => {
             isSubmitting = false;
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Tạo Known Error';
+                submitBtn.textContent = 'Tạo lỗi đã biết';
             }
             return;
         }
 
         if (!problemId || Number.isNaN(problemId)) {
-            Toast.show('Không xác định được Problem. Vui lòng đóng và mở lại Problem.', 'error');
+            Toast.show('Không xác định được vấn đề. Vui lòng đóng và mở lại vấn đề.', 'error');
             isSubmitting = false;
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Tạo Known Error';
+                submitBtn.textContent = 'Tạo lỗi đã biết';
             }
             return;
         }
@@ -838,7 +838,7 @@ const ProblemManagement = (() => {
             await refreshProblemDetail(problemId);
             loadKnownErrors();
         } catch (error) {
-            const msg = (error && error.message) || 'Lỗi khi tạo Known Error';
+            const msg = (error && error.message) || 'Lỗi khi tạo lỗi đã biết';
             if (msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('không có quyền')) {
                 Toast.show('Bạn không có quyền thực hiện thao tác này.', 'error');
             } else {
@@ -848,7 +848,7 @@ const ProblemManagement = (() => {
             isSubmitting = false;
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Tạo Known Error';
+                submitBtn.textContent = 'Tạo lỗi đã biết';
             }
         }
     }
@@ -868,16 +868,16 @@ const ProblemManagement = (() => {
             <div class="modal-content" style="max-width: 720px;">
                 <header class="panel-header">
                     <div>
-                        <h3>Liên kết Known Error đã có</h3>
-                        <p>Tìm Known Error phù hợp với Problem hiện tại để tránh tạo trùng.</p>
+                        <h3>Liên kết lỗi đã biết có sẵn</h3>
+                        <p>Tìm lỗi đã biết phù hợp với vấn đề hiện tại để tránh tạo trùng.</p>
                     </div>
                     <button class="ghost" onclick="ProblemManagement.closeLinkExistingKnownErrorModal()">Đóng</button>
                 </header>
                 <div class="stack">
                     <input type="hidden" id="link-existing-problem-id" value="${problemId}" />
                     <label>
-                        Tìm kiếm Known Error
-                        <input type="text" id="link-existing-search-input" placeholder="Nhập từ khóa: tiêu đề, nguyên nhân, workaround..." />
+                        Tìm kiếm lỗi đã biết
+                        <input type="text" id="link-existing-search-input" placeholder="Nhập từ khóa: tiêu đề, nguyên nhân, cách khắc phục..." />
                     </label>
                     <div class="button-row">
                         <button type="button" class="primary" onclick="ProblemManagement.searchKnownErrorsForLink()">Tìm</button>
@@ -912,11 +912,11 @@ const ProblemManagement = (() => {
                 ? `${API_BASE}/known-errors/search?q=${encodeURIComponent(query)}`
                 : `${API_BASE}/known-errors`;
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to search known errors');
+            if (!response.ok) throw new Error('Không thể tìm lỗi đã biết');
             const results = await response.json();
             renderLinkExistingResults(results || []);
         } catch (err) {
-            resultsEl.innerHTML = '<p class="muted">Lỗi khi tìm Known Error.</p>';
+            resultsEl.innerHTML = '<p class="muted">Lỗi khi tìm lỗi đã biết.</p>';
         }
     }
 
@@ -924,13 +924,13 @@ const ProblemManagement = (() => {
         const resultsEl = document.getElementById('link-existing-results');
         if (!resultsEl) return;
         if (results.length === 0) {
-            resultsEl.innerHTML = '<p class="muted">Không tìm thấy Known Error phù hợp. Bạn có thể tạo mới bằng nút "Tạo Known Error".</p>';
+            resultsEl.innerHTML = '<p class="muted">Không tìm thấy lỗi đã biết phù hợp. Bạn có thể tạo mới bằng nút "Tạo lỗi đã biết".</p>';
             return;
         }
         // Filter out OBSOLETE rows since they cannot be linked.
         const linkable = results.filter(ke => ke.status !== 'OBSOLETE');
         if (linkable.length === 0) {
-            resultsEl.innerHTML = '<p class="muted">Tất cả Known Error tìm được đều OBSOLETE. Vui lòng tạo mới.</p>';
+            resultsEl.innerHTML = '<p class="muted">Tất cả lỗi đã biết tìm được đều đã lỗi thời. Vui lòng tạo mới.</p>';
             return;
         }
         resultsEl.innerHTML = linkable.map(ke => `
@@ -956,21 +956,21 @@ const ProblemManagement = (() => {
         const problemIdRaw = document.getElementById('link-existing-problem-id')?.value;
         const problemId = problemIdRaw ? parseInt(problemIdRaw, 10) : null;
         if (!problemId) {
-            Toast.show('Không xác định được Problem.', 'error');
+            Toast.show('Không xác định được vấn đề.', 'error');
             return;
         }
         try {
             await linkExistingKnownError(problemId, knownErrorId);
-            Toast.show('Đã liên kết Known Error với Problem.', 'success');
+            Toast.show('Đã liên kết lỗi đã biết với vấn đề.', 'success');
             closeLinkExistingKnownErrorModal();
             await refreshProblemDetail(problemId);
             loadKnownErrors();
         } catch (error) {
-            const msg = (error && error.message) || 'Lỗi khi liên kết Known Error';
+            const msg = (error && error.message) || 'Lỗi khi liên kết lỗi đã biết';
             if (msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('không có quyền')) {
                 Toast.show('Bạn không có quyền thực hiện thao tác này.', 'error');
             } else if (msg.toLowerCase().includes('obsolete')) {
-                Toast.show('Known Error đã OBSOLETE, không thể liên kết.', 'error');
+                Toast.show('Lỗi đã biết này đã lỗi thời, không thể liên kết.', 'error');
             } else {
                 Toast.show(msg, 'error');
             }
@@ -978,12 +978,12 @@ const ProblemManagement = (() => {
     }
 
     function confirmUnlinkKnownError(problemId) {
-        if (!confirm('Bỏ liên kết Known Error khỏi Problem này?')) {
+        if (!confirm('Bỏ liên kết lỗi đã biết khỏi vấn đề này?')) {
             return;
         }
         unlinkKnownErrorFromProblem(problemId)
             .then(async () => {
-                Toast.show('Đã bỏ liên kết Known Error.', 'success');
+                Toast.show('Đã bỏ liên kết lỗi đã biết.', 'success');
                 await refreshProblemDetail(problemId);
                 loadKnownErrors();
             })
@@ -1016,18 +1016,18 @@ const ProblemManagement = (() => {
         const currentUser = window.Auth?.getCurrentUser?.();
 
         if (!id || !workaround) {
-            Toast.show('Vui lòng nhập workaround', 'error');
+            Toast.show('Vui lòng nhập cách khắc phục tạm thời', 'error');
             return;
         }
 
         try {
             await addWorkaroundToKnownError(parseInt(id), workaround, currentUser?.displayName || currentUser?.username);
-            Toast.show('Đã thêm workaround', 'success');
+            Toast.show('Đã thêm cách khắc phục tạm thời', 'success');
             // Reload known error detail
             viewKnownError(parseInt(id));
             loadKnownErrors();
         } catch (error) {
-            Toast.show(error.message || 'Lỗi khi thêm workaround', 'error');
+            Toast.show(error.message || 'Lỗi khi thêm cách khắc phục tạm thời', 'error');
         }
     }
 
@@ -1052,13 +1052,13 @@ const ProblemManagement = (() => {
                         Danh mục
                         <select id="problem-category">
                             <option value="">Chọn danh mục</option>
-                            <option value="NETWORK">Network</option>
-                            <option value="HARDWARE">Hardware</option>
-                            <option value="SOFTWARE">Software</option>
-                            <option value="SECURITY">Security</option>
-                            <option value="DATABASE">Database</option>
-                            <option value="APPLICATION">Application</option>
-                            <option value="OTHER">Other</option>
+                            <option value="NETWORK">Mạng</option>
+                            <option value="HARDWARE">Phần cứng</option>
+                            <option value="SOFTWARE">Phần mềm</option>
+                            <option value="SECURITY">Bảo mật</option>
+                            <option value="DATABASE">Cơ sở dữ liệu</option>
+                            <option value="APPLICATION">Ứng dụng</option>
+                            <option value="OTHER">Khác</option>
                         </select>
                     </label>
                     
@@ -1084,7 +1084,7 @@ const ProblemManagement = (() => {
                 </label>
                 
                 <div class="button-row">
-                    <button type="submit" id="problem-submit-btn" class="primary">Tạo Problem</button>
+                    <button type="submit" id="problem-submit-btn" class="primary">Tạo vấn đề</button>
                     <button type="button" id="cancel-problem-btn" class="secondary">Hủy</button>
                 </div>
             `;
@@ -1113,7 +1113,7 @@ const ProblemManagement = (() => {
             Toast.show('Vui lòng nhập tiêu đề', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Tạo Problem';
+                submitBtn.textContent = 'Tạo vấn đề';
             }
             isSubmitting = false;
             return;
@@ -1121,7 +1121,7 @@ const ProblemManagement = (() => {
 
         try {
             await submitProblem(data);
-            Toast.show('Đã tạo Problem thành công!', 'success');
+            Toast.show('Đã tạo vấn đề.', 'success');
             closeModal();
             loadProblems();
         } catch (error) {
@@ -1129,7 +1129,7 @@ const ProblemManagement = (() => {
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Tạo Problem';
+                submitBtn.textContent = 'Tạo vấn đề';
             }
             isSubmitting = false;
         }

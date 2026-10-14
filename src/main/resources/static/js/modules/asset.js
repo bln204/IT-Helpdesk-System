@@ -5,6 +5,11 @@ const AssetManagement = (() => {
     'use strict';
 
     const API_BASE = '/api/assets';
+    const ASSET_TYPE_LABELS = {
+        SERVER: 'Máy chủ', WORKSTATION: 'Máy trạm', LAPTOP: 'Laptop', NETWORK_DEVICE: 'Thiết bị mạng',
+        PRINTER: 'Máy in', MONITOR: 'Màn hình', MOBILE_DEVICE: 'Thiết bị di động', SOFTWARE_LICENSE: 'Bản quyền phần mềm',
+        DATABASE: 'Cơ sở dữ liệu', STORAGE: 'Lưu trữ', CLOUD_RESOURCE: 'Tài nguyên đám mây', OTHER: 'Khác'
+    };
     const ASSET_TYPES = ['SERVER', 'WORKSTATION', 'LAPTOP', 'NETWORK_DEVICE', 'PRINTER', 'MONITOR', 'MOBILE_DEVICE', 'SOFTWARE_LICENSE', 'DATABASE', 'STORAGE', 'CLOUD_RESOURCE', 'OTHER'];
     const ASSET_STATUSES = ['ACTIVE', 'INACTIVE', 'MAINTENANCE', 'REPAIR', 'RETIRED', 'DISPOSED', 'LOST'];
     const HEALTH_STATUSES = ['HEALTHY', 'WARNING', 'CRITICAL', 'UNKNOWN'];
@@ -12,9 +17,9 @@ const AssetManagement = (() => {
     const LICENSE_TYPES = ['PERPETUAL', 'SUBSCRIPTION', 'OPEN_SOURCE', 'FREE', 'TRIAL', 'OTHER'];
 
     const VALIDATION = {
-        name: { required: true, maxLength: 200, label: 'Name' },
-        assetType: { required: true, label: 'Asset Type' },
-        assetNumber: { required: true, maxLength: 50, label: 'Asset Number' }
+        name: { required: true, maxLength: 200, label: 'Tên' },
+        assetType: { required: true, label: 'Loại thiết bị' },
+        assetNumber: { required: true, maxLength: 50, label: 'Mã thiết bị' }
     };
 
     // State
@@ -199,7 +204,7 @@ const AssetManagement = (() => {
         requiredFields.forEach(id => {
             const field = document.getElementById(id);
             if (field && !field.value.trim()) {
-                showFieldError(field, 'This field is required');
+                showFieldError(field, 'Trường này là bắt buộc');
                 if (!firstError) firstError = field;
                 isValid = false;
             }
@@ -209,7 +214,7 @@ const AssetManagement = (() => {
         const seatsUsed = parseInt(document.getElementById('asset-license-seats-used')?.value) || 0;
         if (seatsTotal > 0 && seatsUsed > seatsTotal) {
             const field = document.getElementById('asset-license-seats-used');
-            showFieldError(field, 'Used seats cannot exceed total');
+            showFieldError(field, 'Số bản quyền đã dùng không được vượt tổng số');
             if (!firstError) firstError = field;
             isValid = false;
         }
@@ -243,7 +248,7 @@ const AssetManagement = (() => {
     async function loadStatistics() {
         try {
             const response = await fetch(`${API_BASE}/stats`, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load statistics');
+            if (!response.ok) throw new Error('Không thể tải thống kê');
             stats = await response.json();
             renderStatistics(stats);
         } catch (error) {
@@ -263,19 +268,19 @@ const AssetManagement = (() => {
             if (queryParams.toString()) url += '?' + queryParams.toString();
 
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load assets');
+            if (!response.ok) throw new Error('Không thể tải danh sách thiết bị');
             const data = await response.json();
             assets = data.content || [];
             renderAssetsList(assets);
         } catch (error) {
             console.error('Error loading assets:', error);
-            Toast.show('Lỗi khi tải danh sách Assets', 'error');
+            Toast.show('Lỗi khi tải danh sách thiết bị', 'error');
         }
     }
 
     async function loadAssetById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load asset');
+        if (!response.ok) throw new Error('Không thể tải thiết bị');
         const data = await response.json();
         console.log('loadAssetById - raw response:', data);
         console.log('loadAssetById - purchaseCost:', data.purchaseCost);
@@ -291,7 +296,7 @@ const AssetManagement = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create asset');
+            throw new Error(error.message || 'Không thể tạo thiết bị');
         }
         return await response.json();
     }
@@ -308,9 +313,9 @@ const AssetManagement = (() => {
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to update asset');
+                throw new Error(error.message || 'Không thể cập nhật thiết bị');
             }
-            throw new Error('Failed to update asset');
+            throw new Error('Không thể cập nhật thiết bị');
         }
         return await response.json();
     }
@@ -325,9 +330,9 @@ const AssetManagement = (() => {
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to delete asset');
+                throw new Error(error.message || 'Không thể xóa thiết bị');
             }
-            throw new Error('Failed to delete asset');
+            throw new Error('Không thể xóa thiết bị');
         }
         // DELETE returns 204 No Content, no body to parse
         return { success: true };
@@ -339,7 +344,7 @@ const AssetManagement = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ healthStatus, healthNotes: notes })
         });
-        if (!response.ok) throw new Error('Failed to update health status');
+        if (!response.ok) throw new Error('Không thể cập nhật tình trạng');
         return await response.json();
     }
 
@@ -352,19 +357,19 @@ const AssetManagement = (() => {
         container.innerHTML = `
             <div class="stat-card stat-total">
                 <span class="stat-value">${stats.totalAssets}</span>
-                <span class="stat-label">Total Assets</span>
+                <span class="stat-label">Tổng số thiết bị</span>
             </div>
             <div class="stat-card stat-healthy">
                 <span class="stat-value">${stats.healthyAssets}</span>
-                <span class="stat-label">Healthy</span>
+                <span class="stat-label">Tốt</span>
             </div>
             <div class="stat-card stat-warning">
                 <span class="stat-value">${stats.warningAssets + stats.criticalAssets}</span>
-                <span class="stat-label">Needs Attention</span>
+                <span class="stat-label">Cần chú ý</span>
             </div>
             <div class="stat-card stat-warranty">
                 <span class="stat-value">${stats.expiringWarranties}</span>
-                <span class="stat-label">Warranty Expiring</span>
+                <span class="stat-label">Sắp hết bảo hành</span>
             </div>
         `;
     }
@@ -377,8 +382,8 @@ const AssetManagement = (() => {
             container.innerHTML = `
                 <div class="asset-empty-state">
                     <div class="asset-empty-icon">🖥️</div>
-                    <h4>No assets found</h4>
-                    <p>Start by adding your first IT asset</p>
+                    <h4>Không tìm thấy thiết bị nào</h4>
+                    <p>Thêm thiết bị IT đầu tiên để bắt đầu</p>
                 </div>
             `;
             return;
@@ -410,13 +415,13 @@ const AssetManagement = (() => {
                     
                     ${asset.warrantyExpiringSoon || asset.warrantyExpired ? `
                         <div class="warranty-alert ${asset.warrantyExpired ? 'expired' : 'expiring'}">
-                            ${asset.warrantyExpired ? '⚠️ Warranty Expired' : '📅 Warranty Expiring Soon'}
+                            ${asset.warrantyExpired ? '⚠️ Đã hết bảo hành' : '📅 Sắp hết bảo hành'}
                         </div>
                     ` : ''}
                     
                     <div class="asset-footer">
                         <span class="asset-status status-${asset.status?.toLowerCase()}">${asset.statusLabel || asset.status}</span>
-                        <button class="asset-view-btn" data-id="${asset.id}" onclick="window.AssetManagement.viewAsset(${asset.id})">Details</button>
+                        <button class="asset-view-btn" data-id="${asset.id}" onclick="window.AssetManagement.viewAsset(${asset.id})">Chi tiết</button>
                     </div>
                 </div>
             `;
@@ -425,10 +430,10 @@ const AssetManagement = (() => {
 
     function getHealthConfig(health) {
         const configs = {
-            'HEALTHY': { label: 'Healthy', color: '#10B981' },
-            'WARNING': { label: 'Warning', color: '#F59E0B' },
-            'CRITICAL': { label: 'Critical', color: '#F43F5E' },
-            'UNKNOWN': { label: 'Unknown', color: '#6B7280' }
+            'HEALTHY': { label: 'Tốt', color: '#10B981' },
+            'WARNING': { label: 'Cảnh báo', color: '#F59E0B' },
+            'CRITICAL': { label: 'Nghiêm trọng', color: '#F43F5E' },
+            'UNKNOWN': { label: 'Không rõ', color: '#6B7280' }
         };
         return configs[health] || configs['UNKNOWN'];
     }
@@ -522,7 +527,7 @@ const AssetManagement = (() => {
             document.body.classList.add('modal-open');
         }).catch(err => {
             console.error('Error loading asset:', err);
-            Toast.show('Error loading asset', 'error');
+            Toast.show('Lỗi khi tải thiết bị', 'error');
         });
     }
 
@@ -553,12 +558,12 @@ const AssetManagement = (() => {
         form.innerHTML = `
             <div class="delete-confirm">
                 <div class="delete-icon">⚠️</div>
-                <h3>Delete Asset?</h3>
-                <p>Are you sure you want to delete <strong>"${escapeHtml(currentAsset.name)}"</strong>?</p>
-                <p class="delete-warning">This action cannot be undone.</p>
+                <h3>Xóa thiết bị?</h3>
+                <p>Bạn có chắc muốn xóa <strong>"${escapeHtml(currentAsset.name)}"</strong>?</p>
+                <p class="delete-warning">Hành động này không thể hoàn tác.</p>
                 <div class="delete-actions">
-                    <button type="button" class="btn-ghost" id="delete-cancel-btn">Cancel</button>
-                    <button type="button" class="btn-danger" id="delete-confirm-btn">Delete</button>
+                    <button type="button" class="btn-ghost" id="delete-cancel-btn">Hủy</button>
+                    <button type="button" class="btn-danger" id="delete-confirm-btn">Xóa</button>
                 </div>
             </div>
         `;
@@ -571,12 +576,12 @@ const AssetManagement = (() => {
         document.getElementById('delete-confirm-btn').addEventListener('click', async () => {
             try {
                 await deleteAsset(currentAsset.id);
-                Toast.show('Asset deleted successfully', 'success');
+                Toast.show('Đã xóa thiết bị', 'success');
                 closeModal();
                 loadAssets();
                 loadStatistics();
             } catch (error) {
-                Toast.show(error.message || 'Failed to delete asset', 'error');
+                Toast.show(error.message || 'Không thể xóa thiết bị', 'error');
             }
         });
     }
@@ -602,7 +607,7 @@ const AssetManagement = (() => {
                 </div>
                 <div class="detail-info">
                     <h3>${escapeHtml(asset.name)}</h3>
-                    <p>${escapeHtml(asset.description || 'No description')}</p>
+                    <p>${escapeHtml(asset.description || 'Chưa có mô tả')}</p>
                     <div class="detail-badges">
                         <span class="badge health" style="--badge-color: ${healthConfig.color}">${healthConfig.label}</span>
                         <span class="badge status">${asset.statusLabel || asset.status}</span>
@@ -621,117 +626,117 @@ const AssetManagement = (() => {
 
             <div class="detail-content">
                 <div class="detail-section">
-                    <h4>Basic Information</h4>
+                    <h4>Thông tin cơ bản</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Asset Number</label><span class="mono">${asset.assetNumber || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Type</label><span>${asset.assetTypeLabel || asset.assetType || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Category</label><span>${asset.category || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Manufacturer</label><span>${asset.manufacturer || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Mã thiết bị</label><span class="mono">${asset.assetNumber || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Loại</label><span>${asset.assetTypeLabel || asset.assetType || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Danh mục</label><span>${asset.category || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Nhà sản xuất</label><span>${asset.manufacturer || 'N/A'}</span></div>
                         <div class="detail-item"><label>Model</label><span>${asset.model || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Serial Number</label><span class="mono">${asset.serialNumber || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Part Number</label><span>${asset.partNumber || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Số serial</label><span class="mono">${asset.serialNumber || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Mã linh kiện</label><span>${asset.partNumber || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Location</h4>
+                    <h4>Vị trí</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Location</label><span>${asset.location || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Building</label><span>${asset.building || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Floor</label><span>${asset.floor || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Room</label><span>${asset.room || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Rack Position</label><span>${asset.rackPosition || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Vị trí</label><span>${asset.location || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Tòa nhà</label><span>${asset.building || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Tầng</label><span>${asset.floor || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Phòng</label><span>${asset.room || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Vị trí rack</label><span>${asset.rackPosition || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Assignment</h4>
+                    <h4>Phân công</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Assigned To</label><span>${asset.assignedTo || 'Unassigned'}</span></div>
-                        <div class="detail-item"><label>Department</label><span>${asset.assignedDepartment || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Assigned Location</label><span>${asset.assignedLocation || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Người sử dụng</label><span>${asset.assignedTo || 'Chưa phân công'}</span></div>
+                        <div class="detail-item"><label>Phòng ban</label><span>${asset.assignedDepartment || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Vị trí sử dụng</label><span>${asset.assignedLocation || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Network</h4>
+                    <h4>Mạng</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>IP Address</label><span class="mono">${asset.ipAddress || 'N/A'}</span></div>
-                        <div class="detail-item"><label>MAC Address</label><span class="mono">${asset.macAddress || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Hostname</label><span class="mono">${asset.hostname || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Network Segment</label><span>${asset.networkSegment || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Địa chỉ IP</label><span class="mono">${asset.ipAddress || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Địa chỉ MAC</label><span class="mono">${asset.macAddress || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Tên máy</label><span class="mono">${asset.hostname || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Phân vùng mạng</label><span>${asset.networkSegment || 'N/A'}</span></div>
                         <div class="detail-item"><label>VLAN</label><span>${asset.vlan || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Financial</h4>
+                    <h4>Tài chính</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Purchase Date</label><span>${asset.purchaseDate || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Purchase Cost</label><span>${asset.purchaseCost ? formatCurrency(asset.purchaseCost) : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Current Value</label><span>${asset.currentValue ? formatCurrency(asset.currentValue) : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Depreciation</label><span>${asset.depreciationRate ? asset.depreciationRate + '%' : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Warranty Expiry</label><span class="${asset.warrantyExpired ? 'text-danger' : asset.warrantyExpiringSoon ? 'text-warning' : ''}">${asset.warrantyExpiryDate || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Lease Expiry</label><span>${asset.leaseExpiryDate || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Ngày mua</label><span>${asset.purchaseDate || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Giá mua</label><span>${asset.purchaseCost ? formatCurrency(asset.purchaseCost) : 'N/A'}</span></div>
+                        <div class="detail-item"><label>Giá trị hiện tại</label><span>${asset.currentValue ? formatCurrency(asset.currentValue) : 'N/A'}</span></div>
+                        <div class="detail-item"><label>Khấu hao</label><span>${asset.depreciationRate ? asset.depreciationRate + '%' : 'N/A'}</span></div>
+                        <div class="detail-item"><label>Hết hạn bảo hành</label><span class="${asset.warrantyExpired ? 'text-danger' : asset.warrantyExpiringSoon ? 'text-warning' : ''}">${asset.warrantyExpiryDate || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Hết hạn thuê</label><span>${asset.leaseExpiryDate || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Software & License</h4>
+                    <h4>Phần mềm và bản quyền</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Software</label><span>${asset.softwareName || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Version</label><span>${asset.softwareVersion || 'N/A'}</span></div>
-                        <div class="detail-item"><label>License Type</label><span>${asset.licenseType || 'N/A'}</span></div>
-                        <div class="detail-item"><label>License Key</label><span class="mono">${asset.licenseKey || 'N/A'}</span></div>
-                        <div class="detail-item"><label>License Seats</label><span>${asset.licenseSeatsUsed || 0} / ${asset.licenseSeatsTotal || 0}</span></div>
+                        <div class="detail-item"><label>Phần mềm</label><span>${asset.softwareName || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Phiên bản</label><span>${asset.softwareVersion || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Loại bản quyền</label><span>${asset.licenseType || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Khóa bản quyền</label><span class="mono">${asset.licenseKey || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Số bản quyền</label><span>${asset.licenseSeatsUsed || 0} / ${asset.licenseSeatsTotal || 0}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Cloud Resources</h4>
+                    <h4>Tài nguyên đám mây</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Provider</label><span>${asset.cloudProvider || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Region</label><span>${asset.cloudRegion || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Resource ID</label><span class="mono">${asset.cloudResourceId || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Resource Type</label><span>${asset.resourceType || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Nhà cung cấp</label><span>${asset.cloudProvider || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Khu vực</label><span>${asset.cloudRegion || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Mã tài nguyên</label><span class="mono">${asset.cloudResourceId || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Loại tài nguyên</label><span>${asset.resourceType || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Maintenance</h4>
+                    <h4>Bảo trì</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Last Maintenance</label><span>${asset.lastMaintenanceDate || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Next Maintenance</label><span>${asset.nextMaintenanceDate || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Bảo trì gần nhất</label><span>${asset.lastMaintenanceDate || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Bảo trì tiếp theo</label><span>${asset.nextMaintenanceDate || 'N/A'}</span></div>
                     </div>
                     ${asset.healthNotes ? `
                     <div class="health-notes-box">
-                        <label>Health Notes</label>
+                        <label>Ghi chú tình trạng</label>
                         <p>${escapeHtml(asset.healthNotes)}</p>
                     </div>
                     ` : ''}
                 </div>
 
                 <div class="detail-section">
-                    <h4>Vendor</h4>
+                    <h4>Nhà cung cấp</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Vendor Name</label><span>${asset.vendorName || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Contact</label><span>${asset.vendorContact || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Contract</label><span>${asset.vendorContractNumber || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Tên nhà cung cấp</label><span>${asset.vendorName || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Liên hệ</label><span>${asset.vendorContact || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Hợp đồng</label><span>${asset.vendorContractNumber || 'N/A'}</span></div>
                     </div>
                 </div>
 
                 <div class="detail-section">
-                    <h4>Other</h4>
+                    <h4>Khác</h4>
                     <div class="detail-grid">
-                        <div class="detail-item full"><label>Tags</label><span>${asset.tags || 'N/A'}</span></div>
-                        <div class="detail-item full"><label>Notes</label><span>${asset.notes || 'N/A'}</span></div>
-                        ${asset.photoUrl ? `<div class="detail-item full"><label>Photo</label><a href="${asset.photoUrl}" target="_blank">View Photo</a></div>` : ''}
+                        <div class="detail-item full"><label>Thẻ</label><span>${asset.tags || 'N/A'}</span></div>
+                        <div class="detail-item full"><label>Ghi chú</label><span>${asset.notes || 'N/A'}</span></div>
+                        ${asset.photoUrl ? `<div class="detail-item full"><label>Ảnh</label><a href="${asset.photoUrl}" target="_blank">Xem ảnh</a></div>` : ''}
                     </div>
                 </div>
 
                 ${asset.specifications && Object.keys(asset.specifications).length > 0 ? `
                 <div class="detail-section">
-                    <h4>Custom Specifications</h4>
+                    <h4>Thông số tùy chỉnh</h4>
                     <div class="specs-json">
                         <pre>${JSON.stringify(asset.specifications, null, 2)}</pre>
                     </div>
@@ -740,10 +745,10 @@ const AssetManagement = (() => {
 
                 <div class="detail-section metadata">
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Created</label><span>${asset.createdAt ? new Date(asset.createdAt).toLocaleString() : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Created By</label><span>${asset.createdBy || 'N/A'}</span></div>
-                        <div class="detail-item"><label>Updated</label><span>${asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Updated By</label><span>${asset.updatedBy || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Ngày tạo</label><span>${asset.createdAt ? new Date(asset.createdAt).toLocaleString() : 'N/A'}</span></div>
+                        <div class="detail-item"><label>Người tạo</label><span>${asset.createdBy || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Cập nhật</label><span>${asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : 'N/A'}</span></div>
+                        <div class="detail-item"><label>Người cập nhật</label><span>${asset.updatedBy || 'N/A'}</span></div>
                     </div>
                 </div>
             </div>
@@ -758,100 +763,100 @@ const AssetManagement = (() => {
 
         container.innerHTML = `
             <div class="form-tabs">
-                <button class="form-tab active" data-tab="basic"><span class="tab-number">1</span><span class="tab-label">Basic</span></button>
-                <button class="form-tab" data-tab="location"><span class="tab-number">2</span><span class="tab-label">Location</span></button>
-                <button class="form-tab" data-tab="network"><span class="tab-number">3</span><span class="tab-label">Network</span></button>
-                <button class="form-tab" data-tab="financial"><span class="tab-number">4</span><span class="tab-label">Financial</span></button>
-                <button class="form-tab" data-tab="software"><span class="tab-number">5</span><span class="tab-label">Software</span></button>
-                <button class="form-tab" data-tab="vendor"><span class="tab-number">6</span><span class="tab-label">Vendor</span></button>
+                <button class="form-tab active" data-tab="basic"><span class="tab-number">1</span><span class="tab-label">Cơ bản</span></button>
+                <button class="form-tab" data-tab="location"><span class="tab-number">2</span><span class="tab-label">Vị trí</span></button>
+                <button class="form-tab" data-tab="network"><span class="tab-number">3</span><span class="tab-label">Mạng</span></button>
+                <button class="form-tab" data-tab="financial"><span class="tab-number">4</span><span class="tab-label">Tài chính</span></button>
+                <button class="form-tab" data-tab="software"><span class="tab-number">5</span><span class="tab-label">Phần mềm</span></button>
+                <button class="form-tab" data-tab="vendor"><span class="tab-number">6</span><span class="tab-label">Nhà cung cấp</span></button>
             </div>
 
             <div class="form-tab-content active" data-tab="basic">
                 <div class="form-group">
-                    <label class="form-field"><span>Asset Number</span><input type="text" id="asset-number" value="${escapeHtml(asset.assetNumber || '')}" maxlength="50" /></label>
-                    <label class="form-field"><span>Asset Type</span><select id="asset-type" required>${ASSET_TYPES.map(t => `<option value="${t}" ${asset.assetType === t ? 'selected' : ''}>${t.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field full"><span>Asset Name</span><input type="text" id="asset-name" value="${escapeHtml(asset.name || '')}" maxlength="200" required /></label>
-                    <label class="form-field"><span>Category</span><input type="text" id="asset-category" value="${escapeHtml(asset.category || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Status</span><select id="asset-status">${ASSET_STATUSES.map(s => `<option value="${s}" ${asset.status === s ? 'selected' : ''}>${s.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Health</span><select id="asset-health-status">${HEALTH_STATUSES.map(h => `<option value="${h}" ${asset.healthStatus === h ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Manufacturer</span><input type="text" id="asset-manufacturer" value="${escapeHtml(asset.manufacturer || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Mã thiết bị</span><input type="text" id="asset-number" value="${escapeHtml(asset.assetNumber || '')}" maxlength="50" /></label>
+                    <label class="form-field"><span>Loại thiết bị</span><select id="asset-type" required>${ASSET_TYPES.map(t => `<option value="${t}" ${asset.assetType === t ? 'selected' : ''}>${ASSET_TYPE_LABELS[t] || t}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Tên thiết bị</span><input type="text" id="asset-name" value="${escapeHtml(asset.name || '')}" maxlength="200" required /></label>
+                    <label class="form-field"><span>Danh mục</span><input type="text" id="asset-category" value="${escapeHtml(asset.category || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Trạng thái</span><select id="asset-status">${ASSET_STATUSES.map(s => `<option value="${s}" ${asset.status === s ? 'selected' : ''}>${s.replace(/_/g, ' ')}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Tình trạng</span><select id="asset-health-status">${HEALTH_STATUSES.map(h => `<option value="${h}" ${asset.healthStatus === h ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Nhà sản xuất</span><input type="text" id="asset-manufacturer" value="${escapeHtml(asset.manufacturer || '')}" maxlength="100" /></label>
                     <label class="form-field"><span>Model</span><input type="text" id="asset-model" value="${escapeHtml(asset.model || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Serial Number</span><input type="text" id="asset-serial" value="${escapeHtml(asset.serialNumber || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Part Number</span><input type="text" id="asset-part-number" value="${escapeHtml(asset.partNumber || '')}" maxlength="100" /></label>
-                    <label class="form-field full"><span>Description</span><textarea id="asset-description" rows="2">${escapeHtml(asset.description || '')}</textarea></label>
+                    <label class="form-field"><span>Số serial</span><input type="text" id="asset-serial" value="${escapeHtml(asset.serialNumber || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Mã linh kiện</span><input type="text" id="asset-part-number" value="${escapeHtml(asset.partNumber || '')}" maxlength="100" /></label>
+                    <label class="form-field full"><span>Mô tả</span><textarea id="asset-description" rows="2">${escapeHtml(asset.description || '')}</textarea></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="location">
                 <div class="form-group">
-                    <label class="form-field full"><span>Location</span><input type="text" id="asset-location" value="${escapeHtml(asset.location || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Building</span><input type="text" id="asset-building" value="${escapeHtml(asset.building || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Floor</span><input type="text" id="asset-floor" value="${escapeHtml(asset.floor || '')}" maxlength="50" /></label>
-                    <label class="form-field"><span>Room</span><input type="text" id="asset-room" value="${escapeHtml(asset.room || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Rack Position</span><input type="text" id="asset-rack-position" value="${escapeHtml(asset.rackPosition || '')}" maxlength="50" /></label>
-                    <label class="form-field full"><span>Assigned To</span><input type="text" id="asset-assigned-to" value="${escapeHtml(asset.assignedTo || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Department</span><input type="text" id="asset-assigned-department" value="${escapeHtml(asset.assignedDepartment || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Assigned Location</span><input type="text" id="asset-assigned-location" value="${escapeHtml(asset.assignedLocation || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Parent Asset</span><select id="asset-parent-asset"><option value="">-- No Parent --</option>${assets.filter(a => a.id !== asset.id).map(a => `<option value="${a.id}" ${asset.parentAssetId === a.id ? 'selected' : ''}>${a.assetNumber}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Vị trí</span><input type="text" id="asset-location" value="${escapeHtml(asset.location || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Tòa nhà</span><input type="text" id="asset-building" value="${escapeHtml(asset.building || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Tầng</span><input type="text" id="asset-floor" value="${escapeHtml(asset.floor || '')}" maxlength="50" /></label>
+                    <label class="form-field"><span>Phòng</span><input type="text" id="asset-room" value="${escapeHtml(asset.room || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Vị trí rack</span><input type="text" id="asset-rack-position" value="${escapeHtml(asset.rackPosition || '')}" maxlength="50" /></label>
+                    <label class="form-field full"><span>Người sử dụng</span><input type="text" id="asset-assigned-to" value="${escapeHtml(asset.assignedTo || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Phòng ban</span><input type="text" id="asset-assigned-department" value="${escapeHtml(asset.assignedDepartment || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Vị trí sử dụng</span><input type="text" id="asset-assigned-location" value="${escapeHtml(asset.assignedLocation || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Thiết bị cha</span><select id="asset-parent-asset"><option value="">-- Không có --</option>${assets.filter(a => a.id !== asset.id).map(a => `<option value="${a.id}" ${asset.parentAssetId === a.id ? 'selected' : ''}>${a.assetNumber}</option>`).join('')}</select></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="network">
                 <div class="form-group">
-                    <label class="form-field"><span>IP Address</span><input type="text" id="asset-ip-address" value="${escapeHtml(asset.ipAddress || '')}" placeholder="192.168.1.10" /></label>
-                    <label class="form-field"><span>MAC Address</span><input type="text" id="asset-mac-address" value="${escapeHtml(asset.macAddress || '')}" placeholder="AA:BB:CC:DD:EE:FF" /></label>
-                    <label class="form-field"><span>Hostname</span><input type="text" id="asset-hostname" value="${escapeHtml(asset.hostname || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Network Segment</span><input type="text" id="asset-network-segment" value="${escapeHtml(asset.networkSegment || '')}" maxlength="50" /></label>
+                    <label class="form-field"><span>Địa chỉ IP</span><input type="text" id="asset-ip-address" value="${escapeHtml(asset.ipAddress || '')}" placeholder="192.168.1.10" /></label>
+                    <label class="form-field"><span>Địa chỉ MAC</span><input type="text" id="asset-mac-address" value="${escapeHtml(asset.macAddress || '')}" placeholder="AA:BB:CC:DD:EE:FF" /></label>
+                    <label class="form-field"><span>Tên máy</span><input type="text" id="asset-hostname" value="${escapeHtml(asset.hostname || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Phân vùng mạng</span><input type="text" id="asset-network-segment" value="${escapeHtml(asset.networkSegment || '')}" maxlength="50" /></label>
                     <label class="form-field"><span>VLAN</span><input type="text" id="asset-vlan" value="${escapeHtml(asset.vlan || '')}" maxlength="20" /></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="financial">
                 <div class="form-group">
-                    <label class="form-field"><span>Purchase Date</span><input type="date" id="asset-purchase-date" value="${asset.purchaseDate || ''}" /></label>
-                    <label class="form-field"><span>Purchase Cost</span><input type="number" id="asset-purchase-cost" value="${asset.purchaseCost || ''}" min="0" max="9999999999.99" step="0.01" /></label>
-                    <label class="form-field"><span>Current Value</span><input type="number" id="asset-current-value" value="${asset.currentValue || ''}" min="0" max="9999999999.99" step="0.01" /></label>
-                    <label class="form-field"><span>Depreciation Rate (%)</span><input type="number" id="asset-depreciation-rate" value="${asset.depreciationRate || ''}" min="0" max="100" step="0.01" /></label>
-                    <label class="form-field"><span>Warranty Expiry</span><input type="date" id="asset-warranty-expiry" value="${asset.warrantyExpiryDate || ''}" /></label>
-                    <label class="form-field"><span>Lease Expiry</span><input type="date" id="asset-lease-expiry" value="${asset.leaseExpiryDate || ''}" /></label>
-                    <label class="form-field"><span>Last Maintenance</span><input type="date" id="asset-last-maintenance" value="${asset.lastMaintenanceDate || ''}" /></label>
-                    <label class="form-field"><span>Next Maintenance</span><input type="date" id="asset-next-maintenance" value="${asset.nextMaintenanceDate || ''}" /></label>
-                    <label class="form-field full"><span>Health Notes</span><textarea id="asset-health-notes" rows="2">${escapeHtml(asset.healthNotes || '')}</textarea></label>
+                    <label class="form-field"><span>Ngày mua</span><input type="date" id="asset-purchase-date" value="${asset.purchaseDate || ''}" /></label>
+                    <label class="form-field"><span>Giá mua</span><input type="number" id="asset-purchase-cost" value="${asset.purchaseCost || ''}" min="0" max="9999999999.99" step="0.01" /></label>
+                    <label class="form-field"><span>Giá trị hiện tại</span><input type="number" id="asset-current-value" value="${asset.currentValue || ''}" min="0" max="9999999999.99" step="0.01" /></label>
+                    <label class="form-field"><span>Tỷ lệ khấu hao (%)</span><input type="number" id="asset-depreciation-rate" value="${asset.depreciationRate || ''}" min="0" max="100" step="0.01" /></label>
+                    <label class="form-field"><span>Hết hạn bảo hành</span><input type="date" id="asset-warranty-expiry" value="${asset.warrantyExpiryDate || ''}" /></label>
+                    <label class="form-field"><span>Hết hạn thuê</span><input type="date" id="asset-lease-expiry" value="${asset.leaseExpiryDate || ''}" /></label>
+                    <label class="form-field"><span>Bảo trì gần nhất</span><input type="date" id="asset-last-maintenance" value="${asset.lastMaintenanceDate || ''}" /></label>
+                    <label class="form-field"><span>Bảo trì tiếp theo</span><input type="date" id="asset-next-maintenance" value="${asset.nextMaintenanceDate || ''}" /></label>
+                    <label class="form-field full"><span>Ghi chú tình trạng</span><textarea id="asset-health-notes" rows="2">${escapeHtml(asset.healthNotes || '')}</textarea></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="software">
                 <div class="form-group">
-                    <label class="form-field"><span>Software Name</span><input type="text" id="asset-software-name" value="${escapeHtml(asset.softwareName || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Version</span><input type="text" id="asset-software-version" value="${escapeHtml(asset.softwareVersion || '')}" maxlength="50" /></label>
-                    <label class="form-field"><span>License Type</span><select id="asset-license-type"><option value="">Select type</option>${LICENSE_TYPES.map(t => `<option value="${t}" ${asset.licenseType === t ? 'selected' : ''}>${t.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field full"><span>License Key</span><input type="text" id="asset-license-key" value="${escapeHtml(asset.licenseKey || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Total Seats</span><input type="number" id="asset-license-seats-total" value="${asset.licenseSeatsTotal || 0}" min="0" /></label>
-                    <label class="form-field"><span>Used Seats</span><input type="number" id="asset-license-seats-used" value="${asset.licenseSeatsUsed || 0}" min="0" /></label>
+                    <label class="form-field"><span>Tên phần mềm</span><input type="text" id="asset-software-name" value="${escapeHtml(asset.softwareName || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Phiên bản</span><input type="text" id="asset-software-version" value="${escapeHtml(asset.softwareVersion || '')}" maxlength="50" /></label>
+                    <label class="form-field"><span>Loại bản quyền</span><select id="asset-license-type"><option value="">Chọn loại</option>${LICENSE_TYPES.map(t => `<option value="${t}" ${asset.licenseType === t ? 'selected' : ''}>${ASSET_TYPE_LABELS[t] || t}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Khóa bản quyền</span><input type="text" id="asset-license-key" value="${escapeHtml(asset.licenseKey || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Tổng số bản quyền</span><input type="number" id="asset-license-seats-total" value="${asset.licenseSeatsTotal || 0}" min="0" /></label>
+                    <label class="form-field"><span>Đã sử dụng</span><input type="number" id="asset-license-seats-used" value="${asset.licenseSeatsUsed || 0}" min="0" /></label>
                     <div class="field-divider"></div>
-                    <label class="form-field"><span>Cloud Provider</span><select id="asset-cloud-provider"><option value="">Select provider</option>${CLOUD_PROVIDERS.map(p => `<option value="${p}" ${asset.cloudProvider === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Region</span><input type="text" id="asset-cloud-region" value="${escapeHtml(asset.cloudRegion || '')}" maxlength="50" /></label>
-                    <label class="form-field full"><span>Resource ID</span><input type="text" id="asset-cloud-resource-id" value="${escapeHtml(asset.cloudResourceId || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Resource Type</span><input type="text" id="asset-resource-type" value="${escapeHtml(asset.resourceType || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Nhà cung cấp đám mây</span><select id="asset-cloud-provider"><option value="">Chọn nhà cung cấp</option>${CLOUD_PROVIDERS.map(p => `<option value="${p}" ${asset.cloudProvider === p ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Khu vực</span><input type="text" id="asset-cloud-region" value="${escapeHtml(asset.cloudRegion || '')}" maxlength="50" /></label>
+                    <label class="form-field full"><span>Mã tài nguyên</span><input type="text" id="asset-cloud-resource-id" value="${escapeHtml(asset.cloudResourceId || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Loại tài nguyên</span><input type="text" id="asset-resource-type" value="${escapeHtml(asset.resourceType || '')}" maxlength="100" /></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="vendor">
                 <div class="form-group">
-                    <label class="form-field full"><span>Vendor Name</span><input type="text" id="asset-vendor-name" value="${escapeHtml(asset.vendorName || '')}" maxlength="200" /></label>
-                    <label class="form-field"><span>Contact</span><input type="text" id="asset-vendor-contact" value="${escapeHtml(asset.vendorContact || '')}" maxlength="100" /></label>
-                    <label class="form-field"><span>Contract Number</span><input type="text" id="asset-vendor-contract" value="${escapeHtml(asset.vendorContractNumber || '')}" maxlength="100" /></label>
+                    <label class="form-field full"><span>Tên nhà cung cấp</span><input type="text" id="asset-vendor-name" value="${escapeHtml(asset.vendorName || '')}" maxlength="200" /></label>
+                    <label class="form-field"><span>Liên hệ</span><input type="text" id="asset-vendor-contact" value="${escapeHtml(asset.vendorContact || '')}" maxlength="100" /></label>
+                    <label class="form-field"><span>Số hợp đồng</span><input type="text" id="asset-vendor-contract" value="${escapeHtml(asset.vendorContractNumber || '')}" maxlength="100" /></label>
                     <div class="field-divider"></div>
-                    <label class="form-field full"><span>Tags</span><input type="text" id="asset-tags" value="${escapeHtml(asset.tags || '')}" /></label>
-                    <label class="form-field full"><span>Notes</span><textarea id="asset-notes" rows="3">${escapeHtml(asset.notes || '')}</textarea></label>
-                    <label class="form-field full"><span>Photo URL</span><input type="url" id="asset-photo-url" value="${escapeHtml(asset.photoUrl || '')}" maxlength="500" /></label>
+                    <label class="form-field full"><span>Thẻ</span><input type="text" id="asset-tags" value="${escapeHtml(asset.tags || '')}" /></label>
+                    <label class="form-field full"><span>Ghi chú</span><textarea id="asset-notes" rows="3">${escapeHtml(asset.notes || '')}</textarea></label>
+                    <label class="form-field full"><span>URL ảnh</span><input type="url" id="asset-photo-url" value="${escapeHtml(asset.photoUrl || '')}" maxlength="500" /></label>
                 </div>
             </div>
 
             <div class="form-actions">
-                <button type="button" class="btn-ghost asset-cancel-edit-btn">Cancel</button>
+                <button type="button" class="btn-ghost asset-cancel-edit-btn">Hủy</button>
                 <div class="spacer"></div>
-                <button type="submit" class="btn-primary">Save Changes</button>
+                <button type="submit" class="btn-primary">Lưu thay đổi</button>
             </div>
         `;
         
@@ -871,100 +876,100 @@ const AssetManagement = (() => {
 
         form.innerHTML = `
             <div class="form-tabs">
-                <button class="form-tab active" data-tab="basic"><span class="tab-number">1</span><span class="tab-label">Basic</span></button>
-                <button class="form-tab" data-tab="location"><span class="tab-number">2</span><span class="tab-label">Location</span></button>
-                <button class="form-tab" data-tab="network"><span class="tab-number">3</span><span class="tab-label">Network</span></button>
-                <button class="form-tab" data-tab="financial"><span class="tab-number">4</span><span class="tab-label">Financial</span></button>
-                <button class="form-tab" data-tab="software"><span class="tab-number">5</span><span class="tab-label">Software</span></button>
-                <button class="form-tab" data-tab="vendor"><span class="tab-number">6</span><span class="tab-label">Vendor</span></button>
+                <button class="form-tab active" data-tab="basic"><span class="tab-number">1</span><span class="tab-label">Cơ bản</span></button>
+                <button class="form-tab" data-tab="location"><span class="tab-number">2</span><span class="tab-label">Vị trí</span></button>
+                <button class="form-tab" data-tab="network"><span class="tab-number">3</span><span class="tab-label">Mạng</span></button>
+                <button class="form-tab" data-tab="financial"><span class="tab-number">4</span><span class="tab-label">Tài chính</span></button>
+                <button class="form-tab" data-tab="software"><span class="tab-number">5</span><span class="tab-label">Phần mềm</span></button>
+                <button class="form-tab" data-tab="vendor"><span class="tab-number">6</span><span class="tab-label">Nhà cung cấp</span></button>
             </div>
 
             <div class="form-tab-content active" data-tab="basic">
                 <div class="form-group">
-                    <label class="form-field"><span>Asset Number</span><input type="text" id="asset-number" maxlength="50" readonly /></label>
-                    <label class="form-field"><span>Asset Type</span><select id="asset-type" required><option value="">Select type</option>${ASSET_TYPES.map(t => `<option value="${t}">${t.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field full"><span>Asset Name</span><input type="text" id="asset-name" maxlength="200" required placeholder="e.g., Dell PowerEdge R740 Server" /></label>
-                    <label class="form-field"><span>Category</span><input type="text" id="asset-category" maxlength="100" placeholder="e.g., Server, Desktop" /></label>
-                    <label class="form-field"><span>Status</span><select id="asset-status"><option value="ACTIVE" selected>Active</option>${ASSET_STATUSES.filter(s => s !== 'ACTIVE').map(s => `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Health</span><select id="asset-health-status"><option value="HEALTHY" selected>Healthy</option>${HEALTH_STATUSES.filter(h => h !== 'HEALTHY').map(h => `<option value="${h}">${h}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Manufacturer</span><input type="text" id="asset-manufacturer" maxlength="100" placeholder="e.g., Dell, HP, Cisco" /></label>
+                    <label class="form-field"><span>Mã thiết bị</span><input type="text" id="asset-number" maxlength="50" readonly /></label>
+                    <label class="form-field"><span>Loại thiết bị</span><select id="asset-type" required><option value="">Chọn loại</option>${ASSET_TYPES.map(t => `<option value="${t}">${ASSET_TYPE_LABELS[t] || t}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Tên thiết bị</span><input type="text" id="asset-name" maxlength="200" required placeholder="e.g., Dell PowerEdge R740 Server" /></label>
+                    <label class="form-field"><span>Danh mục</span><input type="text" id="asset-category" maxlength="100" placeholder="e.g., Server, Desktop" /></label>
+                    <label class="form-field"><span>Trạng thái</span><select id="asset-status"><option value="ACTIVE" selected>Đang sử dụng</option>${ASSET_STATUSES.filter(s => s !== 'ACTIVE').map(s => `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Tình trạng</span><select id="asset-health-status"><option value="HEALTHY" selected>Tốt</option>${HEALTH_STATUSES.filter(h => h !== 'HEALTHY').map(h => `<option value="${h}">${h}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Nhà sản xuất</span><input type="text" id="asset-manufacturer" maxlength="100" placeholder="e.g., Dell, HP, Cisco" /></label>
                     <label class="form-field"><span>Model</span><input type="text" id="asset-model" maxlength="100" placeholder="e.g., PowerEdge R740" /></label>
-                    <label class="form-field"><span>Serial Number</span><input type="text" id="asset-serial" maxlength="100" placeholder="Manufacturer serial" /></label>
-                    <label class="form-field"><span>Part Number</span><input type="text" id="asset-part-number" maxlength="100" placeholder="Product/part number" /></label>
-                    <label class="form-field full"><span>Description</span><textarea id="asset-description" rows="2" placeholder="Additional details..."></textarea></label>
+                    <label class="form-field"><span>Số serial</span><input type="text" id="asset-serial" maxlength="100" placeholder="Số serial của nhà sản xuất" /></label>
+                    <label class="form-field"><span>Mã linh kiện</span><input type="text" id="asset-part-number" maxlength="100" placeholder="Mã sản phẩm / linh kiện" /></label>
+                    <label class="form-field full"><span>Mô tả</span><textarea id="asset-description" rows="2" placeholder="Thông tin thêm..."></textarea></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="location">
                 <div class="form-group">
-                    <label class="form-field full"><span>Location</span><input type="text" id="asset-location" maxlength="200" placeholder="e.g., Data Center A, Floor 3" /></label>
-                    <label class="form-field"><span>Building</span><input type="text" id="asset-building" maxlength="100" /></label>
-                    <label class="form-field"><span>Floor</span><input type="text" id="asset-floor" maxlength="50" /></label>
-                    <label class="form-field"><span>Room</span><input type="text" id="asset-room" maxlength="100" /></label>
-                    <label class="form-field"><span>Rack Position</span><input type="text" id="asset-rack-position" maxlength="50" /></label>
-                    <label class="form-field full"><span>Assigned To</span><input type="text" id="asset-assigned-to" maxlength="100" /></label>
-                    <label class="form-field"><span>Department</span><input type="text" id="asset-assigned-department" maxlength="100" /></label>
-                    <label class="form-field"><span>Assigned Location</span><input type="text" id="asset-assigned-location" maxlength="200" /></label>
-                    <label class="form-field"><span>Parent Asset</span><select id="asset-parent-asset"><option value="">-- No Parent --</option>${assets.slice(0, 50).map(a => `<option value="${a.id}">${a.assetNumber}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Vị trí</span><input type="text" id="asset-location" maxlength="200" placeholder="e.g., Data Center A, Floor 3" /></label>
+                    <label class="form-field"><span>Tòa nhà</span><input type="text" id="asset-building" maxlength="100" /></label>
+                    <label class="form-field"><span>Tầng</span><input type="text" id="asset-floor" maxlength="50" /></label>
+                    <label class="form-field"><span>Phòng</span><input type="text" id="asset-room" maxlength="100" /></label>
+                    <label class="form-field"><span>Vị trí rack</span><input type="text" id="asset-rack-position" maxlength="50" /></label>
+                    <label class="form-field full"><span>Người sử dụng</span><input type="text" id="asset-assigned-to" maxlength="100" /></label>
+                    <label class="form-field"><span>Phòng ban</span><input type="text" id="asset-assigned-department" maxlength="100" /></label>
+                    <label class="form-field"><span>Vị trí sử dụng</span><input type="text" id="asset-assigned-location" maxlength="200" /></label>
+                    <label class="form-field"><span>Thiết bị cha</span><select id="asset-parent-asset"><option value="">-- Không có --</option>${assets.slice(0, 50).map(a => `<option value="${a.id}">${a.assetNumber}</option>`).join('')}</select></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="network">
                 <div class="form-group">
-                    <label class="form-field"><span>IP Address</span><input type="text" id="asset-ip-address" placeholder="192.168.1.10" /></label>
-                    <label class="form-field"><span>MAC Address</span><input type="text" id="asset-mac-address" placeholder="AA:BB:CC:DD:EE:FF" /></label>
-                    <label class="form-field"><span>Hostname</span><input type="text" id="asset-hostname" maxlength="100" /></label>
-                    <label class="form-field"><span>Network Segment</span><input type="text" id="asset-network-segment" maxlength="50" /></label>
+                    <label class="form-field"><span>Địa chỉ IP</span><input type="text" id="asset-ip-address" placeholder="192.168.1.10" /></label>
+                    <label class="form-field"><span>Địa chỉ MAC</span><input type="text" id="asset-mac-address" placeholder="AA:BB:CC:DD:EE:FF" /></label>
+                    <label class="form-field"><span>Tên máy</span><input type="text" id="asset-hostname" maxlength="100" /></label>
+                    <label class="form-field"><span>Phân vùng mạng</span><input type="text" id="asset-network-segment" maxlength="50" /></label>
                     <label class="form-field"><span>VLAN</span><input type="text" id="asset-vlan" maxlength="20" /></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="financial">
                 <div class="form-group">
-                    <label class="form-field"><span>Purchase Date</span><input type="date" id="asset-purchase-date" /></label>
-                    <label class="form-field"><span>Purchase Cost</span><input type="number" id="asset-purchase-cost" min="0" step="0.01" placeholder="0.00" /></label>
-                    <label class="form-field"><span>Current Value</span><input type="number" id="asset-current-value" min="0" step="0.01" placeholder="0.00" /></label>
-                    <label class="form-field"><span>Depreciation Rate (%)</span><input type="number" id="asset-depreciation-rate" min="0" max="100" step="0.01" /></label>
-                    <label class="form-field"><span>Warranty Expiry</span><input type="date" id="asset-warranty-expiry" /></label>
-                    <label class="form-field"><span>Lease Expiry</span><input type="date" id="asset-lease-expiry" /></label>
-                    <label class="form-field"><span>Last Maintenance</span><input type="date" id="asset-last-maintenance" /></label>
-                    <label class="form-field"><span>Next Maintenance</span><input type="date" id="asset-next-maintenance" /></label>
-                    <label class="form-field full"><span>Health Notes</span><textarea id="asset-health-notes" rows="2"></textarea></label>
+                    <label class="form-field"><span>Ngày mua</span><input type="date" id="asset-purchase-date" /></label>
+                    <label class="form-field"><span>Giá mua</span><input type="number" id="asset-purchase-cost" min="0" step="0.01" placeholder="0.00" /></label>
+                    <label class="form-field"><span>Giá trị hiện tại</span><input type="number" id="asset-current-value" min="0" step="0.01" placeholder="0.00" /></label>
+                    <label class="form-field"><span>Tỷ lệ khấu hao (%)</span><input type="number" id="asset-depreciation-rate" min="0" max="100" step="0.01" /></label>
+                    <label class="form-field"><span>Hết hạn bảo hành</span><input type="date" id="asset-warranty-expiry" /></label>
+                    <label class="form-field"><span>Hết hạn thuê</span><input type="date" id="asset-lease-expiry" /></label>
+                    <label class="form-field"><span>Bảo trì gần nhất</span><input type="date" id="asset-last-maintenance" /></label>
+                    <label class="form-field"><span>Bảo trì tiếp theo</span><input type="date" id="asset-next-maintenance" /></label>
+                    <label class="form-field full"><span>Ghi chú tình trạng</span><textarea id="asset-health-notes" rows="2"></textarea></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="software">
                 <div class="form-group">
-                    <label class="form-field"><span>Software Name</span><input type="text" id="asset-software-name" maxlength="200" /></label>
-                    <label class="form-field"><span>Version</span><input type="text" id="asset-software-version" maxlength="50" /></label>
-                    <label class="form-field"><span>License Type</span><select id="asset-license-type"><option value="">Select type</option>${LICENSE_TYPES.map(t => `<option value="${t}">${t.replace(/_/g, ' ')}</option>`).join('')}</select></label>
-                    <label class="form-field full"><span>License Key</span><input type="text" id="asset-license-key" maxlength="200" /></label>
-                    <label class="form-field"><span>Total Seats</span><input type="number" id="asset-license-seats-total" min="0" value="0" /></label>
-                    <label class="form-field"><span>Used Seats</span><input type="number" id="asset-license-seats-used" min="0" value="0" /></label>
+                    <label class="form-field"><span>Tên phần mềm</span><input type="text" id="asset-software-name" maxlength="200" /></label>
+                    <label class="form-field"><span>Phiên bản</span><input type="text" id="asset-software-version" maxlength="50" /></label>
+                    <label class="form-field"><span>Loại bản quyền</span><select id="asset-license-type"><option value="">Chọn loại</option>${LICENSE_TYPES.map(t => `<option value="${t}">${ASSET_TYPE_LABELS[t] || t}</option>`).join('')}</select></label>
+                    <label class="form-field full"><span>Khóa bản quyền</span><input type="text" id="asset-license-key" maxlength="200" /></label>
+                    <label class="form-field"><span>Tổng số bản quyền</span><input type="number" id="asset-license-seats-total" min="0" value="0" /></label>
+                    <label class="form-field"><span>Đã sử dụng</span><input type="number" id="asset-license-seats-used" min="0" value="0" /></label>
                     <div class="field-divider"></div>
-                    <label class="form-field"><span>Cloud Provider</span><select id="asset-cloud-provider"><option value="">Select provider</option>${CLOUD_PROVIDERS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Region</span><input type="text" id="asset-cloud-region" maxlength="50" /></label>
-                    <label class="form-field full"><span>Resource ID</span><input type="text" id="asset-cloud-resource-id" maxlength="200" /></label>
-                    <label class="form-field"><span>Resource Type</span><input type="text" id="asset-resource-type" maxlength="100" /></label>
+                    <label class="form-field"><span>Nhà cung cấp đám mây</span><select id="asset-cloud-provider"><option value="">Chọn nhà cung cấp</option>${CLOUD_PROVIDERS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></label>
+                    <label class="form-field"><span>Khu vực</span><input type="text" id="asset-cloud-region" maxlength="50" /></label>
+                    <label class="form-field full"><span>Mã tài nguyên</span><input type="text" id="asset-cloud-resource-id" maxlength="200" /></label>
+                    <label class="form-field"><span>Loại tài nguyên</span><input type="text" id="asset-resource-type" maxlength="100" /></label>
                 </div>
             </div>
 
             <div class="form-tab-content" data-tab="vendor">
                 <div class="form-group">
-                    <label class="form-field full"><span>Vendor Name</span><input type="text" id="asset-vendor-name" maxlength="200" /></label>
-                    <label class="form-field"><span>Contact</span><input type="text" id="asset-vendor-contact" maxlength="100" /></label>
-                    <label class="form-field"><span>Contract Number</span><input type="text" id="asset-vendor-contract" maxlength="100" /></label>
+                    <label class="form-field full"><span>Tên nhà cung cấp</span><input type="text" id="asset-vendor-name" maxlength="200" /></label>
+                    <label class="form-field"><span>Liên hệ</span><input type="text" id="asset-vendor-contact" maxlength="100" /></label>
+                    <label class="form-field"><span>Số hợp đồng</span><input type="text" id="asset-vendor-contract" maxlength="100" /></label>
                     <div class="field-divider"></div>
-                    <label class="form-field full"><span>Tags</span><input type="text" id="asset-tags" placeholder="server, production (comma separated)" /></label>
-                    <label class="form-field full"><span>Notes</span><textarea id="asset-notes" rows="3"></textarea></label>
-                    <label class="form-field full"><span>Photo URL</span><input type="url" id="asset-photo-url" maxlength="500" /></label>
+                    <label class="form-field full"><span>Thẻ</span><input type="text" id="asset-tags" placeholder="server, production (comma separated)" /></label>
+                    <label class="form-field full"><span>Ghi chú</span><textarea id="asset-notes" rows="3"></textarea></label>
+                    <label class="form-field full"><span>URL ảnh</span><input type="url" id="asset-photo-url" maxlength="500" /></label>
                 </div>
             </div>
 
             <div class="form-actions">
-                <button type="button" id="cancel-asset-btn" class="btn-ghost">Cancel</button>
+                <button type="button" id="cancel-asset-btn" class="btn-ghost">Hủy</button>
                 <div class="spacer"></div>
-                <button type="submit" class="btn-primary" id="asset-submit-btn">Add Asset</button>
+                <button type="submit" class="btn-primary" id="asset-submit-btn">Thêm thiết bị</button>
             </div>
         `;
         
@@ -976,7 +981,7 @@ const AssetManagement = (() => {
 
     async function submitAssetForm() {
         if (!validateAllFields()) {
-            Toast.show('Please fill in required fields', 'error');
+            Toast.show('Vui lòng điền các trường bắt buộc', 'error');
             return;
         }
 
@@ -984,10 +989,10 @@ const AssetManagement = (() => {
         isSubmitting = true;
 
         const submitBtn = document.getElementById('asset-submit-btn') || document.querySelector('.btn-primary[type="submit"]');
-        const originalText = submitBtn?.textContent || 'Add Asset';
+        const originalText = submitBtn?.textContent || 'Thêm thiết bị';
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Adding...';
+            submitBtn.textContent = 'Đang thêm...';
         }
 
         const data = buildAssetData();
@@ -997,7 +1002,7 @@ const AssetManagement = (() => {
         try {
             if (isUpdate) {
                 await updateAsset(assetId, data);
-                Toast.show('Asset updated successfully', 'success');
+                Toast.show('Đã cập nhật thiết bị', 'success');
                 // Reset state and reload asset detail after a delay to ensure DB commit
                 currentAsset = null;
                 closeModal();
@@ -1014,13 +1019,13 @@ const AssetManagement = (() => {
                 }, 300);
             } else {
                 await submitAsset(data);
-                Toast.show('Asset created successfully', 'success');
+                Toast.show('Đã thêm thiết bị', 'success');
             }
             closeModal();
             loadAssets();
             loadStatistics();
         } catch (error) {
-            Toast.show(error.message || 'Operation failed', 'error');
+            Toast.show(error.message || 'Thao tác thất bại', 'error');
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;

@@ -288,33 +288,6 @@
 }
 
 /* Problem Tabs */
-.problem-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
-}
-
-.problem-tab-btn {
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  transition: all 0.2s ease;
-}
-
-.problem-tab-btn:hover {
-  color: var(--text);
-}
-
-.problem-tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
 /* Problem Detail Modal */
 .problem-modal-content {
   max-width: 700px;

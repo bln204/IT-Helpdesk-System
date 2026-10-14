@@ -23,7 +23,7 @@
   }
 }
 
-.stat-card {
+.asset-stats .stat-card {
   padding: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -33,7 +33,7 @@
   overflow: hidden;
 }
 
-.stat-card::before {
+.asset-stats .stat-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -265,34 +265,6 @@
 }
 
 /* ==================== Asset Tabs ==================== */
-
-.asset-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
-}
-
-.asset-tab-btn {
-  padding: 10px 20px;
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
-}
-
-.asset-tab-btn:hover {
-  color: var(--text);
-}
-
-.asset-tab-btn.active {
-  color: #0D9488;
-  border-bottom-color: #0D9488;
-}
 
 /* ==================== Asset Detail Modal ==================== */
 

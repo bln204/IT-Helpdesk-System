@@ -96,7 +96,7 @@ const AnalyticsModule = (() => {
                 credentials: 'same-origin'
             });
             if (!response.ok) {
-                throw new Error('Failed to load dashboard');
+                throw new Error('Không thể tải bảng điều khiển');
             }
             dashboardMetrics = await response.json();
             renderDashboard(dashboardMetrics);
@@ -107,7 +107,7 @@ const AnalyticsModule = (() => {
             loadChangeStatus();
         } catch (error) {
             console.error('Error loading dashboard:', error);
-            Toast.show('Lỗi khi tải dashboard', 'error');
+            Toast.show('Lỗi khi tải bảng điều khiển', 'error');
         }
     }
 
@@ -183,51 +183,47 @@ const AnalyticsModule = (() => {
         if (!container) return;
 
         container.innerHTML = `
-            <div class="kpi-card kpi-tickets">
-                <div class="kpi-icon">🎫</div>
+            <div class="kpi-card kpi-tickets">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.tickets.total}</span>
-                    <span class="kpi-label">Total Tickets</span>
+                    <span class="kpi-label">Tổng số phiếu hỗ trợ</span>
                 </div>
                 <div class="kpi-breakdown">
-                    <span class="kpi-stat open">${metrics.tickets.open} Open</span>
-                    <span class="kpi-stat resolved">${metrics.tickets.resolved} Resolved</span>
+                    <span class="kpi-stat open">${metrics.tickets.open} đang mở</span>
+                    <span class="kpi-stat resolved">${metrics.tickets.resolved} đã giải quyết</span>
                 </div>
             </div>
 
-            <div class="kpi-card kpi-resolution">
-                <div class="kpi-icon">📊</div>
+            <div class="kpi-card kpi-resolution">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.tickets.resolutionRate}%</span>
-                    <span class="kpi-label">Resolution Rate</span>
+                    <span class="kpi-label">Tỷ lệ giải quyết</span>
                 </div>
                 <div class="kpi-trend positive">
                     <span class="trend-arrow">↑</span>
-                    <span>vs last period</span>
+                    <span>so với kỳ trước</span>
                 </div>
             </div>
 
-            <div class="kpi-card kpi-assets">
-                <div class="kpi-icon">🖥️</div>
+            <div class="kpi-card kpi-assets">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.assets.total}</span>
-                    <span class="kpi-label">Total Assets</span>
+                    <span class="kpi-label">Tổng số thiết bị</span>
                 </div>
                 <div class="kpi-breakdown">
-                    <span class="kpi-stat healthy">${metrics.assets.healthy} Healthy</span>
-                    <span class="kpi-stat warning">${metrics.assets.warning + metrics.assets.critical} Need Attention</span>
+                    <span class="kpi-stat healthy">${metrics.assets.healthy} tốt</span>
+                    <span class="kpi-stat warning">${metrics.assets.warning + metrics.assets.critical} cần chú ý</span>
                 </div>
             </div>
 
-            <div class="kpi-card kpi-changes">
-                <div class="kpi-icon">🔄</div>
+            <div class="kpi-card kpi-changes">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.changes.total}</span>
-                    <span class="kpi-label">Total Changes</span>
+                    <span class="kpi-label">Tổng số thay đổi</span>
                 </div>
                 <div class="kpi-breakdown">
-                    <span class="kpi-stat pending">${metrics.changes.pending} Pending</span>
-                    <span class="kpi-stat active">${metrics.changes.inProgress} Active</span>
+                    <span class="kpi-stat pending">${metrics.changes.pending} chờ duyệt</span>
+                    <span class="kpi-stat active">${metrics.changes.inProgress} đang thực hiện</span>
                 </div>
             </div>
         `;
@@ -239,55 +235,55 @@ const AnalyticsModule = (() => {
 
         container.innerHTML = `
             <div class="summary-section">
-                <h4>Service Desk Overview</h4>
+                <h4>Tổng quan bộ phận hỗ trợ</h4>
                 <div class="summary-grid">
                     <div class="summary-item">
                         <span class="summary-value">${metrics.tickets.totalIncidents}</span>
-                        <span class="summary-label">Incidents</span>
+                        <span class="summary-label">Sự cố lớn</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value">${metrics.tickets.totalServiceRequests}</span>
-                        <span class="summary-label">Service Requests</span>
+                        <span class="summary-label">Yêu cầu dịch vụ</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value">${metrics.tickets.inProgress}</span>
-                        <span class="summary-label">In Progress</span>
+                        <span class="summary-label">Đang thực hiện</span>
                     </div>
                 </div>
             </div>
 
             <div class="summary-section">
-                <h4>Asset Health</h4>
+                <h4>Tình trạng thiết bị</h4>
                 <div class="summary-grid">
                     <div class="summary-item">
                         <span class="summary-value healthy-text">${metrics.assets.healthy}</span>
-                        <span class="summary-label">Healthy</span>
+                        <span class="summary-label">Tốt</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value warning-text">${metrics.assets.warning}</span>
-                        <span class="summary-label">Warning</span>
+                        <span class="summary-label">Cảnh báo</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value critical-text">${metrics.assets.critical}</span>
-                        <span class="summary-label">Critical</span>
+                        <span class="summary-label">Nghiêm trọng</span>
                     </div>
                 </div>
             </div>
 
             <div class="summary-section">
-                <h4>Changes</h4>
+                <h4>Thay đổi</h4>
                 <div class="summary-grid">
                     <div class="summary-item">
                         <span class="summary-value">${metrics.changes.pending}</span>
-                        <span class="summary-label">Pending Approval</span>
+                        <span class="summary-label">Chờ phê duyệt</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value">${metrics.changes.inProgress}</span>
-                        <span class="summary-label">In Progress</span>
+                        <span class="summary-label">Đang thực hiện</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-value success-text">${metrics.changes.completed}</span>
-                        <span class="summary-label">Completed</span>
+                        <span class="summary-label">Hoàn thành</span>
                     </div>
                 </div>
             </div>
@@ -299,7 +295,7 @@ const AnalyticsModule = (() => {
         if (!container) return;
 
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="chart-empty">No data available</p>';
+            container.innerHTML = '<p class="chart-empty">Chưa có dữ liệu</p>';
             return;
         }
 
@@ -323,7 +319,7 @@ const AnalyticsModule = (() => {
         if (!container) return;
 
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="chart-empty">No data available</p>';
+            container.innerHTML = '<p class="chart-empty">Chưa có dữ liệu</p>';
             return;
         }
 
@@ -333,7 +329,7 @@ const AnalyticsModule = (() => {
             <div class="donut-chart">
                 <div class="donut-center">
                     <span class="donut-total">${total}</span>
-                    <span class="donut-label">Assets</span>
+                    <span class="donut-label">Thiết bị</span>
                 </div>
                 <div class="donut-legend">
                     ${data.map(item => `
@@ -353,7 +349,7 @@ const AnalyticsModule = (() => {
         if (!container) return;
 
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="chart-empty">No data available</p>';
+            container.innerHTML = '<p class="chart-empty">Chưa có dữ liệu</p>';
             return;
         }
 
@@ -411,7 +407,7 @@ const AnalyticsModule = (() => {
                     previewContent.innerHTML = renderAssetReportPreview(report);
                     break;
                 default:
-                    previewContent.innerHTML = '<p>Report type not available for preview.</p>';
+                    previewContent.innerHTML = '<p>Loại báo cáo này chưa hỗ trợ xem trước.</p>';
             }
             currentPreviewReportType = type;
         } catch (error) {
@@ -425,16 +421,16 @@ const AnalyticsModule = (() => {
             <div class="report-summary-card">
                 <div class="summary-stat">
                     <span class="stat-value">${report.stats.total}</span>
-                    <span class="stat-label">Total Tickets</span>
+                    <span class="stat-label">Tổng số phiếu hỗ trợ</span>
                 </div>
                 <div class="summary-stat">
                     <span class="stat-value">${report.resolutionRate.toFixed(1)}%</span>
-                    <span class="stat-label">Resolution Rate</span>
+                    <span class="stat-label">Tỷ lệ giải quyết</span>
                 </div>
             </div>
             <div class="report-breakdown">
                 <div class="breakdown-section">
-                    <h5>By Status</h5>
+                    <h5>Theo trạng thái</h5>
                     <div class="breakdown-list">
                         ${Object.entries(report.stats.byStatus).map(([k, v]) => 
                             `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
@@ -442,7 +438,7 @@ const AnalyticsModule = (() => {
                     </div>
                 </div>
                 <div class="breakdown-section">
-                    <h5>By Priority</h5>
+                    <h5>Theo độ ưu tiên</h5>
                     <div class="breakdown-list">
                         ${Object.entries(report.stats.byPriority).map(([k, v]) => 
                             `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
@@ -454,11 +450,11 @@ const AnalyticsModule = (() => {
                 <table class="data-table report-table">
                     <thead>
                         <tr>
-                            <th>Ticket</th>
-                            <th>Title</th>
-                            <th>Priority</th>
-                            <th>Status</th>
-                            <th>Assignee</th>
+                            <th>Phiếu hỗ trợ</th>
+                            <th>Tiêu đề</th>
+                            <th>Độ ưu tiên</th>
+                            <th>Trạng thái</th>
+                            <th>Người xử lý</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -484,18 +480,18 @@ const AnalyticsModule = (() => {
             <div class="report-summary-card sla-summary-card">
                 <div class="summary-stat large">
                     <span class="stat-value" style="color: ${complianceColor}">${report.overallComplianceRate.toFixed(1)}%</span>
-                    <span class="stat-label">Overall SLA Compliance</span>
+                    <span class="stat-label">Tuân thủ SLA chung</span>
                 </div>
                 <div class="sla-breakdown">
                     <div class="sla-item">
-                        <span class="sla-label">Response SLA</span>
+                        <span class="sla-label">SLA phản hồi</span>
                         <div class="sla-bar-container">
                             <div class="sla-bar" style="width: ${report.responseComplianceRate}%; background: ${report.responseComplianceRate >= 80 ? '#10B981' : '#F59E0B'}"></div>
                         </div>
                         <span class="sla-value">${report.responseComplianceRate.toFixed(1)}%</span>
                     </div>
                     <div class="sla-item">
-                        <span class="sla-label">Resolution SLA</span>
+                        <span class="sla-label">SLA giải quyết</span>
                         <div class="sla-bar-container">
                             <div class="sla-bar" style="width: ${report.resolutionComplianceRate}%; background: ${report.resolutionComplianceRate >= 80 ? '#10B981' : '#F59E0B'}"></div>
                         </div>
@@ -505,19 +501,19 @@ const AnalyticsModule = (() => {
             </div>
             <div class="report-breakdown">
                 <div class="breakdown-section">
-                    <h5>Response SLA</h5>
+                    <h5>SLA phản hồi</h5>
                     <div class="breakdown-list">
-                        <div class="breakdown-item"><span>Met</span><span class="badge success">${report.stats.responseMet}</span></div>
-                        <div class="breakdown-item"><span>Breached</span><span class="badge danger">${report.stats.responseBreached}</span></div>
-                        <div class="breakdown-item"><span>Pending</span><span class="badge">${report.stats.pendingResponse}</span></div>
+                        <div class="breakdown-item"><span>Đạt</span><span class="badge success">${report.stats.responseMet}</span></div>
+                        <div class="breakdown-item"><span>Vi phạm</span><span class="badge danger">${report.stats.responseBreached}</span></div>
+                        <div class="breakdown-item"><span>Đang chờ</span><span class="badge">${report.stats.pendingResponse}</span></div>
                     </div>
                 </div>
                 <div class="breakdown-section">
-                    <h5>Resolution SLA</h5>
+                    <h5>SLA giải quyết</h5>
                     <div class="breakdown-list">
-                        <div class="breakdown-item"><span>Met</span><span class="badge success">${report.stats.resolutionMet}</span></div>
-                        <div class="breakdown-item"><span>Breached</span><span class="badge danger">${report.stats.resolutionBreached}</span></div>
-                        <div class="breakdown-item"><span>Pending</span><span class="badge">${report.stats.pendingResolution}</span></div>
+                        <div class="breakdown-item"><span>Đạt</span><span class="badge success">${report.stats.resolutionMet}</span></div>
+                        <div class="breakdown-item"><span>Vi phạm</span><span class="badge danger">${report.stats.resolutionBreached}</span></div>
+                        <div class="breakdown-item"><span>Đang chờ</span><span class="badge">${report.stats.pendingResolution}</span></div>
                     </div>
                 </div>
             </div>
@@ -525,11 +521,11 @@ const AnalyticsModule = (() => {
                 <table class="data-table report-table">
                     <thead>
                         <tr>
-                            <th>Ticket</th>
-                            <th>Priority</th>
-                            <th>Response SLA</th>
-                            <th>Resolution SLA</th>
-                            <th>Assignee</th>
+                            <th>Phiếu hỗ trợ</th>
+                            <th>Độ ưu tiên</th>
+                            <th>SLA phản hồi</th>
+                            <th>SLA giải quyết</th>
+                            <th>Người xử lý</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -538,14 +534,14 @@ const AnalyticsModule = (() => {
                                 <td>${d.ticketNumber}</td>
                                 <td><span class="priority-badge ${d.priority}">${d.priority}</span></td>
                                 <td>
-                                    ${d.responseSlaMet === true ? '<span class="sla-status met">✓ MET</span>' : ''}
-                                    ${d.responseSlaMet === false ? '<span class="sla-status breached">✗ BREACHED</span>' : ''}
-                                    ${d.responseSlaMet === null ? '<span class="sla-status pending">⏳ PENDING</span>' : ''}
+                                    ${d.responseSlaMet === true ? '<span class="sla-status met">Đạt</span>' : ''}
+                                    ${d.responseSlaMet === false ? '<span class="sla-status breached">Vi phạm</span>' : ''}
+                                    ${d.responseSlaMet === null ? '<span class="sla-status pending">Đang chờ</span>' : ''}
                                 </td>
                                 <td>
-                                    ${d.resolutionSlaMet === true ? '<span class="sla-status met">✓ MET</span>' : ''}
-                                    ${d.resolutionSlaMet === false ? '<span class="sla-status breached">✗ BREACHED</span>' : ''}
-                                    ${d.resolutionSlaMet === null ? '<span class="sla-status pending">⏳ PENDING</span>' : ''}
+                                    ${d.resolutionSlaMet === true ? '<span class="sla-status met">Đạt</span>' : ''}
+                                    ${d.resolutionSlaMet === false ? '<span class="sla-status breached">Vi phạm</span>' : ''}
+                                    ${d.resolutionSlaMet === null ? '<span class="sla-status pending">Đang chờ</span>' : ''}
                                 </td>
                                 <td>${d.assignee || '-'}</td>
                             </tr>
@@ -562,20 +558,20 @@ const AnalyticsModule = (() => {
             <div class="report-summary-card">
                 <div class="summary-stat">
                     <span class="stat-value">${report.stats.total}</span>
-                    <span class="stat-label">Total Assets</span>
+                    <span class="stat-label">Tổng số thiết bị</span>
                 </div>
                 <div class="summary-stat">
                     <span class="stat-value" style="color: ${report.healthRate >= 80 ? '#10B981' : '#F59E0B'}">${report.healthRate.toFixed(1)}%</span>
-                    <span class="stat-label">Health Rate</span>
+                    <span class="stat-label">Tỷ lệ tốt</span>
                 </div>
                 <div class="summary-stat">
                     <span class="stat-value">${report.activeRate.toFixed(1)}%</span>
-                    <span class="stat-label">Active Rate</span>
+                    <span class="stat-label">Tỷ lệ đang dùng</span>
                 </div>
             </div>
             <div class="report-breakdown">
                 <div class="breakdown-section">
-                    <h5>By Health Status</h5>
+                    <h5>Theo tình trạng</h5>
                     <div class="breakdown-list">
                         ${Object.entries(report.stats.byHealth).map(([k, v]) => 
                             `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
@@ -583,7 +579,7 @@ const AnalyticsModule = (() => {
                     </div>
                 </div>
                 <div class="breakdown-section">
-                    <h5>By Type</h5>
+                    <h5>Theo loại</h5>
                     <div class="breakdown-list">
                         ${Object.entries(report.stats.byType).map(([k, v]) => 
                             `<div class="breakdown-item"><span>${k}</span><span class="badge">${v}</span></div>`
@@ -591,10 +587,10 @@ const AnalyticsModule = (() => {
                     </div>
                 </div>
                 <div class="breakdown-section">
-                    <h5>By Location</h5>
+                    <h5>Theo vị trí</h5>
                     <div class="breakdown-list">
                         ${Object.entries(report.stats.byLocation).map(([k, v]) => 
-                            `<div class="breakdown-item"><span>${k || 'Unassigned'}</span><span class="badge">${v}</span></div>`
+                            `<div class="breakdown-item"><span>${k || 'Chưa phân công'}</span><span class="badge">${v}</span></div>`
                         ).join('')}
                     </div>
                 </div>
@@ -603,12 +599,12 @@ const AnalyticsModule = (() => {
                 <table class="data-table report-table">
                     <thead>
                         <tr>
-                            <th>Asset Number</th>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Status</th>
-                            <th>Health</th>
-                            <th>Location</th>
+                            <th>Mã thiết bị</th>
+                            <th>Tên</th>
+                            <th>Loại</th>
+                            <th>Trạng thái</th>
+                            <th>Tình trạng</th>
+                            <th>Vị trí</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -631,13 +627,13 @@ const AnalyticsModule = (() => {
 
     function getReportTitle(type) {
         const titles = {
-            'tickets': 'Ticket Volume Report',
-            'sla': 'SLA Compliance Report',
-            'assets': 'Asset Inventory Report',
-            'agent': 'Agent Performance Report',
-            'changes': 'Change Success Rate Report'
+            'tickets': 'Báo cáo số lượng phiếu hỗ trợ',
+            'sla': 'Báo cáo tuân thủ SLA',
+            'assets': 'Báo cáo kiểm kê thiết bị',
+            'agent': 'Báo cáo hiệu suất nhân viên',
+            'changes': 'Báo cáo tỷ lệ thay đổi thành công'
         };
-        return titles[type] || 'Report Preview';
+        return titles[type] || 'Xem trước báo cáo';
     }
 
     async function exportReport(type, format) {

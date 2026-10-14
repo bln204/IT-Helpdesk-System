@@ -186,49 +186,21 @@
 
 /* ==================== Change Tabs ==================== */
 
-.change-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
-}
-
-.change-tab-btn {
-  padding: 10px 20px;
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
-}
-
-.change-tab-btn:hover {
-  color: var(--text);
-}
-
-.change-tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
 /* ==================== Change Detail Modal ==================== */
 
 .change-modal-content {
-  max-width: 900px;
+  width: min(1040px, 94vw);
 }
 
 .change-detail-layout {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 24px;
 }
 
 @media (max-width: 768px) {
   .change-detail-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -309,7 +281,7 @@
   color: var(--text);
 }
 
-.section-content {
+.change-section .section-content {
   font-size: 0.9rem;
   line-height: 1.6;
   color: var(--muted);
