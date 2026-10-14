@@ -1,5 +1,8 @@
 package com.example.ticketing.ai.query;
 
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ServiceRequestAuthorization;
 import com.example.ticketing.servicerequest.ServiceRequest;
 import com.example.ticketing.servicerequest.ServiceRequestRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -37,9 +40,18 @@ public class ServiceRequestQueryAdapter extends JpaQueryAdapter<ServiceRequest> 
             "createdAt", true);
 
     private final ServiceRequestRepository repository;
+    private final ServiceRequestAuthorization authz;
 
-    public ServiceRequestQueryAdapter(ServiceRequestRepository repository) {
+    public ServiceRequestQueryAdapter(ServiceRequestRepository repository, ServiceRequestAuthorization authz) {
         this.repository = repository;
+        this.authz = authz;
+    }
+
+    @Override
+    protected Scope<ServiceRequest> scope(ActorContext actor) {
+        return ActorTiers.seesAll(actor)
+                ? Scope.all()
+                : Scope.of(authz.readScope(actor), "Kết quả chỉ gồm yêu cầu dịch vụ của bạn hoặc phòng ban của bạn.");
     }
 
     @Override public DomainDef definition() { return DEF; }

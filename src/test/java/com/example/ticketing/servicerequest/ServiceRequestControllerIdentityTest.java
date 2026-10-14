@@ -29,11 +29,16 @@ import com.example.ticketing.auth.JwtService;
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.DepartmentKeys;
+import com.example.ticketing.authorization.ServiceRequestAuthorization;
 import com.example.ticketing.config.SecurityConfig;
+import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.security.JwtBlacklistService;
 
 @WebMvcTest(controllers = ServiceRequestController.class)
-@Import({SecurityConfig.class})
+@Import({SecurityConfig.class, ServiceRequestAuthorization.class, DepartmentKeys.class})
 class ServiceRequestControllerIdentityTest {
 
     @Autowired private MockMvc mockMvc;
@@ -41,6 +46,8 @@ class ServiceRequestControllerIdentityTest {
     @MockitoBean private JwtService jwtService;
     @MockitoBean private JwtBlacklistService jwtBlacklistService;
     @MockitoBean private UserAccountRepository userAccountRepository;
+    @MockitoBean private ActorContextService actorContextService;
+    @MockitoBean private DepartmentRepository departmentRepository;
 
     private static UsernamePasswordAuthenticationToken alice() {
         return new UsernamePasswordAuthenticationToken("alice", "n/a",
@@ -59,6 +66,9 @@ class ServiceRequestControllerIdentityTest {
         sr.setRequesterUsername("alice");
         when(serviceRequestService.confirmCompletion(anyLong(), any())).thenReturn(sr);
         when(serviceRequestService.createRequest(any(), any(), any(), any(), any())).thenReturn(sr);
+        when(serviceRequestService.getRequestById(1L)).thenReturn(sr);
+        when(actorContextService.fromAuthentication(any()))
+                .thenReturn(ActorContext.of("alice", UserRole.Role.NHAN_VIEN, "MKT", false));
     }
 
     @Test
