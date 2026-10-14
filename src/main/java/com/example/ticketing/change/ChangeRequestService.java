@@ -49,7 +49,7 @@ public class ChangeRequestService {
         ChangeRequest saved = changeRepository.save(request);
         
         // Add timeline event
-        addTimelineEvent(saved, ChangeTimeline.EventType.CREATED, createdBy, "Change request created");
+        addTimelineEvent(saved, ChangeTimeline.EventType.CREATED, createdBy, "Đã tạo yêu cầu thay đổi");
         
         return saved;
     }
@@ -130,7 +130,7 @@ public class ChangeRequestService {
         // Determine approval workflow based on risk level
         setupApprovalWorkflow(saved);
         
-        addTimelineEvent(saved, ChangeTimeline.EventType.SUBMITTED, actorName, "Submitted for review");
+        addTimelineEvent(saved, ChangeTimeline.EventType.SUBMITTED, actorName, "Đã gửi duyệt");
         
         return saved;
     }
@@ -190,7 +190,7 @@ public class ChangeRequestService {
         
         ChangeRequest saved = changeRepository.save(change);
         
-        addTimelineEvent(saved, ChangeTimeline.EventType.STARTED, actorName, "Implementation started");
+        addTimelineEvent(saved, ChangeTimeline.EventType.STARTED, actorName, "Bắt đầu triển khai");
         
         return saved;
     }

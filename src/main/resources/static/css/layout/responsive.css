@@ -212,12 +212,12 @@ body.dark .pending-section h4 {
   gap: 10px;
   margin: 14px 0;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 #filter-search {
-  width: 180px;
-  flex: none;
+  min-width: 200px;
+  flex: 1 1 220px;
 }
 
 .toolbar .custom-select {
@@ -252,6 +252,7 @@ body.dark .pending-section h4 {
   border: 1px solid transparent;
   background: transparent;
   flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .inline-toggle input {

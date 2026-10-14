@@ -672,7 +672,7 @@ public class ProblemService {
         if (title != null && !title.isBlank()) {
             problem.setTitle(title);
         } else {
-            problem.setTitle("[Auto] Problem from " + incident.getIncidentNumber());
+            problem.setTitle("[Tự động] Vấn đề từ " +incident.getIncidentNumber());
         }
         
         if (description != null && !description.isBlank()) {

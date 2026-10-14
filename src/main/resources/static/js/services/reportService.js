@@ -30,7 +30,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to generate ticket report');
+            throw new Error('Không thể tạo báo cáo phiếu hỗ trợ');
         }
         
         return await response.json();
@@ -52,7 +52,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to generate SLA compliance report');
+            throw new Error('Không thể tạo báo cáo tuân thủ SLA');
         }
         
         return await response.json();
@@ -74,7 +74,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to generate asset report');
+            throw new Error('Không thể tạo báo cáo thiết bị');
         }
         
         return await response.json();
@@ -103,7 +103,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to export ticket report');
+            throw new Error('Không thể xuất báo cáo phiếu hỗ trợ');
         }
         
         const blob = await response.blob();
@@ -132,7 +132,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to export SLA report');
+            throw new Error('Không thể xuất báo cáo SLA');
         }
         
         const blob = await response.blob();
@@ -161,7 +161,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to export asset report');
+            throw new Error('Không thể xuất báo cáo thiết bị');
         }
         
         const blob = await response.blob();
@@ -185,7 +185,7 @@ const ReportService = {
         });
         
         if (!response.ok) {
-            throw new Error('Failed to get report templates');
+            throw new Error('Không thể tải mẫu báo cáo');
         }
         
         return await response.json();

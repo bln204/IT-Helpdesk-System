@@ -204,8 +204,8 @@ public class ChangeRequest {
     // ==================== Enums ====================
 
     public enum ChangeType {
-        STANDARD("Standard"),
-        NORMAL("Normal"),
+        STANDARD("Tiêu chuẩn"),
+        NORMAL("Thông thường"),
         EMERGENCY("Khẩn cấp");
 
         private final String label;
@@ -222,7 +222,7 @@ public class ChangeRequest {
         SCHEDULED("Đã lên lịch"),
         IN_PROGRESS("Đang thực hiện"),
         COMPLETED("Hoàn thành"),
-        ROLLED_BACK("Đã rollback"),
+        ROLLED_BACK("Đã hoàn tác"),
         CANCELLED("Hủy bỏ");
 
         private final String label;

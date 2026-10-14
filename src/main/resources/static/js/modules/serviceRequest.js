@@ -67,7 +67,7 @@ const ServiceRequest = (() => {
     async function loadCatalog() {
         try {
             const response = await fetch(CATALOG_API, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load catalog');
+            if (!response.ok) throw new Error('Không thể tải danh mục dịch vụ');
             catalog = await response.json();
             renderCatalog();
         } catch (error) {
@@ -90,7 +90,7 @@ const ServiceRequest = (() => {
             }
 
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load requests');
+            if (!response.ok) throw new Error('Không thể tải danh sách yêu cầu');
             const data = await response.json();
             requests = data.content || [];
             renderRequestsList(requests);
@@ -101,7 +101,7 @@ const ServiceRequest = (() => {
 
     async function getRequestById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load request');
+        if (!response.ok) throw new Error('Không thể tải yêu cầu');
         return await response.json();
     }
 
@@ -113,7 +113,7 @@ const ServiceRequest = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create request');
+            throw new Error(error.message || 'Không thể tạo yêu cầu');
         }
         return await response.json();
     }
@@ -123,7 +123,7 @@ const ServiceRequest = (() => {
             method: 'PATCH',
             headers: window.Auth.getAuthHeaders()
         });
-        if (!response.ok) throw new Error('Failed to take ownership');
+        if (!response.ok) throw new Error('Không thể nhận xử lý');
         return await response.json();
     }
 
@@ -133,7 +133,7 @@ const ServiceRequest = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ resolution })
         });
-        if (!response.ok) throw new Error('Failed to complete request');
+        if (!response.ok) throw new Error('Không thể hoàn thành yêu cầu');
         return await response.json();
     }
 
@@ -142,7 +142,7 @@ const ServiceRequest = (() => {
             method: 'PATCH',
             headers: window.Auth.getAuthHeaders()
         });
-        if (!response.ok) throw new Error('Failed to confirm completion');
+        if (!response.ok) throw new Error('Không thể xác nhận hoàn thành');
         return await response.json();
     }
 
@@ -152,13 +152,13 @@ const ServiceRequest = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ reason })
         });
-        if (!response.ok) throw new Error('Failed to reopen request');
+        if (!response.ok) throw new Error('Không thể mở lại yêu cầu');
         return await response.json();
     }
 
     async function getComments(requestId) {
         const response = await fetch(`${API_BASE}/${requestId}/comments`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load comments');
+        if (!response.ok) throw new Error('Không thể tải bình luận');
         return await response.json();
     }
 
@@ -168,7 +168,7 @@ const ServiceRequest = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ body, internal: isInternal })
         });
-        if (!response.ok) throw new Error('Failed to add comment');
+        if (!response.ok) throw new Error('Không thể thêm bình luận');
         return await response.json();
     }
 
@@ -180,7 +180,7 @@ const ServiceRequest = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to submit request');
+            throw new Error(error.message || 'Không thể gửi yêu cầu');
         }
         return await response.json();
     }
@@ -191,7 +191,7 @@ const ServiceRequest = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ status })
         });
-        if (!response.ok) throw new Error('Failed to update status');
+        if (!response.ok) throw new Error('Không thể cập nhật trạng thái');
         return await response.json();
     }
 
@@ -214,15 +214,12 @@ const ServiceRequest = (() => {
                 <h4 class="sr-category-title">${category}</h4>
                 <div class="sr-catalog-grid">
                     ${services.map(service => `
-                        <div class="sr-catalog-item" data-id="${service.id}">
-                            <div class="sr-item-icon" style="background: ${service.color || '#3498db'}20; color: ${service.color || '#3498db'}">
-                                ${service.icon || '📋'}
-                            </div>
+                        <div class="sr-catalog-item" data-id="${service.id}">
                             <div class="sr-item-info">
                                 <h5>${escapeHtml(service.name)}</h5>
                                 <p>${escapeHtml(service.description || '').substring(0, 80)}${service.description?.length > 80 ? '...' : ''}</p>
                                 <span class="sr-item-sla">
-                                    ⏱️ ${formatSla(service.responseSlaMinutes)} - ${formatSla(service.resolutionSlaMinutes)}
+                                    SLA: ${formatSla(service.responseSlaMinutes)} - ${formatSla(service.resolutionSlaMinutes)}
                                 </span>
                             </div>
                         </div>
@@ -260,10 +257,10 @@ const ServiceRequest = (() => {
                         <span class="sr-status ${status.class}">${status.label}</span>
                     </div>
                     <h4 class="sr-title">${escapeHtml(sr.title)}</h4>
-                    <p class="sr-service">${escapeHtml(sr.serviceName || 'General Request')}</p>
+                    <p class="sr-service">${escapeHtml(sr.serviceName || 'Yêu cầu chung')}</p>
                     <div class="sr-meta">
-                        <span>👤 ${sr.requesterName || sr.requesterUsername || 'Unknown'}</span>
-                        <span>📅 ${formatDate(sr.createdAt)}</span>
+                        <span>${sr.requesterName || sr.requesterUsername || 'Không rõ'}</span>
+                        <span>${formatDate(sr.createdAt)}</span>
                     </div>
                     <div class="sr-actions">
                         <button class="secondary btn-sm sr-view-btn" data-id="${sr.id}">Xem</button>
@@ -356,22 +353,22 @@ const ServiceRequest = (() => {
             <div class="sr-detail-actions">
                 ${canTake ? `
                     <button class="primary" onclick="ServiceRequest.handleTakeOwnership(${request.id})">
-                        📥 Nhận yêu cầu
+                        Nhận yêu cầu
                     </button>
                 ` : ''}
                 ${canComplete ? `
                     <button class="primary" onclick="ServiceRequest.openCompleteModal(${request.id})">
-                        ✓ Hoàn thành
+                        Hoàn thành
                     </button>
                 ` : ''}
                 ${canConfirm ? `
                     <button class="success" onclick="ServiceRequest.handleConfirm(${request.id})">
-                        ✓ Xác nhận hoàn thành
+                        Xác nhận hoàn thành
                     </button>
                 ` : ''}
                 ${canReopen ? `
                     <button class="warning" onclick="ServiceRequest.openReopenModal(${request.id})">
-                        🔄 Yêu cầu mở lại
+                        Yêu cầu mở lại
                     </button>
                 ` : ''}
             </div>
@@ -416,7 +413,7 @@ const ServiceRequest = (() => {
                     ${comments.map(c => `
                         <div class="comment-item ${c.visibility === 'INTERNAL' ? 'internal' : ''}">
                             <div class="comment-header">
-                                <span class="comment-author">${c.authorName || 'System'}</span>
+                                <span class="comment-author">${c.authorName || 'Hệ thống'}</span>
                                 <span class="comment-time">${formatDate(c.createdAt)}</span>
                                 ${c.visibility === 'INTERNAL' ? '<span class="comment-badge">Nội bộ</span>' : ''}
                             </div>
@@ -433,7 +430,7 @@ const ServiceRequest = (() => {
                     <div><span>Phòng ban:</span> ${request.requesterDepartment || 'N/A'}</div>
                     <div><span>Email:</span> ${request.requesterEmail || 'N/A'}</div>
                     <div><span>Ngày tạo:</span> ${formatDate(request.createdAt)}</div>
-                    <div><span>Deadline:</span> ${request.slaResolutionAt ? formatDate(request.slaResolutionAt) : 'N/A'}</div>
+                    <div><span>Hạn:</span> ${request.slaResolutionAt ? formatDate(request.slaResolutionAt) : 'N/A'}</div>
                 </div>
             </div>
         `;

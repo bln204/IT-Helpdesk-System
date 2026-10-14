@@ -53,16 +53,6 @@
   transform: translateY(-1px);
 }
 
-.sr-item-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
 
 .sr-item-info {
   flex: 1;
@@ -272,33 +262,6 @@
 }
 
 /* Service Request Tabs */
-.sr-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
-}
-
-.sr-tab-btn {
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  font-size: 0.9rem;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  transition: all 0.2s ease;
-}
-
-.sr-tab-btn:hover {
-  color: var(--text);
-}
-
-.sr-tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
 /* Service Request Comments */
 .sr-comments {
   display: flex;

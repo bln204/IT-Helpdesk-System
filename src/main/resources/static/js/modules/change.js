@@ -84,25 +84,25 @@ const ChangeManagement = (() => {
             }
 
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load changes');
+            if (!response.ok) throw new Error('Không thể tải danh sách thay đổi');
             const data = await response.json();
             changes = data.content || [];
             renderChangesList(changes);
         } catch (error) {
             console.error('Error loading changes:', error);
-            Toast.show('Lỗi khi tải danh sách Changes', 'error');
+            Toast.show('Lỗi khi tải danh sách thay đổi', 'error');
         }
     }
 
     async function loadChangeById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load change');
+        if (!response.ok) throw new Error('Không thể tải thay đổi');
         return await response.json();
     }
 
     async function loadTimeline(id) {
         const response = await fetch(`${API_BASE}/${id}/timeline`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load timeline');
+        if (!response.ok) throw new Error('Không thể tải dòng thời gian');
         return await response.json();
     }
 
@@ -114,7 +114,7 @@ const ChangeManagement = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create change');
+            throw new Error(error.message || 'Không thể tạo thay đổi');
         }
         return await response.json();
     }
@@ -139,8 +139,8 @@ const ChangeManagement = (() => {
             container.innerHTML = `
                 <div class="change-empty-state">
                     <div class="change-empty-icon">🔄</div>
-                    <h4>No active changes</h4>
-                    <p>Schedule and manage infrastructure changes here</p>
+                    <h4>Chưa có thay đổi nào</h4>
+                    <p>Tạo yêu cầu thay đổi để lên lịch và theo dõi</p>
                 </div>
             `;
             return;
@@ -168,11 +168,11 @@ const ChangeManagement = (() => {
                     <div class="change-meta">
                         <span class="meta-item">
                             <span class="meta-icon">📅</span>
-                            ${change.scheduledStartDate ? formatDate(change.scheduledStartDate) : 'Not scheduled'}
+                            ${change.scheduledStartDate ? formatDate(change.scheduledStartDate) : 'Chưa lên lịch'}
                         </span>
                         <span class="meta-item">
                             <span class="meta-icon">👤</span>
-                            ${change.requesterName || change.requesterUsername || 'Unknown'}
+                            ${change.requesterName || change.requesterUsername || 'Không rõ'}
                         </span>
                     </div>
                     
@@ -180,7 +180,7 @@ const ChangeManagement = (() => {
                         <span class="change-status" style="--status-color: ${statusConfig.color}">
                             ${statusConfig.icon} ${statusConfig.label}
                         </span>
-                        <button class="change-view-btn" data-id="${change.id}">View details</button>
+                        <button class="change-view-btn" data-id="${change.id}">Xem chi tiết</button>
                     </div>
                 </div>
             `;
@@ -189,26 +189,26 @@ const ChangeManagement = (() => {
 
     function getStatusConfig(status) {
         const configs = {
-            'DRAFT': { label: 'Draft', color: '#64748B', icon: '📝' },
-            'SUBMITTED': { label: 'Submitted', color: '#F59E0B', icon: '📤' },
-            'PENDING_APPROVAL': { label: 'Pending Approval', color: '#F59E0B', icon: '⏳' },
-            'APPROVED': { label: 'Approved', color: '#10B981', icon: '✅' },
-            'REJECTED': { label: 'Rejected', color: '#F43F5E', icon: '❌' },
-            'SCHEDULED': { label: 'Scheduled', color: '#8B5CF6', icon: '📅' },
-            'IN_PROGRESS': { label: 'In Progress', color: '#3B82F6', icon: '⚡' },
-            'COMPLETED': { label: 'Completed', color: '#10B981', icon: '🎉' },
-            'ROLLED_BACK': { label: 'Rolled Back', color: '#F97316', icon: '↩️' },
-            'CANCELLED': { label: 'Cancelled', color: '#6B7280', icon: '🚫' }
+            'DRAFT': { label: 'Nháp', color: '#64748B', icon: '📝' },
+            'SUBMITTED': { label: 'Đã gửi duyệt', color: '#F59E0B', icon: '📤' },
+            'PENDING_APPROVAL': { label: 'Chờ phê duyệt', color: '#F59E0B', icon: '⏳' },
+            'APPROVED': { label: 'Đã phê duyệt', color: '#10B981', icon: '✅' },
+            'REJECTED': { label: 'Bị từ chối', color: '#F43F5E', icon: '❌' },
+            'SCHEDULED': { label: 'Đã lên lịch', color: '#8B5CF6', icon: '📅' },
+            'IN_PROGRESS': { label: 'Đang thực hiện', color: '#3B82F6', icon: '⚡' },
+            'COMPLETED': { label: 'Hoàn thành', color: '#10B981', icon: '🎉' },
+            'ROLLED_BACK': { label: 'Đã hoàn tác', color: '#F97316', icon: '↩️' },
+            'CANCELLED': { label: 'Đã hủy', color: '#6B7280', icon: '🚫' }
         };
         return configs[status] || configs['DRAFT'];
     }
 
     function getRiskConfig(risk) {
         const configs = {
-            'LOW': { label: 'Low Risk', color: '#10B981' },
-            'MEDIUM': { label: 'Medium Risk', color: '#F59E0B' },
-            'HIGH': { label: 'High Risk', color: '#F97316' },
-            'CRITICAL': { label: 'Critical', color: '#F43F5E' }
+            'LOW': { label: 'Rủi ro thấp', color: '#10B981' },
+            'MEDIUM': { label: 'Rủi ro trung bình', color: '#F59E0B' },
+            'HIGH': { label: 'Rủi ro cao', color: '#F97316' },
+            'CRITICAL': { label: 'Nghiêm trọng', color: '#F43F5E' }
         };
         return configs[risk] || configs['MEDIUM'];
     }
@@ -227,7 +227,7 @@ const ChangeManagement = (() => {
     // ==================== Modal ====================
 
     function openCreateModal() {
-        document.getElementById('change-modal-title').textContent = 'New Change Request';
+        document.getElementById('change-modal-title').textContent = 'Tạo yêu cầu thay đổi';
         resetForm();
         document.getElementById('change-modal').classList.remove('hidden');
         document.body.classList.add('modal-open');
@@ -243,7 +243,7 @@ const ChangeManagement = (() => {
                 document.body.classList.add('modal-open');
             })
             .catch(err => {
-                Toast.show('Error loading change', 'error');
+                Toast.show('Lỗi khi tải thay đổi', 'error');
             });
     }
 
@@ -260,7 +260,7 @@ const ChangeManagement = (() => {
                     <div class="change-detail-header">
                         <div class="header-left">
                             <h3>${escapeHtml(change.title)}</h3>
-                            <p>${escapeHtml(change.description || 'No description')}</p>
+                            <p>${escapeHtml(change.description || 'Chưa có mô tả')}</p>
                         </div>
                         <div class="header-right">
                             <div class="risk-display" style="--risk-color: ${riskConfig.color}">
@@ -274,31 +274,31 @@ const ChangeManagement = (() => {
                     </div>
 
                     <div class="change-section">
-                        <h4>Impact Assessment</h4>
+                        <h4>Đánh giá ảnh hưởng</h4>
                         <div class="impact-grid">
                             <div class="impact-stat">
                                 <span class="stat-value">${change.impactLevelLabel || change.impactLevel}</span>
-                                <span class="stat-label">Impact Level</span>
+                                <span class="stat-label">Mức ảnh hưởng</span>
                             </div>
                             <div class="impact-stat">
                                 <span class="stat-value">${change.affectedUsersCount || 0}</span>
-                                <span class="stat-label">Users Affected</span>
+                                <span class="stat-label">Người dùng bị ảnh hưởng</span>
                             </div>
                             <div class="impact-stat">
                                 <span class="stat-value">${change.estimatedDowntimeMinutes || 0}m</span>
-                                <span class="stat-label">Downtime Est.</span>
+                                <span class="stat-label">Thời gian gián đoạn dự kiến</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="change-section">
-                        <h4>Implementation Plan</h4>
-                        <p class="section-content">${escapeHtml(change.implementationPlan || 'No implementation plan defined')}</p>
+                        <h4>Kế hoạch triển khai</h4>
+                        <p class="section-content">${escapeHtml(change.implementationPlan || 'Chưa có kế hoạch triển khai')}</p>
                     </div>
 
                     <div class="change-section">
-                        <h4>Rollback Procedure</h4>
-                        <p class="section-content">${escapeHtml(change.rollbackPlan || 'No rollback procedure defined')}</p>
+                        <h4>Phương án hoàn tác</h4>
+                        <p class="section-content">${escapeHtml(change.rollbackPlan || 'Chưa có phương án hoàn tác')}</p>
                     </div>
 
                     <div class="change-actions">
@@ -308,23 +308,23 @@ const ChangeManagement = (() => {
 
                 <div class="change-detail-sidebar">
                     <div class="sidebar-section">
-                        <h5>Details</h5>
+                        <h5>Chi tiết</h5>
                         <dl class="detail-list">
-                            <dt>Category</dt>
+                            <dt>Danh mục</dt>
                             <dd>${change.category || 'N/A'}</dd>
-                            <dt>Priority</dt>
-                            <dd>${change.priority || 'N/A'}</dd>
-                            <dt>Scheduled</dt>
-                            <dd>${change.scheduledStartDate ? formatDate(change.scheduledStartDate) : 'Not set'}</dd>
-                            <dt>Requester</dt>
-                            <dd>${change.requesterName || 'Unknown'}</dd>
-                            <dt>Owner</dt>
-                            <dd>${change.changeOwner || 'Unassigned'}</dd>
+                            <dt>Độ ưu tiên</dt>
+                            <dd>${({ LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', CRITICAL: 'Nghiêm trọng' })[change.priority] || change.priority || 'N/A'}</dd>
+                            <dt>Đã lên lịch</dt>
+                            <dd>${change.scheduledStartDate ? formatDate(change.scheduledStartDate) : 'Chưa đặt'}</dd>
+                            <dt>Người yêu cầu</dt>
+                            <dd>${change.requesterName || 'Không rõ'}</dd>
+                            <dt>Người phụ trách</dt>
+                            <dd>${change.changeOwner || 'Chưa phân công'}</dd>
                         </dl>
                     </div>
 
                     <div class="sidebar-section">
-                        <h5>Timeline</h5>
+                        <h5>Dòng thời gian</h5>
                         <div class="timeline">
                             ${renderTimeline(timeline)}
                         </div>
@@ -338,19 +338,19 @@ const ChangeManagement = (() => {
 
     function renderTimeline(timeline) {
         if (!timeline || timeline.length === 0) {
-            return '<p class="timeline-empty">No activity yet</p>';
+            return '<p class="timeline-empty">Chưa có hoạt động</p>';
         }
 
         const eventLabels = {
-            'CREATED': 'Created',
-            'SUBMITTED': 'Submitted for review',
-            'APPROVED': 'Approved',
-            'REJECTED': 'Rejected',
-            'SCHEDULED': 'Scheduled',
-            'STARTED': 'Implementation started',
-            'COMPLETED': 'Completed',
-            'ROLLED_BACK': 'Rolled back',
-            'CANCELLED': 'Cancelled'
+            'CREATED': 'Ngày tạo',
+            'SUBMITTED': 'Đã gửi duyệt',
+            'APPROVED': 'Đã phê duyệt',
+            'REJECTED': 'Bị từ chối',
+            'SCHEDULED': 'Đã lên lịch',
+            'STARTED': 'Bắt đầu triển khai',
+            'COMPLETED': 'Hoàn thành',
+            'ROLLED_BACK': 'Đã hoàn tác',
+            'CANCELLED': 'Đã hủy'
         };
 
         return timeline.map(event => `
@@ -358,7 +358,7 @@ const ChangeManagement = (() => {
                 <div class="timeline-dot"></div>
                 <div class="timeline-content">
                     <span class="timeline-event">${eventLabels[event.eventType] || event.eventType}</span>
-                    <span class="timeline-actor">${event.actorName || 'System'}</span>
+                    <span class="timeline-actor">${event.actorName || 'Hệ thống'}</span>
                     <span class="timeline-time">${formatDate(event.createdAt)}</span>
                     ${event.notes ? `<p class="timeline-notes">${escapeHtml(event.notes)}</p>` : ''}
                 </div>
@@ -371,20 +371,20 @@ const ChangeManagement = (() => {
         
         switch (change.status) {
             case 'DRAFT':
-                actions.push({ action: 'submit', label: 'Submit for Review', class: 'primary' });
-                actions.push({ action: 'cancel', label: 'Cancel', class: 'ghost' });
+                actions.push({ action: 'submit', label: 'Gửi duyệt', class: 'primary' });
+                actions.push({ action: 'cancel', label: 'Hủy', class: 'ghost' });
                 break;
             case 'PENDING_APPROVAL':
-                actions.push({ action: 'approve', label: 'Approve', class: 'success' });
-                actions.push({ action: 'reject', label: 'Reject', class: 'danger' });
+                actions.push({ action: 'approve', label: 'Phê duyệt', class: 'success' });
+                actions.push({ action: 'reject', label: 'Từ chối', class: 'danger' });
                 break;
             case 'APPROVED':
             case 'SCHEDULED':
-                actions.push({ action: 'start', label: 'Start Implementation', class: 'primary' });
+                actions.push({ action: 'start', label: 'Bắt đầu triển khai', class: 'primary' });
                 break;
             case 'IN_PROGRESS':
-                actions.push({ action: 'complete', label: 'Mark Complete', class: 'success' });
-                actions.push({ action: 'rollback', label: 'Rollback', class: 'warning' });
+                actions.push({ action: 'complete', label: 'Đánh dấu hoàn thành', class: 'success' });
+                actions.push({ action: 'rollback', label: 'Hoàn tác', class: 'warning' });
                 break;
         }
         
@@ -402,10 +402,10 @@ const ChangeManagement = (() => {
                 try {
                     switch (action) {
                         case 'approve':
-                            await updateChangeStatus(id, 'approve', { approver: 'admin', notes: 'Approved' });
+                            await updateChangeStatus(id, 'approve', { approver: 'admin', notes: 'Đã phê duyệt' });
                             break;
                         case 'reject':
-                            const reason = prompt('Enter rejection reason:');
+                            const reason = prompt('Nhập lý do từ chối:');
                             if (reason) {
                                 await updateChangeStatus(id, 'reject', { approver: 'admin', notes: reason });
                             }
@@ -414,24 +414,24 @@ const ChangeManagement = (() => {
                             await updateChangeStatus(id, 'start');
                             break;
                         case 'complete':
-                            const notes = prompt('Enter completion notes:');
-                            await updateChangeStatus(id, 'complete', { notes: notes || 'Completed' });
+                            const notes = prompt('Nhập ghi chú hoàn thành:');
+                            await updateChangeStatus(id, 'complete', { notes: notes || 'Hoàn thành' });
                             break;
                         case 'cancel':
-                            await updateChangeStatus(id, 'cancel', { reason: 'Cancelled by user' });
+                            await updateChangeStatus(id, 'cancel', { reason: 'Người dùng đã hủy' });
                             break;
                         case 'submit':
                             await updateChangeStatus(id, 'submit');
                             break;
                         case 'rollback':
-                            await updateChangeStatus(id, 'reject', { approver: 'admin', notes: 'Rollback initiated' });
+                            await updateChangeStatus(id, 'reject', { approver: 'admin', notes: 'Đã bắt đầu hoàn tác' });
                             break;
                     }
-                    Toast.show('Change updated successfully', 'success');
+                    Toast.show('Đã cập nhật thay đổi', 'success');
                     closeModal();
                     loadChanges();
                 } catch (err) {
-                    Toast.show('Failed to update change', 'error');
+                    Toast.show('Không thể cập nhật thay đổi', 'error');
                 }
             });
         });
@@ -449,103 +449,103 @@ const ChangeManagement = (() => {
             form.innerHTML = `
                 <div class="change-form-grid">
                     <label class="form-field full-width">
-                        <span>Title *</span>
+                        <span>Tiêu đề *</span>
                         <input type="text" id="change-title" maxlength="300" required 
                                placeholder="e.g., Upgrade database server firmware" />
                     </label>
 
                     <label class="form-field full-width">
-                        <span>Description</span>
+                        <span>Mô tả</span>
                         <textarea id="change-description" rows="3" 
-                                  placeholder="Detailed description of the change..."></textarea>
+                                  placeholder="Mô tả chi tiết thay đổi..."></textarea>
                     </label>
 
                     <label class="form-field">
-                        <span>Type</span>
+                        <span>Loại</span>
                         <select id="change-type">
-                            <option value="STANDARD">Standard</option>
-                            <option value="NORMAL" selected>Normal</option>
-                            <option value="EMERGENCY">Emergency</option>
+                            <option value="STANDARD">Tiêu chuẩn</option>
+                            <option value="NORMAL" selected>Thông thường</option>
+                            <option value="EMERGENCY">Khẩn cấp</option>
                         </select>
                     </label>
 
                     <label class="form-field">
-                        <span>Category</span>
+                        <span>Danh mục</span>
                         <select id="change-category">
-                            <option value="">Select category</option>
-                            <option value="HARDWARE">Hardware</option>
-                            <option value="SOFTWARE">Software</option>
-                            <option value="NETWORK">Network</option>
-                            <option value="SECURITY">Security</option>
-                            <option value="DATABASE">Database</option>
-                            <option value="APPLICATION">Application</option>
-                            <option value="INFRASTRUCTURE">Infrastructure</option>
-                            <option value="PROCESS">Process</option>
+                            <option value="">Chọn danh mục</option>
+                            <option value="HARDWARE">Phần cứng</option>
+                            <option value="SOFTWARE">Phần mềm</option>
+                            <option value="NETWORK">Mạng</option>
+                            <option value="SECURITY">Bảo mật</option>
+                            <option value="DATABASE">Cơ sở dữ liệu</option>
+                            <option value="APPLICATION">Ứng dụng</option>
+                            <option value="INFRASTRUCTURE">Hạ tầng</option>
+                            <option value="PROCESS">Quy trình</option>
                         </select>
                     </label>
 
                     <label class="form-field">
-                        <span>Risk Level</span>
+                        <span>Mức rủi ro</span>
                         <select id="change-risk">
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM" selected>Medium</option>
-                            <option value="HIGH">High</option>
-                            <option value="CRITICAL">Critical</option>
+                            <option value="LOW">Thấp</option>
+                            <option value="MEDIUM" selected>Trung bình</option>
+                            <option value="HIGH">Cao</option>
+                            <option value="CRITICAL">Nghiêm trọng</option>
                         </select>
                     </label>
 
                     <label class="form-field">
-                        <span>Priority</span>
+                        <span>Độ ưu tiên</span>
                         <select id="change-priority">
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM" selected>Medium</option>
-                            <option value="HIGH">High</option>
-                            <option value="CRITICAL">Critical</option>
+                            <option value="LOW">Thấp</option>
+                            <option value="MEDIUM" selected>Trung bình</option>
+                            <option value="HIGH">Cao</option>
+                            <option value="CRITICAL">Nghiêm trọng</option>
                         </select>
                     </label>
 
                     <label class="form-field">
-                        <span>Impact Level</span>
+                        <span>Mức ảnh hưởng</span>
                         <select id="change-impact">
-                            <option value="MINIMAL">Minimal</option>
-                            <option value="MODERATE" selected>Moderate</option>
-                            <option value="SIGNIFICANT">Significant</option>
-                            <option value="SEVERE">Severe</option>
-                            <option value="CATASTROPHIC">Catastrophic</option>
+                            <option value="MINIMAL">Rất ít</option>
+                            <option value="MODERATE" selected>Vừa phải</option>
+                            <option value="SIGNIFICANT">Đáng kể</option>
+                            <option value="SEVERE">Nghiêm trọng</option>
+                            <option value="CATASTROPHIC">Thảm họa</option>
                         </select>
                     </label>
 
                     <label class="form-field">
-                        <span>Affected Users</span>
+                        <span>Người dùng bị ảnh hưởng</span>
                         <input type="number" id="change-users" min="0" value="0" />
                     </label>
 
                     <label class="form-field">
-                        <span>Scheduled Start</span>
+                        <span>Thời gian bắt đầu</span>
                         <input type="datetime-local" id="change-start" />
                     </label>
 
                     <label class="form-field">
-                        <span>Downtime (minutes)</span>
+                        <span>Thời gian gián đoạn (phút)</span>
                         <input type="number" id="change-downtime" min="0" value="0" />
                     </label>
 
                     <label class="form-field full-width">
-                        <span>Implementation Plan</span>
+                        <span>Kế hoạch triển khai</span>
                         <textarea id="change-plan" rows="4" 
-                                  placeholder="Step-by-step implementation instructions..."></textarea>
+                                  placeholder="Các bước triển khai..."></textarea>
                     </label>
 
                     <label class="form-field full-width">
-                        <span>Rollback Plan</span>
+                        <span>Phương án hoàn tác</span>
                         <textarea id="change-rollback" rows="3" 
-                                  placeholder="How to rollback if something goes wrong..."></textarea>
+                                  placeholder="Cách hoàn tác nếu có sự cố..."></textarea>
                     </label>
                 </div>
 
                 <div class="form-actions">
-                    <button type="submit" id="change-submit-btn" class="btn-primary">Create Change Request</button>
-                    <button type="button" id="cancel-change-btn" class="btn-ghost">Cancel</button>
+                    <button type="submit" id="change-submit-btn" class="btn-primary">Tạo yêu cầu thay đổi</button>
+                    <button type="button" id="cancel-change-btn" class="btn-ghost">Hủy</button>
                 </div>
             `;
         }
@@ -558,7 +558,7 @@ const ChangeManagement = (() => {
         const submitBtn = document.getElementById('change-submit-btn');
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Creating...';
+            submitBtn.textContent = 'Đang tạo...';
         }
 
         const data = {
@@ -582,7 +582,7 @@ const ChangeManagement = (() => {
             Toast.show('Vui lòng nhập tiêu đề (Title)', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Create Change Request';
+                submitBtn.textContent = 'Tạo yêu cầu thay đổi';
             }
             isSubmitting = false;
             return;
@@ -592,7 +592,7 @@ const ChangeManagement = (() => {
             Toast.show('Tiêu đề phải có ít nhất 5 ký tự', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Create Change Request';
+                submitBtn.textContent = 'Tạo yêu cầu thay đổi';
             }
             isSubmitting = false;
             return;
@@ -602,7 +602,7 @@ const ChangeManagement = (() => {
             Toast.show('Tiêu đề không được vượt quá 300 ký tự', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Create Change Request';
+                submitBtn.textContent = 'Tạo yêu cầu thay đổi';
             }
             isSubmitting = false;
             return;
@@ -610,7 +610,7 @@ const ChangeManagement = (() => {
 
         try {
             await submitChange(data);
-            Toast.show('Change request created', 'success');
+            Toast.show('Đã tạo yêu cầu thay đổi', 'success');
             closeModal();
             loadChanges();
         } catch (error) {
@@ -618,7 +618,7 @@ const ChangeManagement = (() => {
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Create Change Request';
+                submitBtn.textContent = 'Tạo yêu cầu thay đổi';
             }
             isSubmitting = false;
         }

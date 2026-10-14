@@ -69,7 +69,7 @@ const Escalation = (() => {
         try {
             const response = await fetch(`${API_BASE}/rules`, { headers: window.Auth.getAuthHeaders() });
             console.log('[Escalation] Response status:', response.status);
-            if (!response.ok) throw new Error('Failed to load escalation rules');
+            if (!response.ok) throw new Error('Không thể tải quy tắc chuyển cấp');
 
             rules = await response.json();
             console.log('[Escalation] Rules loaded:', rules);
@@ -77,14 +77,14 @@ const Escalation = (() => {
         } catch (error) {
             console.error('[Escalation] Error loading escalation rules:', error);
             if (typeof Toast !== 'undefined') {
-                Toast.show('Không thể tải danh sách escalation rules', 'error');
+                Toast.show('Không thể tải danh sách quy tắc chuyển cấp', 'error');
             }
         }
     }
 
     async function getRuleById(id) {
         const response = await fetch(`${API_BASE}/rules/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load rule');
+        if (!response.ok) throw new Error('Không thể tải quy tắc');
         return await response.json();
     }
 
@@ -96,7 +96,7 @@ const Escalation = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create rule');
+            throw new Error(error.message || 'Không thể tạo quy tắc');
         }
         return await response.json();
     }
@@ -109,7 +109,7 @@ const Escalation = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to update rule');
+            throw new Error(error.message || 'Không thể cập nhật quy tắc');
         }
         return await response.json();
     }
@@ -121,7 +121,7 @@ const Escalation = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to delete rule');
+            throw new Error(error.message || 'Không thể xóa quy tắc');
         }
     }
 
@@ -132,7 +132,7 @@ const Escalation = (() => {
                 headers: window.Auth.getAuthHeaders(),
                 body: JSON.stringify({ enabled })
             });
-            if (!response.ok) throw new Error('Failed to toggle rule');
+            if (!response.ok) throw new Error('Không thể bật/tắt quy tắc');
             await loadRules();
             Toast.show(enabled ? 'Rule đã được kích hoạt' : 'Rule đã được vô hiệu hóa', 'success');
         } catch (error) {
@@ -149,7 +149,7 @@ const Escalation = (() => {
         if (rules.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <p>Chưa có escalation rule nào.</p>
+                    <p>Chưa có quy tắc chuyển cấp nào.</p>
                 </div>
             `;
             return;
@@ -165,10 +165,10 @@ const Escalation = (() => {
 
         const triggerLabels = {
             'SLA_RESPONSE_WARNING': '⚠️ SLA Phản hồi Warning',
-            'SLA_RESPONSE_BREACHED': '✗ SLA Phản hồi Breached',
+            'SLA_RESPONSE_BREACHED': '✗ Vi phạm SLA phản hồi',
             'SLA_RESOLUTION_WARNING': '⚠️ SLA Giải quyết Warning',
-            'SLA_RESOLUTION_BREACHED': '✗ SLA Giải quyết Breached',
-            'CRITICAL_TICKET': '🔴 Ticket Critical',
+            'SLA_RESOLUTION_BREACHED': '✗ Vi phạm SLA giải quyết',
+            'CRITICAL_TICKET': '🔴 Phiếu nghiêm trọng',
             'MANUAL': '📋 Thủ công'
         };
 
@@ -207,7 +207,7 @@ const Escalation = (() => {
                         <span class="detail-value">${rule.minPriority || 'Tất cả'}</span>
                     </div>
                     <div class="escalation-detail">
-                        <span class="detail-label">Tối đa escalation:</span>
+                        <span class="detail-label">Số lần chuyển cấp tối đa:</span>
                         <span class="detail-value">${rule.maxEscalations || 3} lần</span>
                     </div>
                 </div>
@@ -305,10 +305,10 @@ const Escalation = (() => {
         try {
             if (currentRule) {
                 await updateRule(currentRule.id, data);
-                Toast.show('Đã cập nhật escalation rule', 'success');
+                Toast.show('Đã cập nhật quy tắc chuyển cấp', 'success');
             } else {
                 await createRule(data);
-                Toast.show('Đã tạo escalation rule mới', 'success');
+                Toast.show('Đã tạo quy tắc chuyển cấp', 'success');
             }
             closeModal();
             await loadRules();
@@ -324,7 +324,7 @@ const Escalation = (() => {
         if (confirm(`Bạn có chắc muốn xóa Escalation Rule "${rule.name}"?\n\nHành động này không thể hoàn tác.`)) {
             deleteRule(id)
                 .then(() => {
-                    Toast.show('Đã xóa escalation rule', 'success');
+                    Toast.show('Đã xóa quy tắc chuyển cấp', 'success');
                     loadRules();
                 })
                 .catch(error => {

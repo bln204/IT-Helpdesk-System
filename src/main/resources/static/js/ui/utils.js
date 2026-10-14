@@ -5,17 +5,28 @@ import { engineerOptions as globalEngineerOptions } from '../config/constants.js
 // ==================== Status and Format Labels ====================
 export const STATUS_LABELS = {
   NEW: 'Mới',
+  OPEN: 'Đang mở',
+  ASSIGNED: 'Đã phân công',
   IN_PROGRESS: 'Đang xử lý',
+  WAITING_FOR_USER: 'Chờ người dùng',
+  RESOLVED: 'Đã giải quyết',
   BLOCKED: 'Bị chặn',
+  ESCALATED: 'Đã chuyển cấp',
+  REOPENED: 'Mở lại',
+  CANCELLED: 'Đã hủy',
   CLOSED: 'Đã đóng',
   LOW: 'Thấp',
   MEDIUM: 'Trung bình',
   HIGH: 'Cao',
   URGENT: 'Khẩn cấp',
+  CRITICAL: 'Nghiêm trọng',
   SOFTWARE: 'Phần mềm',
   ACCESS: 'Quyền truy cập',
   NETWORK: 'Mạng',
   HARDWARE: 'Phần cứng',
+  SECURITY: 'Bảo mật',
+  EMAIL: 'Email',
+  ACCOUNT: 'Tài khoản',
   OTHER: 'Khác',
 };
 

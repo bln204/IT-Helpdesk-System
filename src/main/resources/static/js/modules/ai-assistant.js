@@ -116,16 +116,16 @@ const buildDom = () => {
     fab.className = 'ai-fab hidden';
     fab.type = 'button';
     fab.id = 'ai-fab';
-    fab.setAttribute('aria-label', 'Mở AI Assistant');
-    fab.setAttribute('title', 'AI Assistant');
-    fab.textContent = '🤖';
+    fab.setAttribute('aria-label', 'Mở trợ lý AI');
+    fab.setAttribute('title', 'Trợ lý AI');
+    fab.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-circle-text" aria-hidden="true"><path d="M3.086 17.509a2 2 0 00-.094-1.167 10 10 0 114.777 4.719 2 2 0 00-1.099-.092l-3.413.998a1 1 0 01-1.236-1.168z"/><path d="M8 12h9"/><path d="M8 16h5"/><path d="M8 8h7"/></svg>';
 
     // Panel
     const panel = document.createElement('aside');
     panel.className = 'ai-panel hidden';
     panel.id = 'ai-panel';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'AI Assistant');
+    panel.setAttribute('aria-label', 'Trợ lý AI');
     panel.setAttribute('aria-modal', 'false');
 
     const header = document.createElement('header');
@@ -134,7 +134,7 @@ const buildDom = () => {
     const headerText = document.createElement('div');
     headerText.className = 'ai-panel-header-text';
     const title = document.createElement('strong');
-    title.textContent = 'AI Assistant';
+    title.textContent = 'Trợ lý AI';
     const subtitle = document.createElement('span');
     subtitle.textContent = 'Trợ lý IT Helpdesk';
     headerText.appendChild(title);
@@ -220,7 +220,7 @@ const renderIntro = () => {
         'Xin chào! Tôi là trợ lý AI của hệ thống IT Helpdesk.';
     const description = document.createElement('p');
     description.textContent =
-        'Bạn có thể hỏi tôi về các ticket, trạng thái xử lý hoặc thông tin liên quan đến hệ thống.';
+        'Bạn có thể hỏi tôi về phiếu hỗ trợ, trạng thái xử lý hoặc thông tin trong hệ thống.';
 
     intro.appendChild(greeting);
     intro.appendChild(description);
@@ -280,7 +280,7 @@ const appendAiMessage = (response) => {
     if (response && !isQueryPlan && !response.action && response.hasContext === false && response.contextCount === 0) {
         const hint = document.createElement('div');
         hint.className = 'ai-no-context';
-        hint.textContent = 'Không tìm thấy ticket liên quan trong dữ liệu hiện có.';
+        hint.textContent = 'Không tìm thấy phiếu hỗ trợ liên quan trong dữ liệu hiện có.';
         msg.appendChild(hint);
     }
 
@@ -602,7 +602,7 @@ const appendMissingFieldHint = (field) => {
     const hint = document.createElement('div');
     hint.className = 'ai-msg ai-msg-ai ai-missing-field';
     const label = fieldLabel(field);
-    hint.textContent = `👉 Can cung cap: ${label}`;
+    hint.textContent = `👉 Cần cung cấp: ${label}`;
     dom.body.appendChild(hint);
     scrollBodyToBottom();
 };
@@ -623,14 +623,14 @@ const appendDraftPreview = (draft) => {
     wrap.className = 'ai-msg ai-msg-ai ai-draft-preview';
 
     const heading = document.createElement('strong');
-    heading.textContent = '📝 Ticket se tao:';
+    heading.textContent = '📝 Phiếu hỗ trợ sẽ tạo:';
     wrap.appendChild(heading);
 
     const fields = [
-        ['Tieu de', draft.title],
-        ['Mo ta', draft.description],
-        ['Muc do', draft.priority],
-        ['Loai', draft.category],
+        ['Tiêu đề', draft.title],
+        ['Mô tả', draft.description],
+        ['Mức độ', draft.priority],
+        ['Loại', draft.category],
     ];
     fields.forEach(([k, v]) => {
         const row = document.createElement('div');
@@ -652,13 +652,13 @@ const appendDraftPreview = (draft) => {
     const confirmBtn = document.createElement('button');
     confirmBtn.type = 'button';
     confirmBtn.className = 'ai-draft-confirm';
-    confirmBtn.textContent = '✓ Tao ticket';
+    confirmBtn.textContent = '✓ Tạo phiếu hỗ trợ';
     confirmBtn.addEventListener('click', () => confirmDraft());
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'ai-draft-cancel';
-    cancelBtn.textContent = 'Huy';
+    cancelBtn.textContent = 'Hủy';
     cancelBtn.addEventListener('click', () => {
         state.pendingDraft = null;
         wrap.remove();
@@ -696,12 +696,12 @@ const confirmDraft = async () => {
         } else if (data && data.answer) {
             appendAiMessage(data);
         } else {
-            appendErrorMessage('Tao ticket that bai. Vui long thu lai.');
+            appendErrorMessage('Tạo phiếu hỗ trợ thất bại. Vui lòng thử lại.');
         }
     } catch (err) {
         appendErrorMessage(
             (err && err.message) ||
-            'Tao ticket that bai. Vui long thu lai.'
+            'Tạo phiếu hỗ trợ thất bại. Vui lòng thử lại.'
         );
     } finally {
         setBusy(false);
@@ -736,7 +736,7 @@ const ensureAskTicketBanner = () => {
 
     const text = document.createElement('div');
     const strong = document.createElement('strong');
-    strong.textContent = 'Bạn muốn hỏi AI về ticket này?';
+    strong.textContent = 'Bạn muốn hỏi AI về phiếu hỗ trợ này?';
     text.appendChild(strong);
 
     const btn = document.createElement('button');

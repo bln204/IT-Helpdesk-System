@@ -93,7 +93,7 @@ const SlaPolicy = (() => {
             console.log('[SlaPolicy] Response status:', response.status);
             
             if (!response.ok) {
-                throw new Error('Failed to load SLA policies: ' + response.status);
+                throw new Error('Không thể tải chính sách SLA: ' + response.status);
             }
 
             const data = await response.json();
@@ -109,7 +109,7 @@ const SlaPolicy = (() => {
     async function getPolicyById(id) {
         try {
             const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load policy');
+            if (!response.ok) throw new Error('Không thể tải chính sách');
             return await response.json();
         } catch (error) {
             console.error('Error loading policy:', error);
@@ -127,7 +127,7 @@ const SlaPolicy = (() => {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to create policy');
+                throw new Error(error.message || 'Không thể tạo chính sách');
             }
 
             return await response.json();
@@ -147,7 +147,7 @@ const SlaPolicy = (() => {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to update policy');
+                throw new Error(error.message || 'Không thể cập nhật chính sách');
             }
 
             return await response.json();
@@ -166,7 +166,7 @@ const SlaPolicy = (() => {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to delete policy');
+                throw new Error(error.message || 'Không thể xóa chính sách');
             }
         } catch (error) {
             console.error('Error deleting policy:', error);
@@ -184,7 +184,7 @@ const SlaPolicy = (() => {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to toggle policy');
+                throw new Error(error.message || 'Không thể bật/tắt chính sách');
             }
 
             await loadPolicies();
@@ -204,7 +204,7 @@ const SlaPolicy = (() => {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to set default');
+                throw new Error(error.message || 'Không thể đặt mặc định');
             }
 
             await loadPolicies();

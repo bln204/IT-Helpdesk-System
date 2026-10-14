@@ -136,17 +136,23 @@ export const updateTokenStatus = () => {
       .join(' ');
   };
   
+  const displayName = currentUser?.displayName || formatName(username);
+  const avatarUrl = currentUser?.avatarUrl || null;
   if (logoMarkFallback) {
-    const initial = username ? username.trim().charAt(0).toUpperCase() : 'T';
-    logoMarkFallback.textContent = initial;
-    logoMarkFallback.classList.remove('hidden');
+    logoMarkFallback.textContent = displayName.trim().charAt(0).toUpperCase() || 'T';
+    logoMarkFallback.classList.toggle('hidden', !!avatarUrl);
   }
   if (logoMarkImg) {
-    logoMarkImg.classList.add('hidden');
-    logoMarkImg.removeAttribute('src');
+    if (avatarUrl) {
+      logoMarkImg.src = avatarUrl;
+      logoMarkImg.classList.remove('hidden');
+    } else {
+      logoMarkImg.classList.add('hidden');
+      logoMarkImg.removeAttribute('src');
+    }
   }
   if (sidebarUsername) {
-    sidebarUsername.textContent = formatName(username);
+    sidebarUsername.textContent = displayName;
   }
   if (sidebarRole) {
     sidebarRole.textContent = roles.length

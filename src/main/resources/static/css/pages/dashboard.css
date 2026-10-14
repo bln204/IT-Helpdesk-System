@@ -98,13 +98,13 @@
 /* Dashboard Grid Layout */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 20px;
 }
 
 @media (max-width: 1100px) {
   .dashboard-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -387,7 +387,7 @@
 .workload-bar-fill.high { background: #a12626; }
 
 /* SLA Summary */
-.sla-summary {
+.dashboard-section .sla-summary {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;

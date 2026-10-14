@@ -135,7 +135,7 @@ export const attachEventHandlers = () => {
               <div class="login-error-title">Tài khoản chưa được phê duyệt</div>
               <div class="login-error-message">
                 Tài khoản của bạn hiện đang trong trạng thái chờ phê duyệt.
-                Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Admin</strong> để được hỗ trợ.
+                Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Quản trị viên</strong> để được hỗ trợ.
               </div>
             `;
             loginError.classList.remove('hidden');
@@ -149,7 +149,7 @@ export const attachEventHandlers = () => {
               <div class="login-error-title">Tài khoản đang bị vô hiệu hoá</div>
               <div class="login-error-message">
                 Tài khoản của bạn hiện đang bị vô hiệu hoá.
-                Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Admin</strong> để được hỗ trợ.
+                Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Quản trị viên</strong> để được hỗ trợ.
               </div>
             `;
             loginError.classList.remove('hidden');
@@ -167,7 +167,7 @@ export const attachEventHandlers = () => {
               <div class="login-error-title">Tài khoản đã bị từ chối</div>
               <div class="login-error-message">
                 Tài khoản của bạn đã bị từ chối trong quá trình phê duyệt.
-                Vui lòng liên hệ <strong>Admin</strong> để biết thêm chi tiết.
+                Vui lòng liên hệ <strong>Quản trị viên</strong> để biết thêm chi tiết.
               </div>
               ${reasonText}
             `;

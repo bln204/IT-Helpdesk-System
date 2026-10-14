@@ -81,8 +81,8 @@ const DashboardModule = (() => {
         dashboardContainer.innerHTML = `
             <div class="dashboard-container">
                 <div class="dashboard-header">
-                    <h1>IT Dashboard</h1>
-                    <p>Xem tổng quan công việc và tình trạng ticket</p>
+                    <h1>Bảng điều khiển IT</h1>
+                    <p>Tổng quan công việc và tình trạng phiếu hỗ trợ</p>
                 </div>
                 
                 <!-- Stats Grid -->
@@ -107,7 +107,7 @@ const DashboardModule = (() => {
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <label>Ticket mở</label>
+                            <label>Phiếu đang mở</label>
                             <strong id="stat-open">--</strong>
                         </div>
                     </div>
@@ -135,7 +135,7 @@ const DashboardModule = (() => {
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <label>SLA Breach</label>
+                            <label>Vi phạm SLA</label>
                             <strong id="stat-sla-breached">--</strong>
                         </div>
                     </div>
@@ -157,7 +157,7 @@ const DashboardModule = (() => {
                                             <line x1="12" y1="5" x2="12" y2="19"/>
                                             <line x1="5" y1="12" x2="19" y2="12"/>
                                         </svg>
-                                        Tạo Ticket mới
+                                        Tạo phiếu hỗ trợ
                                     </button>
                                     <button class="quick-action-btn" id="dashboard-refresh">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -171,7 +171,7 @@ const DashboardModule = (() => {
                                             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                                             <polyline points="22 4 12 14.01 9 11.01"/>
                                         </svg>
-                                        Xem Ticket chưa gán
+                                        Xem phiếu chưa phân công
                                     </a>
                                 </div>
                             </div>
@@ -180,8 +180,8 @@ const DashboardModule = (() => {
                         <!-- My Tickets -->
                         <div class="dashboard-section">
                             <header>
-                                <h3>Ticket của tôi</h3>
-                                <span class="section-meta" id="my-tickets-count">-- tickets</span>
+                                <h3>Phiếu của tôi</h3>
+                                <span class="section-meta" id="my-tickets-count">-- phiếu</span>
                             </header>
                             <ul class="dashboard-ticket-list" id="my-tickets-list">
                                 <li class="dashboard-loading">Đang tải...</li>
@@ -192,7 +192,7 @@ const DashboardModule = (() => {
                         <div class="dashboard-section">
                             <header>
                                 <h3>Cần xử lý gấp</h3>
-                                <span class="section-meta" id="urgent-tickets-count">-- tickets</span>
+                                <span class="section-meta" id="urgent-tickets-count">-- phiếu</span>
                             </header>
                             <ul class="dashboard-ticket-list" id="urgent-tickets-list">
                                 <li class="dashboard-loading">Đang tải...</li>
@@ -205,24 +205,24 @@ const DashboardModule = (() => {
                         <!-- SLA Summary -->
                         <div class="dashboard-section">
                             <header>
-                                <h3>SLA Summary</h3>
+                                <h3>Tóm tắt SLA</h3>
                             </header>
                             <div class="section-content">
                                 <div class="sla-summary">
                                     <div class="sla-metric" id="sla-response">
-                                        <label>Response SLA</label>
+                                        <label>SLA phản hồi</label>
                                         <strong>--%</strong>
                                     </div>
                                     <div class="sla-metric" id="sla-resolution">
-                                        <label>Resolution SLA</label>
+                                        <label>SLA giải quyết</label>
                                         <strong>--%</strong>
                                     </div>
                                     <div class="sla-metric" id="sla-open">
-                                        <label>Open Tickets</label>
+                                        <label>Phiếu đang mở</label>
                                         <strong>--</strong>
                                     </div>
                                     <div class="sla-metric" id="sla-breached">
-                                        <label>Breached</label>
+                                        <label>Vi phạm</label>
                                         <strong class="text-danger">--</strong>
                                     </div>
                                 </div>
@@ -232,7 +232,7 @@ const DashboardModule = (() => {
                         <!-- IT Department Workload -->
                         <div class="dashboard-section">
                             <header>
-                                <h3>IT Department Workload</h3>
+                                <h3>Khối lượng công việc phòng IT</h3>
                             </header>
                             <div class="section-content">
                                 <ul class="team-workload-list" id="it-workload-list">
@@ -276,14 +276,14 @@ const DashboardModule = (() => {
             ]);
         } catch (error) {
             console.error('Dashboard load error:', error);
-            showError('Không thể tải dữ liệu dashboard');
+            showError('Không thể tải dữ liệu bảng điều khiển');
         }
     }
     
     async function loadOverview() {
         try {
             const response = await authFetch('/api/dashboard/overview');
-            if (!response.ok) throw new Error('Failed to load overview: ' + response.status);
+            if (!response.ok) throw new Error('Không thể tải tổng quan: ' + response.status);
             
             const data = await response.json();
             
@@ -306,18 +306,18 @@ const DashboardModule = (() => {
     async function loadMyTickets() {
         try {
             const response = await authFetch('/api/dashboard/my-tickets?limit=5');
-            if (!response.ok) throw new Error('Failed to load my tickets');
+            if (!response.ok) throw new Error('Không thể tải phiếu của tôi');
             
             const tickets = await response.json();
             const listEl = document.getElementById('my-tickets-list');
             const countEl = document.getElementById('my-tickets-count');
             
-            countEl.textContent = `${tickets.length} tickets`;
+            countEl.textContent = `${tickets.length} phiếu`;
             
             if (tickets.length === 0) {
                 listEl.innerHTML = `
                     <li class="dashboard-empty">
-                        <p>Không có ticket nào được gán cho bạn</p>
+                        <p>Chưa có phiếu nào được giao cho bạn</p>
                     </li>
                 `;
                 return;
@@ -332,18 +332,18 @@ const DashboardModule = (() => {
     async function loadUrgentTickets() {
         try {
             const response = await authFetch('/api/dashboard/urgent-tickets?limit=5');
-            if (!response.ok) throw new Error('Failed to load urgent tickets');
+            if (!response.ok) throw new Error('Không thể tải phiếu khẩn cấp');
             
             const tickets = await response.json();
             const listEl = document.getElementById('urgent-tickets-list');
             const countEl = document.getElementById('urgent-tickets-count');
             
-            countEl.textContent = `${tickets.length} tickets`;
+            countEl.textContent = `${tickets.length} phiếu`;
             
             if (tickets.length === 0) {
                 listEl.innerHTML = `
                     <li class="dashboard-empty">
-                        <p>Không có ticket khẩn cấp</p>
+                        <p>Không có phiếu khẩn cấp</p>
                     </li>
                 `;
                 return;
@@ -358,7 +358,7 @@ const DashboardModule = (() => {
     async function loadSlaSummary() {
         try {
             const response = await authFetch('/api/dashboard/sla-summary');
-            if (!response.ok) throw new Error('Failed to load SLA summary');
+            if (!response.ok) throw new Error('Không thể tải tóm tắt SLA');
             
             const data = await response.json();
             
@@ -383,7 +383,7 @@ const DashboardModule = (() => {
     async function loadITWorkload() {
         try {
             const response = await authFetch('/api/dashboard/it-workload');
-            if (!response.ok) throw new Error('Failed to load IT workload');
+            if (!response.ok) throw new Error('Không thể tải khối lượng công việc');
             
             const workload = await response.json();
             const listEl = document.getElementById('it-workload-list');
@@ -402,7 +402,7 @@ const DashboardModule = (() => {
                     </div>
                     <div class="member-workload">
                         <div class="member-ticket-count">${staff.ticketCount}</div>
-                        <div class="member-ticket-label">tickets</div>
+                        <div class="member-ticket-label">phiếu</div>
                         <div class="workload-bar">
                             <div class="workload-bar-fill ${getWorkloadLevel(staff.ticketCount)}" 
                                  style="width: ${Math.min(100, staff.ticketCount * 10)}%"></div>
@@ -423,7 +423,7 @@ const DashboardModule = (() => {
     function getRoleLabel(role) {
         const roleLabels = {
             'TRUONG_PHONG': 'Trưởng phòng IT',
-            'NHAN_VIEN': 'IT Staff',
+            'NHAN_VIEN': 'Nhân viên IT',
             'ADMIN': 'Quản trị viên',
             'GIAM_DOC': 'Giám đốc'
         };
@@ -433,7 +433,7 @@ const DashboardModule = (() => {
     async function loadRecentActivity() {
         try {
             const response = await authFetch('/api/dashboard/recent-activity?limit=5');
-            if (!response.ok) throw new Error('Failed to load recent activity');
+            if (!response.ok) throw new Error('Không thể tải hoạt động gần đây');
             
             const activities = await response.json();
             const listEl = document.getElementById('activity-feed');
@@ -526,7 +526,7 @@ const DashboardModule = (() => {
             'WAITING_FOR_USER': 'Chờ thông tin',
             'RESOLVED': 'Đã giải quyết',
             'CLOSED': 'Đã đóng',
-            'ESCALATED': 'Escalated'
+            'ESCALATED': 'Đã chuyển cấp'
         };
         return statusMap[status] || status;
     }

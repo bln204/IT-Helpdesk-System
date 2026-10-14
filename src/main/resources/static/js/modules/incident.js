@@ -84,7 +84,7 @@ const Incident = (() => {
             }
 
             const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load incidents');
+            if (!response.ok) throw new Error('Không thể tải danh sách sự cố');
 
             const data = await response.json();
             incidents = data.content || [];
@@ -93,7 +93,7 @@ const Incident = (() => {
         } catch (error) {
             console.error('Error loading incidents:', error);
             if (typeof Toast !== 'undefined') {
-                Toast.show('Không thể tải danh sách incidents', 'error');
+                Toast.show('Không thể tải danh sách sự cố lớn', 'error');
             }
         }
     }
@@ -105,7 +105,7 @@ const Incident = (() => {
 
     async function getIncidentById(id) {
         const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load incident');
+        if (!response.ok) throw new Error('Không thể tải sự cố');
         return await response.json();
     }
 
@@ -117,7 +117,7 @@ const Incident = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create incident');
+            throw new Error(error.message || 'Không thể tạo sự cố');
         }
         return await response.json();
     }
@@ -127,7 +127,7 @@ const Incident = (() => {
             method: 'PATCH',
             headers: window.Auth.getAuthHeaders()
         });
-        if (!response.ok) throw new Error('Failed to take ownership');
+        if (!response.ok) throw new Error('Không thể nhận xử lý');
         return await response.json();
     }
 
@@ -137,7 +137,7 @@ const Incident = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ resolution })
         });
-        if (!response.ok) throw new Error('Failed to resolve incident');
+        if (!response.ok) throw new Error('Không thể giải quyết sự cố');
         return await response.json();
     }
 
@@ -146,7 +146,7 @@ const Incident = (() => {
             method: 'PATCH',
             headers: window.Auth.getAuthHeaders()
         });
-        if (!response.ok) throw new Error('Failed to confirm resolution');
+        if (!response.ok) throw new Error('Không thể xác nhận đã giải quyết');
         return await response.json();
     }
 
@@ -156,13 +156,13 @@ const Incident = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ reason })
         });
-        if (!response.ok) throw new Error('Failed to reopen incident');
+        if (!response.ok) throw new Error('Không thể mở lại sự cố');
         return await response.json();
     }
 
     async function getTimeline(incidentId) {
         const response = await fetch(`${API_BASE}/${incidentId}/timeline`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load timeline');
+        if (!response.ok) throw new Error('Không thể tải dòng thời gian');
         return await response.json();
     }
 
@@ -172,7 +172,7 @@ const Incident = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ note })
         });
-        if (!response.ok) throw new Error('Failed to add note');
+        if (!response.ok) throw new Error('Không thể thêm ghi chú');
         return await response.json();
     }
 
@@ -184,7 +184,7 @@ const Incident = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to update incident');
+            throw new Error(error.message || 'Không thể cập nhật sự cố');
         }
         return await response.json();
     }
@@ -195,7 +195,7 @@ const Incident = (() => {
             headers: window.Auth.getAuthHeaders(),
             body: JSON.stringify({ status })
         });
-        if (!response.ok) throw new Error('Failed to update status');
+        if (!response.ok) throw new Error('Không thể cập nhật trạng thái');
         return await response.json();
     }
 
@@ -207,14 +207,14 @@ const Incident = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to link ticket');
+            throw new Error(error.message || 'Không thể liên kết phiếu hỗ trợ');
         }
         return await response.json();
     }
 
     async function getLinkedTickets(incidentId) {
         const response = await fetch(`${API_BASE}/${incidentId}/tickets`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Failed to load linked tickets');
+        if (!response.ok) throw new Error('Không thể tải phiếu liên kết');
         return await response.json();
     }
 
@@ -226,7 +226,7 @@ const Incident = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to assign incident');
+            throw new Error(error.message || 'Không thể phân công sự cố');
         }
         return await response.json();
     }
@@ -241,7 +241,7 @@ const Incident = (() => {
         });
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || 'Failed to create problem from incident');
+            throw new Error(error.message || 'Không thể tạo vấn đề từ sự cố');
         }
         return await response.json();
     }
@@ -251,7 +251,7 @@ const Incident = (() => {
             method: 'DELETE',
             headers: window.Auth.getAuthHeaders()
         });
-        if (!response.ok) throw new Error('Failed to delete incident');
+        if (!response.ok) throw new Error('Không thể xóa sự cố');
     }
 
     // ==================== Rendering ====================
@@ -263,8 +263,8 @@ const Incident = (() => {
         if (!incidentsList || incidentsList.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
-                    <p>Chưa có incident nào.</p>
-                    <button class="secondary" onclick="Incident.openCreateModal()">Tạo Incident đầu tiên</button>
+                    <p>Chưa có sự cố lớn nào.</p>
+                    <button class="secondary" onclick="Incident.openCreateModal()">Tạo sự cố lớn đầu tiên</button>
                 </div>
             `;
             return;
@@ -343,7 +343,7 @@ const Incident = (() => {
             document.getElementById('incident-submit-btn').textContent = 'Lưu thay đổi';
             openModal();
         } catch (error) {
-            Toast.show('Không thể tải thông tin incident', 'error');
+            Toast.show('Không thể tải thông tin sự cố', 'error');
         }
     }
 
@@ -355,7 +355,7 @@ const Incident = (() => {
             
             showIncidentDetail(currentIncident, linkedTickets, timeline);
         } catch (error) {
-            Toast.show('Không thể tải thông tin incident', 'error');
+            Toast.show('Không thể tải thông tin sự cố', 'error');
         }
     }
 
@@ -414,7 +414,7 @@ const Incident = (() => {
             
             <div class="incident-detail-status">
                 <span class="incident-status ${incident.status?.toLowerCase().replace('_', '-')}">${statusLabels[incident.status] || incident.status}</span>
-                <span>Priority: <strong>${incident.priority || 'N/A'}</strong></span>
+                <span>Độ ưu tiên: <strong>${incident.priority || 'N/A'}</strong></span>
                 <span>Impact: ${incident.impactLevel || 'N/A'}</span>
             </div>
             
@@ -436,7 +436,7 @@ const Incident = (() => {
             
             ${incident.workaround ? `
             <div class="incident-detail-section">
-                <h4>Workaround</h4>
+                <h4>Cách khắc phục tạm thời</h4>
                 <p>${escapeHtml(incident.workaround)}</p>
             </div>
             ` : ''}
@@ -455,7 +455,7 @@ const Incident = (() => {
                 ` : ''}
                 ${canTakeOwnership ? `
                     <button class="primary" onclick="Incident.handleTakeOwnership(${incident.id})">
-                        📥 Nhận incident
+                        📥 Nhận xử lý
                     </button>
                 ` : ''}
                 ${canResolve ? `
@@ -480,7 +480,7 @@ const Incident = (() => {
                 ` : ''}
                 ${canCreateProblem ? `
                     <button class="warning" onclick="Incident.openCreateProblemModal(${incident.id})">
-                        📋 Tạo Problem
+                        📋 Tạo vấn đề
                     </button>
                 ` : ''}
             </div>
@@ -488,21 +488,21 @@ const Incident = (() => {
             <!-- Create Problem Modal -->
             <div id="create-problem-modal-${incident.id}" class="incident-action-modal hidden">
                 <div class="modal-content" style="max-width: 500px;">
-                    <h4>Tạo Problem từ Incident</h4>
+                    <h4>Tạo vấn đề từ sự cố</h4>
                     <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 16px;">
-                        Một Problem mới sẽ được tạo và tự động liên kết với incident này.
+                        Một vấn đề mới sẽ được tạo và tự động liên kết với sự cố này.
                     </p>
                     <label style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
-                        <span style="font-size: 0.85rem; font-weight: 600;">Tiêu đề Problem:</span>
+                        <span style="font-size: 0.85rem; font-weight: 600;">Tiêu đề vấn đề:</span>
                         <input type="text" id="problem-title-${incident.id}" placeholder="VD: [Auto] Problem from ${incident.incidentNumber}" />
                     </label>
                     <label style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px;">
                         <span style="font-size: 0.85rem; font-weight: 600;">Mô tả (tùy chọn):</span>
-                        <textarea id="problem-description-${incident.id}" rows="3" placeholder="Mô tả chi tiết về problem..."></textarea>
+                        <textarea id="problem-description-${incident.id}" rows="3" placeholder="Mô tả chi tiết vấn đề..."></textarea>
                     </label>
                     <div class="modal-actions">
                         <button class="secondary" onclick="Incident.closeCreateProblemModal(${incident.id})">Hủy</button>
-                        <button class="primary" onclick="Incident.handleCreateProblem(${incident.id})">Tạo Problem</button>
+                        <button class="primary" onclick="Incident.handleCreateProblem(${incident.id})">Tạo vấn đề</button>
                     </div>
                 </div>
             </div>
@@ -510,7 +510,7 @@ const Incident = (() => {
             <!-- Assign Modal -->
             <div id="assign-modal-${incident.id}" class="incident-action-modal hidden">
                 <div class="modal-content">
-                    <h4>Phân công Incident</h4>
+                    <h4>Phân công sự cố</h4>
                     <label style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
                         <span style="font-size: 0.85rem; font-weight: 600;">Chọn người phụ trách:</span>
                         <select id="assign-select-${incident.id}" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
@@ -527,7 +527,7 @@ const Incident = (() => {
             <!-- Resolution Modal -->
             <div id="resolve-modal-${incident.id}" class="incident-action-modal hidden">
                 <div class="modal-content">
-                    <h4>Giải quyết Incident</h4>
+                    <h4>Giải quyết sự cố</h4>
                     <textarea id="resolve-text-${incident.id}" placeholder="Nhập giải pháp..." rows="4"></textarea>
                     <div class="modal-actions">
                         <button class="secondary" onclick="Incident.closeResolveModal(${incident.id})">Hủy</button>
@@ -539,7 +539,7 @@ const Incident = (() => {
             <!-- Reopen Modal -->
             <div id="reopen-modal-${incident.id}" class="incident-action-modal hidden">
                 <div class="modal-content">
-                    <h4>Yêu cầu mở lại incident</h4>
+                    <h4>Yêu cầu mở lại sự cố</h4>
                     <textarea id="reopen-text-${incident.id}" placeholder="Lý do mở lại..." rows="3"></textarea>
                     <div class="modal-actions">
                         <button class="secondary" onclick="Incident.closeReopenModal(${incident.id})">Hủy</button>
@@ -550,7 +550,7 @@ const Incident = (() => {
             
             <!-- Linked Tickets -->
             <div class="incident-detail-section">
-                <h4>Tickets liên quan (${linkedTickets.length})</h4>
+                <h4>Phiếu hỗ trợ liên quan (${linkedTickets.length})</h4>
                 <div class="linked-tickets-list">
                     ${linkedTickets.length === 0 ? '<p class="muted">Chưa có ticket nào được liên kết</p>' : ''}
                     ${linkedTickets.map(t => `
@@ -575,7 +575,7 @@ const Incident = (() => {
                     ${timeline.map(t => `
                         <div class="timeline-item ${t.eventType === 'NOTE_ADDED' ? 'note' : ''}">
                             <div class="timeline-header">
-                                <span class="timeline-actor">${t.actorName || 'System'}</span>
+                                <span class="timeline-actor">${t.actorName || 'Hệ thống'}</span>
                                 <span class="timeline-time">${formatDate(t.createdAt)}</span>
                             </div>
                             <div class="timeline-content">${escapeHtml(t.description || t.title)}</div>
@@ -588,7 +588,7 @@ const Incident = (() => {
                 <h4>Thông tin</h4>
                 <div class="incident-info-grid">
                     <div><span>Người phụ trách:</span> ${incident.assignedToUsername || 'Chưa gán'}</div>
-                    <div><span>Team:</span> ${incident.teamName || 'N/A'}</div>
+                    <div><span>Nhóm:</span> ${incident.teamName || 'N/A'}</div>
                     <div><span>Người báo:</span> ${incident.reportedByUsername || currentUser?.username || 'N/A'}</div>
                     <div><span>Ngày tạo:</span> ${formatDate(incident.createdAt)}</div>
                     <div><span>Đã giải quyết:</span> ${incident.resolvedAt ? formatDate(incident.resolvedAt) : 'Chưa'}</div>
@@ -754,7 +754,7 @@ const Incident = (() => {
         const description = document.getElementById(`problem-description-${incidentId}`)?.value?.trim();
 
         if (!title) {
-            Toast.show('Vui lòng nhập tiêu đề Problem', 'error');
+            Toast.show('Vui lòng nhập tiêu đề vấn đề', 'error');
             return;
         }
 
@@ -770,14 +770,14 @@ const Incident = (() => {
                 window.navigateTo('problems');
             }
         } catch (error) {
-            Toast.show(error.message || 'Lỗi khi tạo Problem', 'error');
+            Toast.show(error.message || 'Lỗi khi tạo vấn đề', 'error');
         }
     }
 
     async function handleTakeOwnership(incidentId) {
         try {
             await takeOwnership(incidentId);
-            Toast.show('Đã nhận incident', 'success');
+            Toast.show('Đã nhận xử lý sự cố', 'success');
             if (slaTimerInterval) clearInterval(slaTimerInterval);
             viewIncident(incidentId);
             loadIncidents();
@@ -795,7 +795,7 @@ const Incident = (() => {
         
         try {
             await resolveIncident(incidentId, resolution);
-            Toast.show('Đã giải quyết incident', 'success');
+            Toast.show('Đã giải quyết sự cố', 'success');
             if (slaTimerInterval) clearInterval(slaTimerInterval);
             closeResolveModal(incidentId);
             viewIncident(incidentId);
@@ -812,7 +812,7 @@ const Incident = (() => {
         
         try {
             await confirmResolution(incidentId);
-            Toast.show('Đã xác nhận và đóng incident', 'success');
+            Toast.show('Đã xác nhận và đóng sự cố', 'success');
             if (slaTimerInterval) clearInterval(slaTimerInterval);
             closeDetail();
             loadIncidents();
@@ -826,7 +826,7 @@ const Incident = (() => {
         
         try {
             await reopenIncident(incidentId, reason);
-            Toast.show('Đã yêu cầu mở lại incident', 'success');
+            Toast.show('Đã yêu cầu mở lại sự cố', 'success');
             if (slaTimerInterval) clearInterval(slaTimerInterval);
             closeReopenModal(incidentId);
             viewIncident(incidentId);
@@ -848,7 +848,7 @@ const Incident = (() => {
     async function loadITStaffForAssign(incidentId) {
         try {
             const response = await fetch('/api/users/engineers', { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Failed to load IT staff');
+            if (!response.ok) throw new Error('Không thể tải danh sách nhân viên IT');
             const staff = await response.json();
             
             const select = document.getElementById(`assign-select-${incidentId}`);
@@ -880,7 +880,7 @@ const Incident = (() => {
         
         try {
             await assignIncident(incidentId, assigneeUsername);
-            Toast.show('Đã phân công incident', 'success');
+            Toast.show('Đã phân công sự cố', 'success');
             closeAssignModal(incidentId);
             viewIncident(incidentId);
             loadIncidents();
@@ -977,7 +977,7 @@ const Incident = (() => {
             Toast.show('Vui lòng nhập tiêu đề', 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = currentIncident ? 'Lưu thay đổi' : 'Tạo Incident';
+                submitBtn.textContent = currentIncident ? 'Lưu thay đổi' : 'Tạo sự cố lớn';
             }
             isSubmitting = false;
             return;
@@ -986,10 +986,10 @@ const Incident = (() => {
         try {
             if (currentIncident) {
                 await updateIncident(currentIncident.id, data);
-                Toast.show('Đã cập nhật incident', 'success');
+                Toast.show('Đã cập nhật sự cố', 'success');
             } else {
                 await createIncident(data);
-                Toast.show('Đã tạo incident mới', 'success');
+                Toast.show('Đã tạo sự cố lớn', 'success');
             }
             closeModal();
             loadIncidents();
@@ -998,17 +998,17 @@ const Incident = (() => {
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = currentIncident ? 'Lưu thay đổi' : 'Tạo Incident';
+                submitBtn.textContent = currentIncident ? 'Lưu thay đổi' : 'Tạo sự cố lớn';
             }
             isSubmitting = false;
         }
     }
 
     function confirmDelete(id) {
-        if (confirm('Bạn có chắc muốn xóa incident này?\n\nHành động này không thể hoàn tác.')) {
+        if (confirm('Bạn có chắc muốn xóa sự cố này?\n\nHành động này không thể hoàn tác.')) {
             deleteIncident(id)
                 .then(() => {
-                    Toast.show('Đã xóa incident', 'success');
+                    Toast.show('Đã xóa sự cố', 'success');
                     closeDetail();
                     loadIncidents();
                 })
@@ -1019,10 +1019,10 @@ const Incident = (() => {
     }
     
     function confirmDeleteFromDetail(id) {
-        if (confirm('Bạn có chắc muốn xóa incident này?\n\nHành động này không thể hoàn tác.')) {
+        if (confirm('Bạn có chắc muốn xóa sự cố này?\n\nHành động này không thể hoàn tác.')) {
             deleteIncident(id)
                 .then(() => {
-                    Toast.show('Đã xóa incident', 'success');
+                    Toast.show('Đã xóa sự cố', 'success');
                     closeDetail();
                     loadIncidents();
                 })

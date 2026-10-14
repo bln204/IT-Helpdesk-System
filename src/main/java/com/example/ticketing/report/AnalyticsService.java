@@ -144,10 +144,10 @@ public class AnalyticsService {
     public List<HealthDistribution> getAssetHealthDistribution() {
         List<HealthDistribution> data = new ArrayList<>();
         
-        data.add(new HealthDistribution("Healthy", assetRepository.countByHealthStatus(HealthStatus.HEALTHY), "#10B981"));
-        data.add(new HealthDistribution("Warning", assetRepository.countByHealthStatus(HealthStatus.WARNING), "#F59E0B"));
-        data.add(new HealthDistribution("Critical", assetRepository.countByHealthStatus(HealthStatus.CRITICAL), "#F43F5E"));
-        data.add(new HealthDistribution("Unknown", assetRepository.countByHealthStatus(HealthStatus.UNKNOWN), "#6B7280"));
+        data.add(new HealthDistribution("Tốt", assetRepository.countByHealthStatus(HealthStatus.HEALTHY), "#10B981"));
+        data.add(new HealthDistribution("Cảnh báo", assetRepository.countByHealthStatus(HealthStatus.WARNING), "#F59E0B"));
+        data.add(new HealthDistribution("Nghiêm trọng", assetRepository.countByHealthStatus(HealthStatus.CRITICAL), "#F43F5E"));
+        data.add(new HealthDistribution("Không rõ", assetRepository.countByHealthStatus(HealthStatus.UNKNOWN), "#6B7280"));
         
         return data;
     }
@@ -158,11 +158,11 @@ public class AnalyticsService {
     public List<CategoryData> getAssetTypeDistribution() {
         // Return sample data - in production would query asset type
         List<CategoryData> data = new ArrayList<>();
-        data.add(new CategoryData("Server", 3));
-        data.add(new CategoryData("Workstation", 2));
+        data.add(new CategoryData("Máy chủ", 3));
+        data.add(new CategoryData("Máy trạm", 2));
         data.add(new CategoryData("Laptop", 1));
-        data.add(new CategoryData("Network", 1));
-        data.add(new CategoryData("Software License", 1));
+        data.add(new CategoryData("Mạng", 1));
+        data.add(new CategoryData("Bản quyền phần mềm", 1));
         return data;
     }
 
@@ -174,12 +174,12 @@ public class AnalyticsService {
     public List<ChangeStatusData> getChangeStatusDistribution() {
         List<ChangeStatusData> data = new ArrayList<>();
         
-        data.add(new ChangeStatusData("Draft", changeRepository.countByStatus(ChangeRequest.ChangeStatus.DRAFT), "#64748B"));
-        data.add(new ChangeStatusData("Pending", changeRepository.countByStatus(ChangeRequest.ChangeStatus.PENDING_APPROVAL), "#F59E0B"));
-        data.add(new ChangeStatusData("Approved", changeRepository.countByStatus(ChangeRequest.ChangeStatus.APPROVED), "#3B82F6"));
-        data.add(new ChangeStatusData("In Progress", changeRepository.countByStatus(ChangeRequest.ChangeStatus.IN_PROGRESS), "#8B5CF6"));
-        data.add(new ChangeStatusData("Completed", changeRepository.countByStatus(ChangeRequest.ChangeStatus.COMPLETED), "#10B981"));
-        data.add(new ChangeStatusData("Rejected", changeRepository.countByStatus(ChangeRequest.ChangeStatus.REJECTED), "#F43F5E"));
+        data.add(new ChangeStatusData("Nháp", changeRepository.countByStatus(ChangeRequest.ChangeStatus.DRAFT), "#64748B"));
+        data.add(new ChangeStatusData("Chờ phê duyệt", changeRepository.countByStatus(ChangeRequest.ChangeStatus.PENDING_APPROVAL), "#F59E0B"));
+        data.add(new ChangeStatusData("Đã phê duyệt", changeRepository.countByStatus(ChangeRequest.ChangeStatus.APPROVED), "#3B82F6"));
+        data.add(new ChangeStatusData("Đang thực hiện", changeRepository.countByStatus(ChangeRequest.ChangeStatus.IN_PROGRESS), "#8B5CF6"));
+        data.add(new ChangeStatusData("Hoàn thành", changeRepository.countByStatus(ChangeRequest.ChangeStatus.COMPLETED), "#10B981"));
+        data.add(new ChangeStatusData("Bị từ chối", changeRepository.countByStatus(ChangeRequest.ChangeStatus.REJECTED), "#F43F5E"));
         
         return data;
     }
@@ -191,9 +191,9 @@ public class AnalyticsService {
         List<ChangeTypeData> data = new ArrayList<>();
         
         // Return sample data - in production would count by type
-        data.add(new ChangeTypeData("Standard", 5, "#10B981"));
-        data.add(new ChangeTypeData("Normal", 3, "#3B82F6"));
-        data.add(new ChangeTypeData("Emergency", 1, "#F43F5E"));
+        data.add(new ChangeTypeData("Tiêu chuẩn", 5, "#10B981"));
+        data.add(new ChangeTypeData("Thông thường", 3, "#3B82F6"));
+        data.add(new ChangeTypeData("Khẩn cấp", 1, "#F43F5E"));
         
         return data;
     }

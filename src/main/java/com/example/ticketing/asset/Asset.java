@@ -196,18 +196,18 @@ public class Asset {
     // ==================== Enums ====================
 
     public enum AssetType {
-        SERVER("Server"),
-        WORKSTATION("Workstation"),
+        SERVER("Máy chủ"),
+        WORKSTATION("Máy trạm"),
         LAPTOP("Laptop"),
-        NETWORK_DEVICE("Network Device"),
-        PRINTER("Printer"),
-        MONITOR("Monitor"),
-        MOBILE_DEVICE("Mobile Device"),
-        SOFTWARE_LICENSE("Software License"),
-        DATABASE("Database"),
-        STORAGE("Storage"),
-        CLOUD_RESOURCE("Cloud Resource"),
-        OTHER("Other");
+        NETWORK_DEVICE("Thiết bị mạng"),
+        PRINTER("Máy in"),
+        MONITOR("Màn hình"),
+        MOBILE_DEVICE("Thiết bị di động"),
+        SOFTWARE_LICENSE("Bản quyền phần mềm"),
+        DATABASE("Cơ sở dữ liệu"),
+        STORAGE("Lưu trữ"),
+        CLOUD_RESOURCE("Tài nguyên đám mây"),
+        OTHER("Khác");
 
         private final String label;
         AssetType(String label) { this.label = label; }

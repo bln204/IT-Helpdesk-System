@@ -93,9 +93,9 @@ export const showNewReportDialog = () => {
                 <div class="form-group">
                     <label for="report-type">Loại Báo Cáo</label>
                     <select id="report-type" class="form-control">
-                        <option value="tickets">Ticket Report</option>
-                        <option value="sla">SLA Compliance</option>
-                        <option value="assets">Asset Inventory</option>
+                        <option value="tickets">Báo cáo phiếu hỗ trợ</option>
+                        <option value="sla">Tuân thủ SLA</option>
+                        <option value="assets">Kiểm kê thiết bị</option>
                     </select>
                 </div>
                 
@@ -219,18 +219,18 @@ async function generateAndPreviewReport(type, params) {
     switch (type) {
         case 'tickets':
             report = await ReportService.generateTicketReport(params);
-            columns = ['Ticket Number', 'Title', 'Priority', 'Status', 'Requester', 'Assignee', 'Created', 'Resolved'];
+            columns = ['Mã phiếu', 'Tiêu đề', 'Độ ưu tiên', 'Trạng thái', 'Người yêu cầu', 'Người xử lý', 'Ngày tạo', 'Đã giải quyết'];
             rows = report.tickets.map(t => ({
-                'Ticket Number': t.ticketNumber,
-                'Title': t.title,
-                'Priority': t.priority,
-                'Status': t.status,
-                'Requester': t.requesterName,
-                'Assignee': t.assigneeName || '-',
-                'Created': formatDate(t.createdAt),
-                'Resolved': t.resolvedAt ? formatDate(t.resolvedAt) : '-'
+                'Mã phiếu': t.ticketNumber,
+                'Tiêu đề': t.title,
+                'Độ ưu tiên': t.priority,
+                'Trạng thái': t.status,
+                'Người yêu cầu': t.requesterName,
+                'Người xử lý': t.assigneeName || '-',
+                'Ngày tạo': formatDate(t.createdAt),
+                'Đã giải quyết': t.resolvedAt ? formatDate(t.resolvedAt) : '-'
             }));
-            setCurrentReport(type, 'Ticket Report', columns, rows);
+            setCurrentReport(type, 'Báo cáo phiếu hỗ trợ', columns, rows);
             break;
             
         case 'sla':
@@ -239,17 +239,17 @@ async function generateAndPreviewReport(type, params) {
             // Show summary stats
             showSlaSummary(report);
             
-            columns = ['Ticket', 'Priority', 'Status', 'Response SLA', 'Resolution SLA', 'Response By', 'Resolution By'];
+            columns = ['Phiếu hỗ trợ', 'Độ ưu tiên', 'Trạng thái', 'SLA phản hồi', 'SLA giải quyết', 'Thời điểm phản hồi', 'Thời điểm giải quyết'];
             rows = report.details.map(d => ({
-                'Ticket': d.ticketNumber,
-                'Priority': d.priority,
-                'Status': d.status,
-                'Response SLA': formatSlaStatus(d.responseSlaMet),
-                'Resolution SLA': formatSlaStatus(d.resolutionSlaMet),
-                'Response By': d.firstResponseAt ? formatDate(d.firstResponseAt) : '-',
-                'Resolution By': d.resolvedAt ? formatDate(d.resolvedAt) : '-'
+                'Phiếu hỗ trợ': d.ticketNumber,
+                'Độ ưu tiên': d.priority,
+                'Trạng thái': d.status,
+                'SLA phản hồi': formatSlaStatus(d.responseSlaMet),
+                'SLA giải quyết': formatSlaStatus(d.resolutionSlaMet),
+                'Thời điểm phản hồi': d.firstResponseAt ? formatDate(d.firstResponseAt) : '-',
+                'Thời điểm giải quyết': d.resolvedAt ? formatDate(d.resolvedAt) : '-'
             }));
-            setCurrentReport(type, 'SLA Compliance Report', columns, rows);
+            setCurrentReport(type, 'Báo cáo tuân thủ SLA', columns, rows);
             break;
             
         case 'assets':
@@ -258,17 +258,17 @@ async function generateAndPreviewReport(type, params) {
             // Show asset stats
             showAssetSummary(report);
             
-            columns = ['Asset Number', 'Name', 'Type', 'Status', 'Health', 'Location', 'Assigned To'];
+            columns = ['Mã thiết bị', 'Tên', 'Loại', 'Trạng thái', 'Tình trạng', 'Vị trí', 'Người sử dụng'];
             rows = report.assets.map(a => ({
-                'Asset Number': a.assetNumber,
-                'Name': a.name,
-                'Type': a.assetType,
-                'Status': a.status,
-                'Health': a.healthStatus,
-                'Location': a.location || '-',
-                'Assigned To': a.assignedTo || '-'
+                'Mã thiết bị': a.assetNumber,
+                'Tên': a.name,
+                'Loại': a.assetType,
+                'Trạng thái': a.status,
+                'Tình trạng': a.healthStatus,
+                'Vị trí': a.location || '-',
+                'Người sử dụng': a.assignedTo || '-'
             }));
-            setCurrentReport(type, 'Asset Inventory Report', columns, rows);
+            setCurrentReport(type, 'Báo cáo kiểm kê thiết bị', columns, rows);
             break;
     }
     
@@ -303,40 +303,40 @@ function showSlaSummary(report) {
     
     const summaryHtml = `
         <div class="report-summary sla-summary">
-            <h4>SLA Compliance Summary</h4>
+            <h4>Tóm tắt tuân thủ SLA</h4>
             <div class="summary-stats">
                 <div class="stat-card">
                     <div class="stat-value">${report.stats.total}</div>
-                    <div class="stat-label">Total Tickets</div>
+                    <div class="stat-label">Tổng số phiếu hỗ trợ</div>
                 </div>
                 <div class="stat-card ${report.responseComplianceRate >= 80 ? 'success' : 'warning'}">
                     <div class="stat-value">${report.responseComplianceRate.toFixed(1)}%</div>
-                    <div class="stat-label">Response SLA</div>
+                    <div class="stat-label">SLA phản hồi</div>
                 </div>
                 <div class="stat-card ${report.resolutionComplianceRate >= 80 ? 'success' : 'warning'}">
                     <div class="stat-value">${report.resolutionComplianceRate.toFixed(1)}%</div>
-                    <div class="stat-label">Resolution SLA</div>
+                    <div class="stat-label">SLA giải quyết</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value">${report.overallComplianceRate.toFixed(1)}%</div>
-                    <div class="stat-label">Overall</div>
+                    <div class="stat-label">Tổng thể</div>
                 </div>
             </div>
             <div class="sla-details">
                 <div class="sla-row">
-                    <span class="sla-label">Response SLA Met:</span>
+                    <span class="sla-label">Đạt SLA phản hồi:</span>
                     <span class="sla-value success">${report.stats.responseMet}</span>
                 </div>
                 <div class="sla-row">
-                    <span class="sla-label">Response SLA Breached:</span>
+                    <span class="sla-label">Vi phạm SLA phản hồi:</span>
                     <span class="sla-value danger">${report.stats.responseBreached}</span>
                 </div>
                 <div class="sla-row">
-                    <span class="sla-label">Resolution SLA Met:</span>
+                    <span class="sla-label">Đạt SLA giải quyết:</span>
                     <span class="sla-value success">${report.stats.resolutionMet}</span>
                 </div>
                 <div class="sla-row">
-                    <span class="sla-label">Resolution SLA Breached:</span>
+                    <span class="sla-label">Vi phạm SLA giải quyết:</span>
                     <span class="sla-value danger">${report.stats.resolutionBreached}</span>
                 </div>
             </div>
@@ -352,30 +352,30 @@ function showAssetSummary(report) {
     
     const summaryHtml = `
         <div class="report-summary asset-summary">
-            <h4>Asset Inventory Summary</h4>
+            <h4>Tóm tắt kiểm kê thiết bị</h4>
             <div class="summary-stats">
                 <div class="stat-card">
                     <div class="stat-value">${report.stats.total}</div>
-                    <div class="stat-label">Total Assets</div>
+                    <div class="stat-label">Tổng số thiết bị</div>
                 </div>
                 <div class="stat-card ${report.healthRate >= 80 ? 'success' : 'warning'}">
                     <div class="stat-value">${report.healthRate.toFixed(1)}%</div>
-                    <div class="stat-label">Health Rate</div>
+                    <div class="stat-label">Tỷ lệ tốt</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value">${report.activeRate.toFixed(1)}%</div>
-                    <div class="stat-label">Active Rate</div>
+                    <div class="stat-label">Tỷ lệ đang dùng</div>
                 </div>
             </div>
             <div class="asset-breakdown">
                 <div class="breakdown-section">
-                    <h5>By Health Status</h5>
+                    <h5>Theo tình trạng</h5>
                     ${Object.entries(report.stats.byHealth).map(([k, v]) => 
                         `<div class="breakdown-row"><span>${k}</span><span>${v}</span></div>`
                     ).join('')}
                 </div>
                 <div class="breakdown-section">
-                    <h5>By Type</h5>
+                    <h5>Theo loại</h5>
                     ${Object.entries(report.stats.byType).map(([k, v]) => 
                         `<div class="breakdown-row"><span>${k}</span><span>${v}</span></div>`
                     ).join('')}
