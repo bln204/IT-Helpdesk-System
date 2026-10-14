@@ -50,6 +50,9 @@ public class TicketController {
     private final UserAccountRepository userAccountRepository;
     private final ActorContextService actorContextService;
     private final TicketAuthorization ticketAuthorization;
+    // Stateless; dùng trực tiếp để không đổi constructor (xem ruling B7).
+    private static final com.example.ticketing.authorization.ReportingAuthorization REPORTING =
+            new com.example.ticketing.authorization.ReportingAuthorization();
 
     public TicketController(
             TicketService ticketService,
@@ -629,12 +632,10 @@ public class TicketController {
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        UserAccount user = getCurrentUser(authentication);
-        String requesterUsername = user.getRole() == UserRole.Role.NHAN_VIEN
-                ? authentication.getName()
-                : null;
+        // Phạm vi theo ReportingAuthorization: GS/IT toàn công ty, TP nghiệp vụ phòng mình, NV nghiệp vụ ticket của mình.
+        var actor = actorContextService.fromAuthentication(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
-        return ticketService.buildDashboardSummary(requesterUsername, range[0], range[1]);
+        return ticketService.buildDashboardSummary(REPORTING.ticketStatsScope(actor), range[0], range[1]);
     }
 
     @GetMapping("/reports/assignee-workload")

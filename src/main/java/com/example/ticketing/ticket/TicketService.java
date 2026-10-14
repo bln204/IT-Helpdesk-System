@@ -1744,15 +1744,10 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public TicketDtos.DashboardSummary buildDashboardSummary(
-            String requesterUsername,
+            org.springframework.data.jpa.domain.Specification<Ticket> scope,
             LocalDateTime from,
             LocalDateTime to) {
-        List<Ticket> tickets = ticketRepository.findAll();
-        if (requesterUsername != null) {
-            tickets = tickets.stream()
-                    .filter(ticket -> requesterUsername.equalsIgnoreCase(ticket.getRequesterUsername()))
-                    .toList();
-        }
+        List<Ticket> tickets = ticketRepository.findAll(scope);
         LocalDateTime overdueThreshold = LocalDateTime.now().minusDays(7);
         long openCount = tickets.stream()
                 .filter(ticket -> ticket.getStatus() != TicketTypes.TicketStatus.CLOSED)
