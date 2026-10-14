@@ -50,6 +50,49 @@ class TicketNotificationServiceTeamMembersTest {
             .containsExactly("assignee", "active");
     }
 
+    @Test
+    void assignmentNotifiesTheRequester() {
+        NotificationRepository notifications = mock(NotificationRepository.class);
+        TicketNotificationService service = new TicketNotificationService(notifications,
+            mock(UserAccountRepository.class), mock(ItDepartmentResolver.class), mock(TeamMemberRepository.class));
+        Ticket ticket = new Ticket();
+        ticket.setTicketNumber("T-2");
+        ticket.setTitle("VPN");
+        ticket.setRequesterUsername("owner");
+        ticket.setAssignee(user("tech", true));
+
+        service.notifyTicketAssigned(ticket, "lead");
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notifications, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(Notification::getRecipientUsername)
+            .containsExactly("tech", "owner");
+        assertThat(saved.getAllValues().get(1).getMessage()).contains("T-2").contains("tech");
+    }
+
+    @Test
+    void requesterIsNotNotifiedTwiceOrAboutOwnAction() {
+        NotificationRepository notifications = mock(NotificationRepository.class);
+        TicketNotificationService service = new TicketNotificationService(notifications,
+            mock(UserAccountRepository.class), mock(ItDepartmentResolver.class), mock(TeamMemberRepository.class));
+        Ticket selfReceived = new Ticket();
+        selfReceived.setTicketNumber("T-3");
+        selfReceived.setRequesterUsername("tech");
+        selfReceived.setAssignee(user("tech", true));
+        Ticket assignedByOwner = new Ticket();
+        assignedByOwner.setTicketNumber("T-4");
+        assignedByOwner.setRequesterUsername("lead");
+        assignedByOwner.setAssignee(user("tech", true));
+
+        service.notifyTicketAssigned(selfReceived, "tech");
+        service.notifyTicketAssigned(assignedByOwner, "lead");
+
+        ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notifications, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues()).extracting(Notification::getRecipientUsername)
+            .containsExactly("tech", "tech");
+    }
+
     private static UserAccount user(String username, boolean enabled) {
         UserAccount u = new UserAccount();
         u.setUsername(username);

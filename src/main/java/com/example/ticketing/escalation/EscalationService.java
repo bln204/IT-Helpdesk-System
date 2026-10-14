@@ -15,6 +15,11 @@ import com.example.ticketing.team.TeamRepository;
 import com.example.ticketing.ticket.AssignmentTargetValidator;
 import com.example.ticketing.ticket.AssignmentTargetVerdict;
 import com.example.ticketing.ticket.Ticket;
+import com.example.ticketing.ticket.TicketAssignment;
+import com.example.ticketing.ticket.TicketAssignmentRepository;
+import com.example.ticketing.ticket.TicketAudit;
+import com.example.ticketing.ticket.TicketAuditRepository;
+import com.example.ticketing.ticket.TicketTypes;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketNotFoundException;
 import com.example.ticketing.ticket.TicketNotificationService;
@@ -47,6 +52,8 @@ public class EscalationService {
     private final TeamRepository teamRepository;
     private final AssignmentTargetValidator assignmentTargetValidator;
     private final TicketNotificationService ticketNotificationService;
+    private final TicketAuditRepository ticketAuditRepository;
+    private final TicketAssignmentRepository ticketAssignmentRepository;
 
     public EscalationService(
             EscalationRuleRepository ruleRepository,
@@ -55,7 +62,9 @@ public class EscalationService {
             UserAccountRepository userAccountRepository,
             TeamRepository teamRepository,
             AssignmentTargetValidator assignmentTargetValidator,
-            TicketNotificationService ticketNotificationService) {
+            TicketNotificationService ticketNotificationService,
+            TicketAuditRepository ticketAuditRepository,
+            TicketAssignmentRepository ticketAssignmentRepository) {
         this.ruleRepository = ruleRepository;
         this.historyRepository = historyRepository;
         this.ticketRepository = ticketRepository;
@@ -63,6 +72,8 @@ public class EscalationService {
         this.teamRepository = teamRepository;
         this.assignmentTargetValidator = assignmentTargetValidator;
         this.ticketNotificationService = ticketNotificationService;
+        this.ticketAuditRepository = ticketAuditRepository;
+        this.ticketAssignmentRepository = ticketAssignmentRepository;
     }
 
     // ==================== Rule Management ====================
@@ -324,6 +335,32 @@ public class EscalationService {
     }
 
     /**
+     * An automatic reassignment is still an assignment: write the same audit row and
+     * assignment history as a manual one, with SYSTEM as the actor, and notify like one.
+     */
+    private void recordSystemReassignment(Ticket ticket, String previousAssignee, String newAssignee) {
+        TicketAssignment assignment = new TicketAssignment();
+        assignment.setTicketId(ticket.getId());
+        assignment.setPreviousAssignee(previousAssignee);
+        assignment.setNewAssignee(newAssignee);
+        assignment.setActorRole(SYSTEM_ACTOR);
+        assignment.setActorName(SYSTEM_ACTOR);
+        ticketAssignmentRepository.save(assignment);
+
+        TicketAudit audit = new TicketAudit();
+        audit.setTicketId(ticket.getId());
+        audit.setAction(TicketTypes.AuditAction.ASSIGNEE_CHANGED);
+        audit.setFieldName("assigneeName");
+        audit.setOldValue(previousAssignee);
+        audit.setNewValue(newAssignee);
+        audit.setActorRole(SYSTEM_ACTOR);
+        audit.setActorName(SYSTEM_ACTOR);
+        ticketAuditRepository.save(audit);
+
+        ticketNotificationService.notifyTicketAssigned(ticket, SYSTEM_ACTOR);
+    }
+
+    /**
      * Thực hiện reassignment.
      *
      * <p>
@@ -345,10 +382,12 @@ public class EscalationService {
             if (verdict == AssignmentTargetVerdict.VALID) {
                 UserAccount user = userAccountRepository.findById(rule.getEscalateToUserId()).orElse(null);
                 if (user != null) {
+                    String previousAssignee = ticket.getAssigneeName();
                     history.setNewAssignee(user.getUsername());
                     history.setActionTaken("REASSIGN");
                     ticket.setAssigneeName(user.getUsername());
                     ticket.setAssignee(user);
+                    recordSystemReassignment(ticket, previousAssignee, user.getUsername());
                 } else {
                     // Race: the user was deleted between verdict and load. Treat as
                     // TARGET_NOT_FOUND - safe no-op, no fallback.

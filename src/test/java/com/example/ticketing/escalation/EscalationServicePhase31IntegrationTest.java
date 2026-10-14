@@ -1,5 +1,9 @@
 package com.example.ticketing.escalation;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import com.example.ticketing.ticket.TicketAssignmentRepository;
+import com.example.ticketing.ticket.TicketAuditRepository;
+import com.example.ticketing.ticket.TicketTypes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -62,6 +66,12 @@ class EscalationServicePhase31IntegrationTest {
 
     @Autowired
     private TicketRepository ticketRepository;
+
+    @Autowired
+    private TicketAuditRepository ticketAuditRepository;
+
+    @Autowired
+    private TicketAssignmentRepository ticketAssignmentRepository;
 
     @Autowired
     private UserAccountRepository userAccountRepository;
@@ -196,6 +206,29 @@ class EscalationServicePhase31IntegrationTest {
         assertEquals("REASSIGN", row.getActionTaken(),
             "Successful REASSIGN history action must be REASSIGN");
         assertEquals(target.getUsername(), row.getNewAssignee());
+    }
+
+    @Test
+    @DisplayName("escalation reassignment is recorded in ticket audit and assignment history as SYSTEM")
+    void reassignmentIsAudited() {
+        UserAccount target = user("p31_target_audit", UserRole.Role.NHAN_VIEN, itDept, true, true);
+        UserAccount requester = user("p31_req_audit", UserRole.Role.NHAN_VIEN, mktDept, true, true);
+        Ticket ticket = ticketRepository.save(newTicket(requester));
+        persistRule(EscalationRule.EscalationAction.REASSIGN,
+            EscalationRule.EscalationTrigger.SLA_RESPONSE_BREACHED, target.getId(), null);
+
+        escalationService.checkAndEscalate(ticket);
+
+        assertThat(ticketAuditRepository.findByTicketIdOrderByCreatedAtDesc(ticket.getId()))
+            .anySatisfy(a -> {
+                assertEquals(TicketTypes.AuditAction.ASSIGNEE_CHANGED, a.getAction());
+                assertEquals(target.getUsername(), a.getNewValue());
+                assertEquals(EscalationService.SYSTEM_ACTOR, a.getActorName());
+                assertEquals(EscalationService.SYSTEM_ACTOR, a.getActorRole());
+            });
+        assertThat(ticketAssignmentRepository.findByTicketIdOrderByCreatedAtDesc(ticket.getId()))
+            .singleElement()
+            .satisfies(r -> assertEquals(target.getUsername(), r.getNewAssignee()));
     }
     }
 

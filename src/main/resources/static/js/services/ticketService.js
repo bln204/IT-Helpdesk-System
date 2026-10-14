@@ -1,9 +1,11 @@
 // ==================== Ticket Service ====================
 import { request } from '../core/api.js';
 import { getToken, getCurrentUser } from '../core/auth.js';
-import { formatStatus, formatName, getDisplayName, formatHours, formatSlaBucket } from '../ui/utils.js';
+import { formatStatus, formatName, formatHours, formatSlaBucket } from '../ui/utils.js';
+// Single source of user display names (filled from /api/users and /api/users/engineers)
+import { getDisplayName, getUserAvatarMap } from './userService.js';
 import { escapeHtml } from '../core/sanitize.js';
-import { userAvatarMap, selectedTicket, engineerOptions } from '../config/constants.js';
+import { selectedTicket, engineerOptions } from '../config/constants.js';
 import { setActiveReportButton, renderReportTable, setCurrentReport } from '../modules/reports.js';
 
 // SLA Timer module
@@ -150,7 +152,7 @@ export const renderTickets = (rows, { append = false } = {}) => {
     const priorityClass = ticket.priority ? ticket.priority.toLowerCase() : 'low';
     const statusClass = ticket.status ? ticket.status.toLowerCase().replace(/_/g, '-') : 'new';
     const assigneeKey = ticket.assigneeName ? ticket.assigneeName.toLowerCase() : '';
-    const assigneeProfile = assigneeKey ? userAvatarMap.get(assigneeKey) : null;
+    const assigneeProfile = assigneeKey ? getUserAvatarMap().get(assigneeKey) : null;
     const assigneeLabel = assigneeProfile && assigneeProfile.displayName
       ? assigneeProfile.displayName
       : (ticket.assigneeName ? formatName(ticket.assigneeName) : 'Chưa phân công');
@@ -493,7 +495,7 @@ export const loadTickets = async ({ reset = false } = {}) => {
       const getAssigneeLabel = (ticket) => {
         if (!ticket || !ticket.assigneeName) return '';
         const key = ticket.assigneeName.toLowerCase();
-        const profile = userAvatarMap.get(key);
+        const profile = getUserAvatarMap().get(key);
         if (profile && profile.displayName) {
           return profile.displayName;
         }
@@ -590,7 +592,7 @@ export const selectTicket = async (ticket) => {
     </div>
   `;
   
-  const ticketTabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+  const ticketTabButtons = Array.from(document.querySelectorAll('.ticket-tabs .tab-btn'));
   const ticketTabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
   
   ticketActions.classList.remove('hidden');
@@ -661,6 +663,9 @@ export const loadComments = async (ticketId) => {
   });
 };
 
+// Automatic actions (escalation rules) are recorded with actorRole SYSTEM.
+const personLabel = (username, role) => (role === 'SYSTEM' ? 'hệ thống' : getDisplayName(username));
+
 export const loadAudit = async (ticketId) => {
   const data = await request(`/api/tickets/${ticketId}/audit`);
   auditList = document.getElementById('audit-list');
@@ -673,8 +678,11 @@ export const loadAudit = async (ticketId) => {
     const item = document.createElement('div');
     item.className = 'list-item';
     const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
-    const actor = entry.actorName ? `bởi ${entry.actorName}` : '';
-    const detail = `${formatFieldName(entry.fieldName)} ${formatAuditValue(entry.fieldName, entry.oldValue)} → ${formatAuditValue(entry.fieldName, entry.newValue)}`.trim();
+    const actor = entry.actorName ? `bởi ${personLabel(entry.actorName, entry.actorRole)}` : '';
+    const value = (v) => (entry.fieldName === 'assigneeName'
+      ? (v ? getDisplayName(v) : 'Chưa phân công')
+      : formatAuditValue(entry.fieldName, v));
+    const detail = `${formatFieldName(entry.fieldName)} ${value(entry.oldValue)} → ${value(entry.newValue)}`.trim();
     item.textContent = `${when} • ${formatAuditAction(entry.action)} ${actor} ${detail}`.trim();
     auditList.appendChild(item);
   });
@@ -717,9 +725,10 @@ export const loadAssignments = async (ticketId) => {
     item.className = 'list-item';
     
     const when = assignment.createdAt ? new Date(assignment.createdAt).toLocaleString('vi-VN') : '';
-    const actor = assignment.actorName ? `<span class="actor">bởi ${assignment.actorName}</span>` : '';
-    const prev = assignment.previousAssignee ? formatName(assignment.previousAssignee) : '<span class="muted">Chưa phân công</span>';
-    const next = assignment.newAssignee ? formatName(assignment.newAssignee) : '<span class="muted">Chưa phân công</span>';
+    const actor = assignment.actorName
+      ? `<span class="actor">bởi ${escapeHtml(personLabel(assignment.actorName, assignment.actorRole))}</span>` : '';
+    const prev = assignment.previousAssignee ? escapeHtml(getDisplayName(assignment.previousAssignee)) : '<span class="muted">Chưa phân công</span>';
+    const next = assignment.newAssignee ? escapeHtml(getDisplayName(assignment.newAssignee)) : '<span class="muted">Chưa phân công</span>';
     
     item.innerHTML = `
       <span class="time">${when}</span>

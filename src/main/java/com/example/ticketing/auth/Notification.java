@@ -182,6 +182,20 @@ public class Notification {
     }
 
     /**
+     * Báo cho người tạo phiếu biết phiếu của họ đã có người xử lý.
+     */
+    public static Notification forRequesterTicketAssigned(String requesterUsername, Long ticketId,
+            String ticketNumber, String assigneeName, String assignedBy) {
+        Notification n = new Notification(requesterUsername, NotificationType.TICKET_ASSIGNED,
+                "Phiếu của bạn đã được phân công",
+                "Phiếu #" + ticketNumber + " đã được giao cho " + assigneeName + " xử lý");
+        n.setTicketId(ticketId);
+        n.setTicketNumber(ticketNumber);
+        n.setActorUsername(assignedBy);
+        return n;
+    }
+
+    /**
      * Tạo notification khi status thay đổi.
      */
     public static Notification forStatusChanged(String recipientUsername, Long ticketId, String ticketNumber,
