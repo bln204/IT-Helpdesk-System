@@ -51,8 +51,8 @@ export const updatePendingBadge = (count) => {
 export const loadUserAvatarMap = async () => {
   userAvatarMap.clear();
   userAvatarReady = false;
-  // Load for IT Staff and users who can manage users
-  const { isITStaff, canManageUsers } = await import('../core/auth.js');
+  // Load for IT Staff and users who can manage users. auth.js does not export canManageUsers,
+  // so importing it from there threw and silently aborted the startup name loading in app.js.
   if (!canManageUsers() && !isITStaff()) return;
   try {
     const data = await request('/api/users?page=0&size=200');
@@ -828,9 +828,6 @@ export const loadProfile = async () => {
   const profileEmail = document.getElementById('profile-email');
   const profileAvatarPreview = document.getElementById('profile-avatar-preview');
   const profileAvatarFallback = document.getElementById('profile-avatar-fallback');
-  const sidebarUsername = document.getElementById('sidebar-username');
-  const logoMarkImg = document.getElementById('logo-mark-img');
-  const logoMarkFallback = document.getElementById('logo-mark-fallback');
   
   if (profileDetails) {
     profileDetails.innerHTML = '';
@@ -867,18 +864,6 @@ export const loadProfile = async () => {
     profileAvatarFallback.textContent = initialSource.trim().charAt(0).toUpperCase();
     profileAvatarFallback.classList.toggle('hidden', !!profile.avatarUrl);
   }
-  if (sidebarUsername) {
-    sidebarUsername.textContent = formatName((profileDisplayName ? profileDisplayName.value : '') || profile.username);
-  }
-  if (logoMarkImg) {
-    logoMarkImg.src = profile.avatarUrl || '';
-    logoMarkImg.classList.toggle('hidden', !profile.avatarUrl);
-  }
-  if (logoMarkFallback) {
-    const initialSource = (profileDisplayName ? profileDisplayName.value : '') || profile.username || 'T';
-    logoMarkFallback.textContent = initialSource.trim().charAt(0).toUpperCase();
-    logoMarkFallback.classList.toggle('hidden', !!profile.avatarUrl);
-  }
   
   currentUser = {
     id: profile.id,
@@ -889,6 +874,7 @@ export const loadProfile = async () => {
     departmentName: profile.departmentName,
     displayName: profile.displayName,
     email: profile.email,
+    avatarUrl: profile.avatarUrl,
   };
   localStorage.setItem('ticketing.currentUser', JSON.stringify(currentUser));
   
