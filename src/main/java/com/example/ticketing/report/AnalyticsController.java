@@ -29,13 +29,6 @@ public class AnalyticsController {
         this.reportService = reportService;
     }
 
-    // TEST ENDPOINT - No auth required
-    @GetMapping("/test")
-    public ResponseEntity<String> test() {
-        log.info("TEST ENDPOINT HIT!");
-        return ResponseEntity.ok("Analytics test OK");
-    }
-
     // ==================== Dashboard ====================
 
     /**
