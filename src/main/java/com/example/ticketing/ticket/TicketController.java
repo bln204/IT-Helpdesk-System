@@ -36,6 +36,7 @@ import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
 import com.example.ticketing.authorization.TicketAuthorization;
 
 import jakarta.validation.Valid;
@@ -600,7 +601,7 @@ public class TicketController {
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        requireStaff(authentication);
+        requireDepartmentStats(authentication);
         UserAccount user = getCurrentUser(authentication);
         Map<TicketTypes.TicketStatus, Long> counts = new HashMap<>();
         for (Ticket ticket : ticketService.listTickets(
@@ -746,11 +747,16 @@ public class TicketController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 
+    // Cùng quy tắc với ReportingAuthorization (spec §4.6); gọi ActorTiers trực tiếp để không đổi constructor.
     private void requireStaff(Authentication authentication) {
-        UserAccount user = getCurrentUser(authentication);
-        if (user.getRole() == UserRole.Role.NHAN_VIEN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This action requires staff privileges.");
-        }
+        ActorTiers.require(ActorTiers.seesAll(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem báo cáo toàn công ty.");
+    }
+
+    private void requireDepartmentStats(Authentication authentication) {
+        var actor = actorContextService.fromAuthentication(authentication);
+        ActorTiers.require(ActorTiers.seesAll(actor) || ActorTiers.isBusinessLead(actor),
+                "Bạn không có quyền xem báo cáo này.");
     }
 
     // PHASE 2.1: controller-level authorization gates. These do NOT duplicate the

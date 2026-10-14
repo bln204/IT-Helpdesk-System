@@ -57,7 +57,7 @@ class AiAskPipelineAuthorizationTest {
         fixtures.nhanVienMkt();
         planned("list", "team", null);
         assertThat(ask("nv_mkt", "liệt kê team"))
-                .isEqualTo("Bạn không có quyền xem team. Chức năng này dành cho Admin, Giám đốc, Trưởng phòng.");
+                .isEqualTo("Bạn không có quyền xem team. Chức năng này dành cho IT và ban giám sát.");
     }
 
     @Test

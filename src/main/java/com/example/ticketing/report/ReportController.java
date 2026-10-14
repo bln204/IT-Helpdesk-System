@@ -9,8 +9,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ReportingAuthorization;
 
 import com.example.ticketing.report.ReportGenerationService.*;
 
@@ -33,7 +37,13 @@ public class ReportController {
     private final ReportGenerationService reportGenerationService;
     private final ReportExportService reportExportService;
 
-    public ReportController(ReportGenerationService reportGenerationService, ReportExportService reportExportService) {
+    private final ActorContextService actorContextService;
+    private final ReportingAuthorization reporting;
+
+    public ReportController(ReportGenerationService reportGenerationService, ReportExportService reportExportService,
+                            ActorContextService actorContextService, ReportingAuthorization reporting) {
+        this.actorContextService = actorContextService;
+        this.reporting = reporting;
         this.reportGenerationService = reportGenerationService;
         this.reportExportService = reportExportService;
     }
@@ -49,11 +59,13 @@ public class ReportController {
      * @param days      Pre-defined range (7, 30, 90) - overrides dates if provided
      */
     @PostMapping("/tickets")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<TicketReport> generateTicketReport(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Generating ticket report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
 
@@ -71,11 +83,13 @@ public class ReportController {
      * POST /api/reports/sla
      */
     @PostMapping("/sla")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<SLAComplianceReport> generateSlaReport(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Generating SLA compliance report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
 
@@ -93,11 +107,13 @@ public class ReportController {
      * POST /api/reports/assets
      */
     @PostMapping("/assets")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<AssetReport> generateAssetReport(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Generating asset report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
 
@@ -116,12 +132,14 @@ public class ReportController {
      * /api/reports/tickets/export?format=csv|excel&startDate=...&endDate=...&days=...
      */
     @GetMapping("/tickets/export")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<byte[]> exportTicketReport(
             @RequestParam(defaultValue = "csv") String format,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Exporting ticket report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate,
                 endDate, days);
@@ -153,12 +171,14 @@ public class ReportController {
      * GET /api/reports/sla/export
      */
     @GetMapping("/sla/export")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<byte[]> exportSlaReport(
             @RequestParam(defaultValue = "csv") String format,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Exporting SLA report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate, endDate,
                 days);
@@ -190,12 +210,14 @@ public class ReportController {
      * GET /api/reports/assets/export
      */
     @GetMapping("/assets/export")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<byte[]> exportAssetReport(
             @RequestParam(defaultValue = "csv") String format,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
-            @RequestParam(required = false) Integer days) {
+            @RequestParam(required = false) Integer days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
 
         log.info("Exporting asset report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate,
                 endDate, days);
@@ -229,8 +251,9 @@ public class ReportController {
      * GET /api/reports/templates
      */
     @GetMapping("/templates")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<ReportTemplate>> getReportTemplates() {
+    public ResponseEntity<List<ReportTemplate>> getReportTemplates(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         List<ReportTemplate> templates = List.of(
                 new ReportTemplate("TICKETS", "Ticket Report",
                         "Overview of tickets with status, priority, and volume analysis", "ticket"),

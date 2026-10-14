@@ -6,8 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ReportingAuthorization;
 
 import com.example.ticketing.report.AnalyticsService.*;
 
@@ -23,10 +27,15 @@ public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
     private final ReportService reportService;
+    private final ActorContextService actorContextService;
+    private final ReportingAuthorization reporting;
 
-    public AnalyticsController(AnalyticsService analyticsService, ReportService reportService) {
+    public AnalyticsController(AnalyticsService analyticsService, ReportService reportService,
+                               ActorContextService actorContextService, ReportingAuthorization reporting) {
         this.analyticsService = analyticsService;
         this.reportService = reportService;
+        this.actorContextService = actorContextService;
+        this.reporting = reporting;
     }
 
     // ==================== Dashboard ====================
@@ -36,22 +45,9 @@ public class AnalyticsController {
      * GET /api/analytics/dashboard
      */
     @GetMapping("/dashboard")
-    // @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<DashboardMetrics> getDashboardMetrics() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        
-        // Manual check for required role
-        boolean hasRole = auth.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || 
-                          a.getAuthority().equals("ROLE_GIAM_DOC") ||
-                          a.getAuthority().equals("ROLE_TRUONG_PHONG") ||
-                          a.getAuthority().equals("ROLE_NHAN_VIEN"));
-        
-        if (!hasRole) {
-            log.warn("User {} does not have required analytics role", auth.getName());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        
+    public ResponseEntity<DashboardMetrics> getDashboardMetrics(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         return ResponseEntity.ok(analyticsService.getDashboardMetrics());
     }
 
@@ -62,9 +58,11 @@ public class AnalyticsController {
      * GET /api/analytics/tickets/volume
      */
     @GetMapping("/tickets/volume")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<List<TimeSeriesData>> getTicketVolume(
-            @RequestParam(defaultValue = "30") int days) {
+            @RequestParam(defaultValue = "30") int days,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/tickets/volume - days: {}", days);
         return ResponseEntity.ok(analyticsService.getTicketVolumeByDay(days));
     }
@@ -74,8 +72,9 @@ public class AnalyticsController {
      * GET /api/analytics/tickets/by-category
      */
     @GetMapping("/tickets/by-category")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<CategoryData>> getTicketsByCategory() {
+    public ResponseEntity<List<CategoryData>> getTicketsByCategory(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/tickets/by-category");
         return ResponseEntity.ok(analyticsService.getTicketsByCategory());
     }
@@ -85,8 +84,9 @@ public class AnalyticsController {
      * GET /api/analytics/tickets/by-priority
      */
     @GetMapping("/tickets/by-priority")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<PriorityData>> getTicketsByPriority() {
+    public ResponseEntity<List<PriorityData>> getTicketsByPriority(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/tickets/by-priority");
         return ResponseEntity.ok(analyticsService.getTicketsByPriority());
     }
@@ -96,9 +96,11 @@ public class AnalyticsController {
      * GET /api/analytics/tickets/top-requesters
      */
     @GetMapping("/tickets/top-requesters")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<List<AgentData>> getTopRequesters(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/tickets/top-requesters - limit: {}", limit);
         return ResponseEntity.ok(analyticsService.getTopRequesters(limit));
     }
@@ -110,8 +112,9 @@ public class AnalyticsController {
      * GET /api/analytics/assets/health
      */
     @GetMapping("/assets/health")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<HealthDistribution>> getAssetHealthDistribution() {
+    public ResponseEntity<List<HealthDistribution>> getAssetHealthDistribution(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/assets/health");
         return ResponseEntity.ok(analyticsService.getAssetHealthDistribution());
     }
@@ -121,8 +124,9 @@ public class AnalyticsController {
      * GET /api/analytics/assets/by-type
      */
     @GetMapping("/assets/by-type")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<CategoryData>> getAssetTypeDistribution() {
+    public ResponseEntity<List<CategoryData>> getAssetTypeDistribution(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/assets/by-type");
         return ResponseEntity.ok(analyticsService.getAssetTypeDistribution());
     }
@@ -134,8 +138,9 @@ public class AnalyticsController {
      * GET /api/analytics/changes/by-status
      */
     @GetMapping("/changes/by-status")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<ChangeStatusData>> getChangeStatusDistribution() {
+    public ResponseEntity<List<ChangeStatusData>> getChangeStatusDistribution(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/changes/by-status");
         return ResponseEntity.ok(analyticsService.getChangeStatusDistribution());
     }
@@ -145,8 +150,9 @@ public class AnalyticsController {
      * GET /api/analytics/changes/by-type
      */
     @GetMapping("/changes/by-type")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<ChangeTypeData>> getChangeTypeDistribution() {
+    public ResponseEntity<List<ChangeTypeData>> getChangeTypeDistribution(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/changes/by-type");
         return ResponseEntity.ok(analyticsService.getChangeTypeDistribution());
     }
@@ -158,8 +164,9 @@ public class AnalyticsController {
      * GET /api/analytics/reports
      */
     @GetMapping("/reports")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<List<ReportConfig>> getReports() {
+    public ResponseEntity<List<ReportConfig>> getReports(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/reports");
         return ResponseEntity.ok(reportService.getPublicReports());
     }
@@ -169,8 +176,9 @@ public class AnalyticsController {
      * GET /api/analytics/reports/{id}
      */
     @GetMapping("/reports/{id}")
-    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
-    public ResponseEntity<ReportConfig> getReportById(@PathVariable Long id) {
+    public ResponseEntity<ReportConfig> getReportById(@PathVariable Long id, Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem số liệu phân tích.");
         log.info("GET /api/analytics/reports/{}", id);
         return ResponseEntity.ok(reportService.getReportById(id));
     }

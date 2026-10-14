@@ -34,7 +34,9 @@ class AssetQueryAdapterTest {
     @Autowired
     private AssetQueryAdapter adapter;
 
-    private final ActorContext staff = ActorContext.of("nv", Role.NHAN_VIEN, "MKT", false);
+    // IT operator: thấy toàn bộ thiết bị (spec phase1-rbac-hardening §4.4).
+    private final ActorContext staff = ActorContext.of("nv", Role.NHAN_VIEN, "IT", true);
+    private final ActorContext business = ActorContext.of("nv_mkt", Role.NHAN_VIEN, "MKT", false);
     private final DomainDef d = AssetQueryAdapter.DEF;
 
     private void asset(String number, String name, AssetType type, HealthStatus health) {
@@ -57,6 +59,18 @@ class AssetQueryAdapterTest {
         asset("AST-T01", "Dell PowerEdge R740", AssetType.SERVER, HealthStatus.CRITICAL);
         asset("AST-T02", "HP ProLiant DL380", AssetType.SERVER, HealthStatus.WARNING);
         asset("AST-T03", "Asus 304 50% pin", AssetType.LAPTOP, HealthStatus.HEALTHY);
+    }
+
+    @Test
+    void businessUserSeesOnlyAssignedAssets() {
+        Asset mine = new Asset();
+        mine.setAssetNumber("AST-T04");
+        mine.setName("Laptop của tôi");
+        mine.setAssetType(AssetType.LAPTOP);
+        mine.setAssignedTo("NV_MKT");
+        assets.save(mine);
+        QueryResult r = adapter.execute(list(d, mine()), business);
+        assertThat(r.rows()).extracting(Row::id).containsExactly("AST-T04");
     }
 
     @Test
