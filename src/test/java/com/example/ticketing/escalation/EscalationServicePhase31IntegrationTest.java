@@ -168,7 +168,7 @@ class EscalationServicePhase31IntegrationTest {
         UserAccount requester = user("p31_req_mkt", UserRole.Role.NHAN_VIEN, mktDept, true, true);
 
         Ticket ticket = ticketRepository.save(newTicket(requester));
-        EscalationRule rule = persistRule(EscalationRule.EscalationAction.REASSIGN,
+        persistRule(EscalationRule.EscalationAction.REASSIGN,
             EscalationRule.EscalationTrigger.SLA_RESPONSE_BREACHED, target.getId(), null);
 
         // Sanity check: the rule is queryable the way the SLA scheduler sees it.
@@ -214,7 +214,7 @@ class EscalationServicePhase31IntegrationTest {
             UserAccount requester = user("p31_req_mkt_dis", UserRole.Role.NHAN_VIEN, mktDept, true, true);
 
             Ticket ticket = ticketRepository.save(newTicket(requester));
-            EscalationRule rule = persistRule(EscalationRule.EscalationAction.REASSIGN,
+            persistRule(EscalationRule.EscalationAction.REASSIGN,
                 EscalationRule.EscalationTrigger.SLA_RESPONSE_BREACHED, target.getId(), null);
 
             escalationService.checkAndEscalate(ticket);

@@ -4,7 +4,9 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Report Configuration Entity.
@@ -30,6 +32,27 @@ public class ReportConfig {
     @Column(length = 50)
     private String category;
 
+    // CP-3.3.11: the column is JSONB in the schema (V53) and must
+    // round-trip structured payloads through both ReportService
+    // paths (createReport + updateReport). Without
+    // @JdbcTypeCode(SqlTypes.JSON) Hibernate binds the parameter
+    // as varchar, which PostgreSQL rejects with SQLSTATE 42804
+    // ("column is of type jsonb but expression is of type
+    // character varying"). Critically, this failure also occurs
+    // when the Java field is null because the driver still sends
+    // a typed-varchar NULL that PostgreSQL cannot implicitly
+    // cast to jsonb, and it occurs on both INSERT (createReport)
+    // and UPDATE (updateReport) paths. This annotation matches
+    // the proven ChangeTimeline.event_data mapping (CP-3.3.7),
+    // the proven ChangeRequest.risk_factors mapping (CP-3.3.8),
+    // the proven ServiceRequest.form_data mapping (CP-3.3.9) and
+    // the proven ServiceCatalogItem.form_fields mapping
+    // (CP-3.3.10) used in production for other JSONB columns.
+    // CP-3.3.11 baseline run on PostgreSQL reproduced the
+    // error before this annotation was added - for round-trip,
+    // for Java null, for the JSON 'null' literal AND for the
+    // update path.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String config;
 

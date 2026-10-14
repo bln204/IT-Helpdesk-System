@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.ticketing.auth.UserRole;
-
 import jakarta.validation.Valid;
 
 /**
@@ -41,10 +39,11 @@ public class RagSearchController {
      * - ADMIN: Can search all tickets
      * - Others: Only tickets from their department
      * 
-     * @param query Natural language query
-     * @param limit Maximum number of results (default 5)
-     * @param minScore Minimum similarity score 0.0-1.0 (default 0.5)
-     * @param authentication The authenticated principal, used to obtain the username
+     * @param query          Natural language query
+     * @param limit          Maximum number of results (default 5)
+     * @param minScore       Minimum similarity score 0.0-1.0 (default 0.5)
+     * @param authentication The authenticated principal, used to obtain the
+     *                       username
      * @return List of semantically similar tickets (filtered by authorization)
      */
     @GetMapping("/search")
@@ -55,8 +54,10 @@ public class RagSearchController {
             @RequestParam(defaultValue = "0.5") double minScore,
             Authentication authentication) {
 
-        // Username MUST come from the authenticated principal established by Spring Security.
-        // JwtAuthenticationFilter stores the principal as a String, so @AuthenticationPrincipal
+        // Username MUST come from the authenticated principal established by Spring
+        // Security.
+        // JwtAuthenticationFilter stores the principal as a String, so
+        // @AuthenticationPrincipal
         // UserDetails resolves to null and department authorization would be bypassed.
         String username = authentication != null ? authentication.getName() : null;
 
@@ -78,7 +79,8 @@ public class RagSearchController {
             @Valid @RequestBody RagSearchDto.SearchRequest request,
             Authentication authentication) {
 
-        // See GET /search: principal is a String, so Authentication#getName() is required.
+        // See GET /search: principal is a String, so Authentication#getName() is
+        // required.
         String username = authentication != null ? authentication.getName() : null;
         return ResponseEntity.ok(ragSearchService.search(request, username));
     }

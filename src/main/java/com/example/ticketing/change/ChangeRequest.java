@@ -6,7 +6,9 @@ import java.util.List;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Change Request Entity - Yêu cầu thay đổi hạ tầng IT.
@@ -42,6 +44,16 @@ public class ChangeRequest {
     @Column(name = "risk_score")
     private Integer riskScore = 0;
 
+    // CP-3.3.8: the column is JSONB in the schema (V50) and must
+    // round-trip structured payloads. Without @JdbcTypeCode(SqlTypes.JSON)
+    // Hibernate binds the parameter as varchar, which PostgreSQL rejects
+    // with SQLSTATE 42804 ("column is of type jsonb but expression is
+    // of type character varying"). This annotation matches the proven
+    // ChangeTimeline.event_data mapping (CP-3.3.7) and the proven
+    // AiMessage.metadata mapping (CP-3.3.5) used in production for
+    // other JSONB columns. CP-3.3.8 baseline run on PostgreSQL
+    // reproduced the error before this annotation was added.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "risk_factors", columnDefinition = "jsonb")
     private String riskFactors;
 

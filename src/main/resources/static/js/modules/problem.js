@@ -230,6 +230,46 @@ const ProblemManagement = (() => {
         return await response.json();
     }
 
+    // PHASE 6.6.3 - atomic create + link. The backend sets the relationship
+    // in the same transaction; the caller just needs to refresh the Problem.
+    async function createKnownErrorForProblem(problemId, data) {
+        const response = await fetch(`${API_BASE}/${problemId}/known-error`, {
+            method: 'POST',
+            headers: window.Auth.getAuthHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || `Failed to create known error (HTTP ${response.status})`);
+        }
+        return await response.json();
+    }
+
+    async function linkExistingKnownError(problemId, knownErrorId) {
+        const response = await fetch(`${API_BASE}/${problemId}/known-error/link`, {
+            method: 'POST',
+            headers: window.Auth.getAuthHeaders(),
+            body: JSON.stringify({ knownErrorId })
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || `Failed to link known error (HTTP ${response.status})`);
+        }
+        return await response.json();
+    }
+
+    async function unlinkKnownErrorFromProblem(problemId) {
+        const response = await fetch(`${API_BASE}/${problemId}/known-error`, {
+            method: 'DELETE',
+            headers: window.Auth.getAuthHeaders()
+        });
+        // 204 No Content is the success signal; we don't try to parse a body.
+        if (!response.ok && response.status !== 204) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || `Failed to unlink known error (HTTP ${response.status})`);
+        }
+    }
+
     async function deleteKnownError(id) {
         const response = await fetch(`${API_BASE}/known-errors/${id}`, {
             method: 'DELETE',
@@ -270,7 +310,9 @@ const ProblemManagement = (() => {
 
         container.innerHTML = problemsList.map(problem => {
             const status = statusLabels[problem.status] || statusLabels['NEW'];
-            const canAddToKnownErrors = problem.status === 'RESOLVED';
+            // PHASE 6.6.3: button visible for any non-closed Problem, role-gated separately.
+            const isClosed = problem.status === 'CLOSED';
+            const hasKe = !!problem.knownErrorId;
             return `
                 <div class="problem-card">
                     <div class="problem-card-header">
@@ -281,14 +323,15 @@ const ProblemManagement = (() => {
                     <p class="problem-category">📁 ${problem.category || 'Không phân loại'}</p>
                     <div class="problem-meta">
                         <span>🔗 ${problem.totalIncidentsLinked || 0} incidents</span>
+                        ${hasKe ? `<span>📚 ${problem.knownErrorCode || ('KE #' + problem.knownErrorId)}</span>` : ''}
                         <span>📅 ${formatDate(problem.createdAt)}</span>
                     </div>
                     <div class="problem-footer">
                         <span class="problem-status ${status.class}">${status.label}</span>
                         <div class="problem-card-actions">
-                            ${canAddToKnownErrors ? `
-                                <button class="ghost btn-sm problem-add-to-known-error-btn" data-id="${problem.id}" title="Thêm vào Known Errors">
-                                    📚 Known Error
+                            ${!isClosed ? `
+                                <button class="ghost btn-sm problem-add-to-known-error-btn" data-id="${problem.id}" title="Liên kết Known Error">
+                                    ${hasKe ? '📚 Đổi Known Error' : '📚 Known Error'}
                                 </button>
                             ` : ''}
                             <button class="secondary btn-sm problem-view-btn" data-id="${problem.id}">Xem</button>
@@ -416,6 +459,21 @@ const ProblemManagement = (() => {
         const container = document.getElementById('problem-form');
         if (!container) return;
 
+        // PHASE 6.6.3 - role gate for Known Error actions.
+        // The backend @PreAuthorize is the security boundary; this is UX only.
+        const allowedRoles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG'];
+        const userRoles = (window.Auth && typeof window.Auth.getRoles === 'function')
+            ? window.Auth.getRoles()
+            : (window.Auth && typeof window.Auth.getCurrentUser === 'function'
+                ? [window.Auth.getCurrentUser()?.role].filter(Boolean)
+                : []);
+        const canManageKe = userRoles.some(r => allowedRoles.includes(r));
+        const isClosed = problem.status === 'CLOSED';
+        const hasKe = !!problem.knownErrorId;
+        const keStatusClass = problem.knownErrorStatus
+            ? `ke-status-${problem.knownErrorStatus.toLowerCase()}`
+            : '';
+
         container.innerHTML = `
             <div class="problem-detail-header">
                 <div>
@@ -488,20 +546,44 @@ const ProblemManagement = (() => {
                 </div>
             </div>
 
-            ${['IDENTIFIED', 'SOLVING', 'RESOLVED'].includes(problem.status) ? `
-                <div class="problem-add-known-error-section">
-                    <button class="secondary" onclick="ProblemManagement.openAddToKnownErrorModal(${problem.id})">
-                        📚 Thêm vào Known Errors Database
-                    </button>
-                </div>
-            ` : ''}
+            <!-- PHASE 6.6.3 - Known Error relationship panel -->
+            <div class="problem-known-error-section detail-section">
+                <h5>📚 Known Error</h5>
+                ${hasKe ? `
+                    <div class="ke-linked">
+                        <span>${escapeHtml(problem.knownErrorCode || ('KE #' + problem.knownErrorId))}</span>
+                        <span class="ke-status-badge ${keStatusClass}">${escapeHtml(problem.knownErrorStatus || '')}</span>
+                        ${(problem.knownErrorRelatedProblemsCount !== null && problem.knownErrorRelatedProblemsCount !== undefined)
+                            ? `<span class="ke-related-count">🔁 ${problem.knownErrorRelatedProblemsCount} problem</span>`
+                            : ''}
+                    </div>
+                ` : `
+                    <p class="muted">No linked Known Error</p>
+                `}
+                ${(!isClosed && canManageKe) ? `
+                    <div class="button-row" style="margin-top: 12px;">
+                        <button class="secondary" onclick="ProblemManagement.openAddToKnownErrorModal(${problem.id})">
+                            ${hasKe ? '🔄 Đổi / Tạo mới' : '➕ Tạo Known Error'}
+                        </button>
+                        <button class="ghost" onclick="ProblemManagement.openLinkExistingKnownErrorModal(${problem.id})">
+                            🔗 Liên kết Known Error đã có
+                        </button>
+                        ${hasKe ? `
+                            <button class="warning" onclick="ProblemManagement.confirmUnlinkKnownError(${problem.id})">
+                                ⛓️‍💥 Bỏ liên kết
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : ''}
+            </div>
         `;
 
         // Set current status
-        document.getElementById('problem-status-select').value = problem.status;
+        const statusSelect = document.getElementById('problem-status-select');
+        if (statusSelect) statusSelect.value = problem.status;
 
         // Add status change listener
-        document.getElementById('problem-status-select').addEventListener('change', async (e) => {
+        statusSelect?.addEventListener('change', async (e) => {
             try {
                 await updateProblemStatus(problem.id, e.target.value);
                 Toast.show('Đã cập nhật trạng thái', 'success');
@@ -663,8 +745,16 @@ const ProblemManagement = (() => {
                         <textarea id="ke-root-cause" rows="2" placeholder="Nguyên nhân gốc rễ..."></textarea>
                     </label>
                     <label>
+                        Loại nguyên nhân
+                        <input type="text" id="ke-root-cause-category" placeholder="INFRASTRUCTURE, CONFIGURATION, PROCESS, VENDOR, HUMAN_ERROR, DESIGN_FLAW..." />
+                    </label>
+                    <label>
                         Workaround (Giải pháp tạm thời)
                         <textarea id="ke-workaround" rows="2" placeholder="Giải pháp tạm thời..."></textarea>
+                    </label>
+                    <label>
+                        Permanent resolution
+                        <textarea id="ke-resolution" rows="2" placeholder="Giải pháp vĩnh viễn (nếu có)..."></textarea>
                     </label>
                     <label>
                         Fix Steps (Các bước khắc phục)
@@ -701,12 +791,19 @@ const ProblemManagement = (() => {
             submitBtn.textContent = 'Đang tạo...';
         }
 
+        // PHASE 6.6.3 - the hidden input carries the problem id and is the
+        // single source of truth for which Problem this KE is being created for.
+        const problemIdRaw = document.getElementById('add-to-known-error-problem-id')?.value;
+        const problemId = problemIdRaw ? parseInt(problemIdRaw, 10) : null;
+
         const data = {
             title: document.getElementById('ke-title')?.value?.trim(),
             description: document.getElementById('ke-description')?.value?.trim(),
             symptoms: document.getElementById('ke-symptoms')?.value?.trim(),
             rootCause: document.getElementById('ke-root-cause')?.value?.trim(),
+            rootCauseCategory: document.getElementById('ke-root-cause-category')?.value?.trim(),
             workaround: document.getElementById('ke-workaround')?.value?.trim(),
+            resolution: document.getElementById('ke-resolution')?.value?.trim(),
             fixSteps: document.getElementById('ke-fix-steps')?.value?.trim()
         };
 
@@ -720,20 +817,196 @@ const ProblemManagement = (() => {
             return;
         }
 
+        if (!problemId || Number.isNaN(problemId)) {
+            Toast.show('Không xác định được Problem. Vui lòng đóng và mở lại Problem.', 'error');
+            isSubmitting = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Tạo Known Error';
+            }
+            return;
+        }
+
         try {
-            const knownError = await createKnownError(data);
-            Toast.show(`Đã tạo Known Error: ${knownError.errorCode}`, 'success');
+            // PHASE 6.6.3 - use the new atomic endpoint that creates the KE
+            // AND links it to the Problem in one transaction.
+            const knownError = await createKnownErrorForProblem(problemId, data);
+            Toast.show(`Đã tạo Known Error ${knownError.errorCode} và liên kết với Problem.`, 'success');
             closeAddToKnownErrorModal();
-            closeModal();
+            // Refresh the underlying Problem so the detail view reflects the
+            // new knownErrorId / knownErrorCode / knownErrorStatus.
+            await refreshProblemDetail(problemId);
             loadKnownErrors();
         } catch (error) {
-            Toast.show(error.message || 'Lỗi khi tạo Known Error', 'error');
+            const msg = (error && error.message) || 'Lỗi khi tạo Known Error';
+            if (msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('không có quyền')) {
+                Toast.show('Bạn không có quyền thực hiện thao tác này.', 'error');
+            } else {
+                Toast.show(msg, 'error');
+            }
         } finally {
             isSubmitting = false;
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Tạo Known Error';
             }
+        }
+    }
+
+    // PHASE 6.6.3 - new "Link to existing Known Error" UX. The user searches
+    // the KEDB, picks a row, the service links it to the Problem. The DTO is
+    // intentionally tiny (search field + results + "Link" button per row) so
+    // the reuse-first path is the lowest-friction choice.
+    function openLinkExistingKnownErrorModal(problemId) {
+        let modal = document.getElementById('link-existing-known-error-modal');
+        if (modal) modal.remove();
+
+        modal = document.createElement('div');
+        modal.id = 'link-existing-known-error-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 720px;">
+                <header class="panel-header">
+                    <div>
+                        <h3>Liên kết Known Error đã có</h3>
+                        <p>Tìm Known Error phù hợp với Problem hiện tại để tránh tạo trùng.</p>
+                    </div>
+                    <button class="ghost" onclick="ProblemManagement.closeLinkExistingKnownErrorModal()">Đóng</button>
+                </header>
+                <div class="stack">
+                    <input type="hidden" id="link-existing-problem-id" value="${problemId}" />
+                    <label>
+                        Tìm kiếm Known Error
+                        <input type="text" id="link-existing-search-input" placeholder="Nhập từ khóa: tiêu đề, nguyên nhân, workaround..." />
+                    </label>
+                    <div class="button-row">
+                        <button type="button" class="primary" onclick="ProblemManagement.searchKnownErrorsForLink()">Tìm</button>
+                    </div>
+                    <div id="link-existing-results"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        modal.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        // Auto-load the most recent KEs so the user sees something immediately.
+        searchKnownErrorsForLink();
+    }
+
+    function closeLinkExistingKnownErrorModal() {
+        const modal = document.getElementById('link-existing-known-error-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.remove();
+        }
+        document.body.classList.remove('modal-open');
+    }
+
+    async function searchKnownErrorsForLink() {
+        const query = document.getElementById('link-existing-search-input')?.value?.trim() || '';
+        const resultsEl = document.getElementById('link-existing-results');
+        if (!resultsEl) return;
+        resultsEl.innerHTML = '<p class="muted">Đang tìm...</p>';
+        try {
+            const url = query
+                ? `${API_BASE}/known-errors/search?q=${encodeURIComponent(query)}`
+                : `${API_BASE}/known-errors`;
+            const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
+            if (!response.ok) throw new Error('Failed to search known errors');
+            const results = await response.json();
+            renderLinkExistingResults(results || []);
+        } catch (err) {
+            resultsEl.innerHTML = '<p class="muted">Lỗi khi tìm Known Error.</p>';
+        }
+    }
+
+    function renderLinkExistingResults(results) {
+        const resultsEl = document.getElementById('link-existing-results');
+        if (!resultsEl) return;
+        if (results.length === 0) {
+            resultsEl.innerHTML = '<p class="muted">Không tìm thấy Known Error phù hợp. Bạn có thể tạo mới bằng nút "Tạo Known Error".</p>';
+            return;
+        }
+        // Filter out OBSOLETE rows since they cannot be linked.
+        const linkable = results.filter(ke => ke.status !== 'OBSOLETE');
+        if (linkable.length === 0) {
+            resultsEl.innerHTML = '<p class="muted">Tất cả Known Error tìm được đều OBSOLETE. Vui lòng tạo mới.</p>';
+            return;
+        }
+        resultsEl.innerHTML = linkable.map(ke => `
+            <div class="link-existing-row">
+                <div class="link-existing-row-text">
+                    <strong>${escapeHtml(ke.errorCode)}</strong>
+                    <span>${escapeHtml(ke.title || '')}</span>
+                    <span class="muted">Status: ${escapeHtml(ke.status || '')} • ${(ke.relatedProblemsCount || 0)} problem</span>
+                </div>
+                <button class="primary btn-sm" data-id="${ke.id}">Liên kết</button>
+            </div>
+        `).join('');
+        // Wire up per-row click handlers.
+        resultsEl.querySelectorAll('button[data-id]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const keId = parseInt(btn.dataset.id, 10);
+                handleLinkExisting(keId);
+            });
+        });
+    }
+
+    async function handleLinkExisting(knownErrorId) {
+        const problemIdRaw = document.getElementById('link-existing-problem-id')?.value;
+        const problemId = problemIdRaw ? parseInt(problemIdRaw, 10) : null;
+        if (!problemId) {
+            Toast.show('Không xác định được Problem.', 'error');
+            return;
+        }
+        try {
+            await linkExistingKnownError(problemId, knownErrorId);
+            Toast.show('Đã liên kết Known Error với Problem.', 'success');
+            closeLinkExistingKnownErrorModal();
+            await refreshProblemDetail(problemId);
+            loadKnownErrors();
+        } catch (error) {
+            const msg = (error && error.message) || 'Lỗi khi liên kết Known Error';
+            if (msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('không có quyền')) {
+                Toast.show('Bạn không có quyền thực hiện thao tác này.', 'error');
+            } else if (msg.toLowerCase().includes('obsolete')) {
+                Toast.show('Known Error đã OBSOLETE, không thể liên kết.', 'error');
+            } else {
+                Toast.show(msg, 'error');
+            }
+        }
+    }
+
+    function confirmUnlinkKnownError(problemId) {
+        if (!confirm('Bỏ liên kết Known Error khỏi Problem này?')) {
+            return;
+        }
+        unlinkKnownErrorFromProblem(problemId)
+            .then(async () => {
+                Toast.show('Đã bỏ liên kết Known Error.', 'success');
+                await refreshProblemDetail(problemId);
+                loadKnownErrors();
+            })
+            .catch((err) => {
+                const msg = (err && err.message) || 'Lỗi khi bỏ liên kết';
+                if (msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('không có quyền')) {
+                    Toast.show('Bạn không có quyền thực hiện thao tác này.', 'error');
+                } else {
+                    Toast.show(msg, 'error');
+                }
+            });
+    }
+
+    // PHASE 6.6.3 - refresh the open Problem detail modal after a KE mutation
+    // so the linked-Known-Error panel reflects the new state without a full
+    // page reload.
+    async function refreshProblemDetail(problemId) {
+        try {
+            const fresh = await loadProblemById(problemId);
+            currentProblem = fresh;
+            renderProblemDetail(fresh);
+        } catch (err) {
+            console.error('refreshProblemDetail failed', err);
         }
     }
 
@@ -895,6 +1168,12 @@ const ProblemManagement = (() => {
         openAddToKnownErrorModal,
         closeAddToKnownErrorModal,
         submitAddToKnownError,
+        // PHASE 6.6.3 - new public surface for the reuse-first workflow.
+        openLinkExistingKnownErrorModal,
+        closeLinkExistingKnownErrorModal,
+        searchKnownErrorsForLink,
+        confirmUnlinkKnownError,
+        refreshProblemDetail,
         confirmDeleteKnownError
     };
 })();

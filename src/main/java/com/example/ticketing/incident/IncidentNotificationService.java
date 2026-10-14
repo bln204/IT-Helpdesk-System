@@ -15,6 +15,8 @@ import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
 import com.example.ticketing.department.ItDepartmentResolver;
+import com.example.ticketing.team.TeamMember;
+import com.example.ticketing.team.TeamMemberRepository;
 
 /**
  * Service xử lý notifications cho incident lifecycle.
@@ -29,14 +31,17 @@ public class IncidentNotificationService {
     private final NotificationRepository notificationRepository;
     private final UserAccountRepository userAccountRepository;
     private final ItDepartmentResolver itDepartmentResolver;
+    private final TeamMemberRepository teamMemberRepository;
 
     public IncidentNotificationService(
             NotificationRepository notificationRepository,
             UserAccountRepository userAccountRepository,
-            ItDepartmentResolver itDepartmentResolver) {
+            ItDepartmentResolver itDepartmentResolver,
+            TeamMemberRepository teamMemberRepository) {
         this.notificationRepository = notificationRepository;
         this.userAccountRepository = userAccountRepository;
         this.itDepartmentResolver = itDepartmentResolver;
+        this.teamMemberRepository = teamMemberRepository;
     }
     
     /**
@@ -355,9 +360,18 @@ public class IncidentNotificationService {
         if (incident.getTeam() == null) {
             return;
         }
-        // TODO: Implement khi có thông tin về team members
-        log.info("Team member notification for incident: {} - Team: {}", 
-            incident.getIncidentNumber(), incident.getTeam().getName());
+        String assignee = incident.getAssignedTo() != null ? incident.getAssignedTo().getUsername() : null;
+        for (TeamMember member : teamMemberRepository.findByTeamIdAndEnabledTrue(incident.getTeam().getId())) {
+            UserAccount user = member.getUser();
+            // assignee already got a personal assignment notification
+            if (user == null || !user.isEnabled() || user.getUsername().equals(assignee)) {
+                continue;
+            }
+            Notification notification = new Notification(user.getUsername(), type, title, message);
+            notification.setTicketId(incident.getId());
+            notification.setTicketNumber(incident.getIncidentNumber());
+            notificationRepository.save(notification);
+        }
     }
     
     /**

@@ -1,0 +1,919 @@
+// ==================== Floating AI Assistant ====================
+// Phase 6.6 frontend integration.
+//
+// - Uses the existing request helper (core/api.js) so JWT auth, CORS,
+//   timeouts, and structured error parsing stay consistent.
+// - Calls ONLY the audited backend endpoint POST /api/ai/ask.
+// - Per-call timeout is overridden to 180_000 ms (180 s) because the
+//   production Gemma3:4b chat timeout is 180 s; the global default of
+//   30 s in core/api.js is intentionally NOT changed.
+// - Renders AI responses using textContent only. No innerHTML for AI
+//   text, no Markdown parser, no new dependencies.
+// - Role gate uses the existing window.Auth.hasRole helper; this is
+//   purely UX — backend @PreAuthorize remains the security boundary.
+// - Conversation state lives in memory only (this module). No database,
+//   no localStorage, no conversationId. The /api/ai/ask contract does
+//   not include such a field.
+
+import { request } from '../core/api.js';
+
+const ENDPOINT = '/api/ai/ask';
+const AI_REQUEST_TIMEOUT_MS = 180000;
+const MAX_QUESTION_LENGTH = 500;
+const MIN_QUESTION_LENGTH = 5;
+
+const ALLOWED_ROLES = [
+    'ROLE_ADMIN',
+    'ROLE_GIAM_DOC',
+    'ROLE_TRUONG_PHONG',
+    'ROLE_NHAN_VIEN',
+];
+
+// PHASE 7.7 hotfix-22: chat-box suggestion buttons have
+// been removed entirely (constant + render path +
+// submitSuggestion helper). The user reported that
+// pre-canned suggestions (e.g. "Ticket TKT-2026-00199
+// đang ở trạng thái gì?") led the LLM to hallucinate a
+// status when the suggested ticket did not exist in
+// the database (see hotfix-21 for the server-side
+// short-circuit). Removing the buttons at the source
+// (frontend) is a defense-in-depth measure so no role
+// (NHAN_VIEN, TRUONG_PHONG, GIAM_DOC, ADMIN) ever
+// sees them again.
+
+const AI_ERROR_MESSAGES = {
+    'ACCESS_DENIED':
+        'Bạn không có quyền sử dụng AI Assistant.',
+    'REQUEST_TIMEOUT':
+        'AI mất nhiều thời gian để phản hồi. Vui lòng thử lại.',
+    'NETWORK_ERROR':
+        'Không thể kết nối đến hệ thống AI. Vui lòng kiểm tra kết nối và thử lại.',
+    'LLM_UNAVAILABLE':
+        'Dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau.',
+    'LLM_TIMEOUT':
+        'AI mất nhiều thời gian để phản hồi. Vui lòng thử lại.',
+    'LLM_ERROR_RESPONSE':
+        'AI tạm thời không thể tạo câu trả lời. Vui lòng thử lại.',
+    'LLM_MALFORMED_RESPONSE':
+        'AI tạm thời không thể tạo câu trả lời. Vui lòng thử lại.',
+    'LLM_EMPTY_RESPONSE':
+        'AI tạm thời không thể tạo câu trả lời. Vui lòng thử lại.',
+    'EMBEDDING_UNAVAILABLE':
+        'Dịch vụ tìm kiếm AI hiện không khả dụng. Vui lòng thử lại sau.',
+    'EMBEDDING_TIMEOUT':
+        'AI mất nhiều thời gian để tìm kiếm dữ liệu. Vui lòng thử lại.',
+    'EMBEDDING_MALFORMED_RESPONSE':
+        'Dịch vụ tìm kiếm AI hiện không khả dụng. Vui lòng thử lại sau.',
+    'VALIDATION_ERROR':
+        'Câu hỏi không hợp lệ. Vui lòng kiểm tra lại nội dung.',
+};
+
+const FALLBACK_ERROR_MESSAGE =
+    'AI tạm thời không khả dụng. Vui lòng thử lại sau.';
+
+// ==================== Module state ====================
+let state = {
+    initialized: false,
+    isOpen: false,
+    isMinimized: false,
+    isBusy: false,
+    sessionId: null,    // current conversation thread (Phase 7)
+    pendingDraft: null, // TicketDraft awaiting user confirmation
+    messages: [], // [{role: 'user'|'ai'|'error', node: HTMLElement}]
+};
+
+let dom = null;
+
+// ==================== Helpers ====================
+
+const hasAllowedRole = () => {
+    const Auth = window.Auth;
+    if (!Auth || typeof Auth.hasRole !== 'function') return false;
+    return ALLOWED_ROLES.some((role) => {
+        try {
+            return Auth.hasRole(role);
+        } catch (e) {
+            return false;
+        }
+    });
+};
+
+const getAuthUser = () => {
+    const Auth = window.Auth;
+    if (Auth && typeof Auth.getCurrentUser === 'function') {
+        try {
+            return Auth.getCurrentUser();
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+};
+
+const buildDom = () => {
+    // Floating button
+    const fab = document.createElement('button');
+    fab.className = 'ai-fab hidden';
+    fab.type = 'button';
+    fab.id = 'ai-fab';
+    fab.setAttribute('aria-label', 'Mở AI Assistant');
+    fab.setAttribute('title', 'AI Assistant');
+    fab.textContent = '🤖';
+
+    // Panel
+    const panel = document.createElement('aside');
+    panel.className = 'ai-panel hidden';
+    panel.id = 'ai-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'AI Assistant');
+    panel.setAttribute('aria-modal', 'false');
+
+    const header = document.createElement('header');
+    header.className = 'ai-panel-header';
+
+    const headerText = document.createElement('div');
+    headerText.className = 'ai-panel-header-text';
+    const title = document.createElement('strong');
+    title.textContent = 'AI Assistant';
+    const subtitle = document.createElement('span');
+    subtitle.textContent = 'Trợ lý IT Helpdesk';
+    headerText.appendChild(title);
+    headerText.appendChild(subtitle);
+
+    const headerActions = document.createElement('div');
+    headerActions.className = 'ai-panel-header-actions';
+    const minBtn = document.createElement('button');
+    minBtn.type = 'button';
+    minBtn.id = 'ai-minimize-btn';
+    minBtn.setAttribute('aria-label', 'Thu nhỏ');
+    minBtn.setAttribute('title', 'Thu nhỏ');
+    minBtn.textContent = '−';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.id = 'ai-close-btn';
+    closeBtn.setAttribute('aria-label', 'Đóng');
+    closeBtn.setAttribute('title', 'Đóng');
+    closeBtn.textContent = '×';
+    headerActions.appendChild(minBtn);
+    headerActions.appendChild(closeBtn);
+
+    header.appendChild(headerText);
+    header.appendChild(headerActions);
+
+    const body = document.createElement('div');
+    body.className = 'ai-panel-body';
+    body.id = 'ai-panel-body';
+
+    const footer = document.createElement('footer');
+    footer.className = 'ai-panel-footer';
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'ai-input-row';
+    const textarea = document.createElement('textarea');
+    textarea.id = 'ai-input';
+    textarea.rows = 1;
+    textarea.maxLength = MAX_QUESTION_LENGTH;
+    textarea.placeholder = 'Nhập câu hỏi của bạn...';
+    textarea.setAttribute('aria-label', 'Câu hỏi cho AI Assistant');
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.id = 'ai-send-btn';
+    sendBtn.className = 'ai-send-btn';
+    sendBtn.setAttribute('aria-label', 'Gửi câu hỏi');
+    sendBtn.textContent = '➤';
+    inputRow.appendChild(textarea);
+    inputRow.appendChild(sendBtn);
+
+    const hint = document.createElement('div');
+    hint.className = 'ai-hint';
+    hint.textContent = 'Enter để gửi, Shift + Enter để xuống dòng.';
+
+    footer.appendChild(inputRow);
+    footer.appendChild(hint);
+
+    panel.appendChild(header);
+    panel.appendChild(body);
+    panel.appendChild(footer);
+
+    document.body.appendChild(fab);
+    document.body.appendChild(panel);
+
+    return {
+        fab,
+        panel,
+        header,
+        minBtn,
+        closeBtn,
+        body,
+        textarea,
+        sendBtn,
+    };
+};
+
+const renderIntro = () => {
+    if (!dom) return;
+    const intro = document.createElement('div');
+    intro.className = 'ai-intro';
+
+    const greeting = document.createElement('p');
+    greeting.textContent =
+        'Xin chào! Tôi là trợ lý AI của hệ thống IT Helpdesk.';
+    const description = document.createElement('p');
+    description.textContent =
+        'Bạn có thể hỏi tôi về các ticket, trạng thái xử lý hoặc thông tin liên quan đến hệ thống.';
+
+    intro.appendChild(greeting);
+    intro.appendChild(description);
+
+    // PHASE 7.7 hotfix-22: chat-box suggestion buttons
+    // are no longer rendered. The render block that
+    // used to call INTRO_SUGGESTIONS.forEach(...) has
+    // been removed entirely (the constant is also gone
+    // from the top of the file). This applies to all
+    // roles.
+
+    dom.body.appendChild(intro);
+    state.messages.push({ role: 'intro', node: intro });
+};
+
+const appendUserMessage = (text) => {
+    if (!dom) return null;
+    const msg = document.createElement('div');
+    msg.className = 'ai-msg ai-msg-user';
+    msg.textContent = text; // textContent only — never innerHTML
+    dom.body.appendChild(msg);
+    scrollBodyToBottom();
+    state.messages.push({ role: 'user', node: msg });
+    return msg;
+};
+
+const appendLoadingMessage = () => {
+    if (!dom) return null;
+    const msg = document.createElement('div');
+    msg.className = 'ai-msg ai-msg-ai ai-loading';
+    msg.textContent = 'AI đang xử lý...';
+    dom.body.appendChild(msg);
+    scrollBodyToBottom();
+    state.messages.push({ role: 'loading', node: msg });
+    return msg;
+};
+
+const removeMessage = (entry) => {
+    if (!entry || !entry.node || !entry.node.parentNode) return;
+    entry.node.parentNode.removeChild(entry.node);
+};
+
+const appendAiMessage = (response) => {
+    if (!dom) return null;
+    const msg = document.createElement('div');
+    msg.className = 'ai-msg ai-msg-ai';
+
+    const text = document.createElement('div');
+    text.textContent = response && response.answer ? response.answer : '';
+    msg.appendChild(text);
+
+    // No-context hint (subtle, only when hasContext is explicitly false).
+    // Legacy-pipeline hint only: query-plan answers (searchType 'query-plan') already state counts/empty results
+    // for every domain, and "ticket" would be wrong for assets/users/changes.
+    const isQueryPlan = response && response.metadata && response.metadata.searchType === 'query-plan';
+    // Structured actions (ticket draft, missing field) are not lookups either.
+    if (response && !isQueryPlan && !response.action && response.hasContext === false && response.contextCount === 0) {
+        const hint = document.createElement('div');
+        hint.className = 'ai-no-context';
+        hint.textContent = 'Không tìm thấy ticket liên quan trong dữ liệu hiện có.';
+        msg.appendChild(hint);
+    }
+
+    // Sources (collapsible)
+    if (
+        response &&
+        Array.isArray(response.sources) &&
+        response.sources.length > 0
+    ) {
+        const details = document.createElement('details');
+        details.className = 'ai-msg-sources';
+        const summary = document.createElement('summary');
+        summary.textContent = `Nguồn tham khảo (${response.sources.length})`;
+        details.appendChild(summary);
+
+        const ul = document.createElement('ul');
+        response.sources.forEach((source, index) => {
+            const li = document.createElement('li');
+            const number = document.createElement('span');
+            number.className = 'ai-source-number';
+            number.textContent = `${index + 1}.`;
+            li.appendChild(number);
+
+            // PHASE 6.6.4 - the sourceType discriminator drives the
+            // rendered label. TICKET sources use the existing
+            // ticketNumber; KNOWN_ERROR sources use the new
+            // knownErrorCode; RELATIONAL sources are rendered with a
+            // distinct prefix so the user can see the answer came from
+            // a deterministic lookup, not a similarity match.
+            const sourceType = source.sourceType || 'TICKET';
+            const isKnownError = sourceType === 'KNOWN_ERROR';
+            const isRelational = sourceType === 'RELATIONAL';
+
+            const prefix = document.createElement('strong');
+            if (isKnownError) {
+                prefix.textContent = source.knownErrorCode || '—';
+                li.classList.add('ai-source-known-error');
+            } else if (isRelational) {
+                prefix.textContent = (source.knownErrorCode || source.ticketNumber || '—');
+                li.classList.add('ai-source-relational');
+            } else {
+                prefix.textContent = source.ticketNumber || '—';
+                li.classList.add('ai-source-ticket');
+            }
+            li.appendChild(prefix);
+
+            if (source.title) {
+                const titleSpan = document.createElement('span');
+                titleSpan.textContent = ` — ${source.title}`;
+                li.appendChild(titleSpan);
+            }
+
+            // Similarity score is rendered for vector sources but
+            // suppressed for RELATIONAL lookups (which are exact, not
+            // probabilistic).
+            if (
+                !isRelational &&
+                typeof source.similarityScore === 'number' &&
+                !Number.isNaN(source.similarityScore)
+            ) {
+                const score = document.createElement('span');
+                score.className = 'ai-source-score';
+                const pct = Math.round(source.similarityScore * 100);
+                score.textContent = `Độ liên quan: ${pct}%`;
+                li.appendChild(score);
+            } else if (isRelational) {
+                const tag = document.createElement('span');
+                tag.className = 'ai-source-score';
+                tag.textContent = 'Tra cứu';
+                li.appendChild(tag);
+            }
+            ul.appendChild(li);
+        });
+        details.appendChild(ul);
+        msg.appendChild(details);
+    }
+
+    // Lightweight metadata footer (model + processing time only)
+    if (
+        response &&
+        response.metadata &&
+        (response.metadata.model || response.metadata.processingTimeMs)
+    ) {
+        const meta = document.createElement('div');
+        meta.className = 'ai-msg-meta';
+        const model = response.metadata.model || 'model';
+        const ms = response.metadata.processingTimeMs;
+        const seconds = typeof ms === 'number' ? (ms / 1000).toFixed(1) : null;
+        meta.textContent = seconds
+            ? `${model} • ${seconds}s`
+            : `${model}`;
+        msg.appendChild(meta);
+    }
+
+    dom.body.appendChild(msg);
+    scrollBodyToBottom();
+    state.messages.push({ role: 'ai', node: msg });
+    return msg;
+};
+
+const appendErrorMessage = (message) => {
+    if (!dom) return null;
+    const msg = document.createElement('div');
+    msg.className = 'ai-msg-error';
+    msg.textContent = message;
+    dom.body.appendChild(msg);
+    scrollBodyToBottom();
+    state.messages.push({ role: 'error', node: msg });
+    return msg;
+};
+
+const scrollBodyToBottom = () => {
+    if (!dom) return;
+    dom.body.scrollTop = dom.body.scrollHeight;
+};
+
+const setBusy = (busy) => {
+    state.isBusy = busy;
+    if (!dom) return;
+    dom.sendBtn.disabled = busy;
+    dom.textarea.disabled = busy;
+    if (busy) {
+        dom.textarea.setAttribute('aria-busy', 'true');
+    } else {
+        dom.textarea.removeAttribute('aria-busy');
+    }
+};
+
+const clearConversation = () => {
+    if (!dom) return;
+    // Drop every rendered message
+    state.messages.forEach((entry) => removeMessage(entry));
+    state.messages = [];
+    renderIntro();
+};
+
+const openPanel = () => {
+    if (!dom) return;
+    state.isOpen = true;
+    state.isMinimized = false;
+    dom.panel.classList.remove('hidden');
+    dom.panel.classList.remove('minimized');
+    // Reset minBtn label
+    dom.minBtn.textContent = '−';
+    dom.minBtn.setAttribute('title', 'Thu nhỏ');
+    dom.minBtn.setAttribute('aria-label', 'Thu nhỏ');
+    if (state.messages.length === 0) {
+        renderIntro();
+    }
+    scrollBodyToBottom();
+    // Focus management
+    setTimeout(() => {
+        if (dom && !state.isBusy) dom.textarea.focus();
+    }, 50);
+};
+
+const closePanel = () => {
+    if (!dom) return;
+    state.isOpen = false;
+    state.isMinimized = false;
+    dom.panel.classList.add('hidden');
+    dom.panel.classList.remove('minimized');
+    if (dom.fab) dom.fab.focus();
+};
+
+const toggleMinimize = () => {
+    if (!dom) return;
+    state.isMinimized = !state.isMinimized;
+    if (state.isMinimized) {
+        dom.panel.classList.add('minimized');
+        dom.minBtn.textContent = '+';
+        dom.minBtn.setAttribute('title', 'Mở rộng');
+        dom.minBtn.setAttribute('aria-label', 'Mở rộng');
+    } else {
+        dom.panel.classList.remove('minimized');
+        dom.minBtn.textContent = '−';
+        dom.minBtn.setAttribute('title', 'Thu nhỏ');
+        dom.minBtn.setAttribute('aria-label', 'Thu nhỏ');
+        scrollBodyToBottom();
+        if (!state.isBusy) dom.textarea.focus();
+    }
+};
+
+// ==================== API call ====================
+
+const submitQuestion = async (rawQuestion) => {
+    if (!dom || state.isBusy) return;
+
+    const question = (rawQuestion || '').trim();
+    if (!question) {
+        appendErrorMessage('Vui lòng nhập câu hỏi.');
+        return;
+    }
+    if (question.length < MIN_QUESTION_LENGTH) {
+        appendErrorMessage(
+            `Câu hỏi quá ngắn (tối thiểu ${MIN_QUESTION_LENGTH} ký tự).`
+        );
+        return;
+    }
+    if (question.length > MAX_QUESTION_LENGTH) {
+        appendErrorMessage(
+            `Câu hỏi quá dài (tối đa ${MAX_QUESTION_LENGTH} ký tự).`
+        );
+        return;
+    }
+
+    // Clear intro on first real interaction so the conversation feels real
+    if (state.messages.length === 1 && state.messages[0].role === 'intro') {
+        state.messages.forEach((entry) => removeMessage(entry));
+        state.messages = [];
+    }
+
+    appendUserMessage(question);
+    // Drop any stale validation error left in the body
+    state.messages
+        .filter((entry) => entry.role === 'error')
+        .forEach((entry) => removeMessage(entry));
+    state.messages = state.messages.filter((entry) => entry.role !== 'error');
+
+    // Clear the input only after the question is accepted, so the user
+    // can still see what they sent and (on error) copy/retry it.
+    dom.textarea.value = '';
+    autoResizeTextarea();
+
+    setBusy(true);
+    const loadingEntry = appendLoadingMessage();
+
+    try {
+        // Phase 7: include sessionId so the server can keep the
+        // conversation history across calls. The server returns the
+        // id on the first response; we cache it and resend.
+        const body = { question };
+        if (state.sessionId) body.sessionId = state.sessionId;
+        const data = await request(ENDPOINT, {
+            method: 'POST',
+            body: JSON.stringify(body),
+            timeout: AI_REQUEST_TIMEOUT_MS,
+        });
+
+        removeMessage(loadingEntry);
+        if (
+            data &&
+            typeof data === 'object' &&
+            Object.prototype.hasOwnProperty.call(data, 'answer')
+        ) {
+            if (data.sessionId) state.sessionId = data.sessionId;
+            handleServerAction(data);
+        } else {
+            appendErrorMessage(
+                AI_ERROR_MESSAGES['LLM_MALFORMED_RESPONSE'] || FALLBACK_ERROR_MESSAGE
+            );
+        }
+    } catch (err) {
+        removeMessage(loadingEntry);
+        const code = err && err.errorCode ? String(err.errorCode) : '';
+        const status = err && err.status ? Number(err.status) : 0;
+
+        let message = FALLBACK_ERROR_MESSAGE;
+        if (status === 401) {
+            // The api.js wrapper already triggers logout on 401 with token;
+            // surface a friendly message here without redirecting.
+            message =
+                'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để sử dụng AI Assistant.';
+        } else if (status === 403 || code === 'ACCESS_DENIED') {
+            message = AI_ERROR_MESSAGES['ACCESS_DENIED'] || FALLBACK_ERROR_MESSAGE;
+        } else if (AI_ERROR_MESSAGES[code]) {
+            message = AI_ERROR_MESSAGES[code];
+        } else if (code === 'VALIDATION_ERROR') {
+            message =
+                (err && err.message) ||
+                AI_ERROR_MESSAGES['VALIDATION_ERROR'] ||
+                FALLBACK_ERROR_MESSAGE;
+        }
+
+        appendErrorMessage(message);
+    } finally {
+        setBusy(false);
+    }
+};
+
+// ==================== Phase 7: structured actions ====================
+
+/**
+ * Phase 7 - the server can return a structured action alongside
+ * the normal text answer. Render the appropriate UI:
+ *   - CONFIRM_TICKET_DRAFT  -> preview form + "Create ticket" button
+ *   - ASK_MISSING_FIELD     -> highlighted prompt for the missing field
+ *   - TICKET_CREATED        -> success card with the new ticket number
+ *   - null / unknown        -> plain text answer
+ */
+const handleServerAction = (data) => {
+    const action = data && data.action ? String(data.action) : null;
+    const payloadRaw = data && data.actionPayload ? String(data.actionPayload) : null;
+    let payload = null;
+    if (payloadRaw) {
+        try { payload = JSON.parse(payloadRaw); } catch (e) { payload = null; }
+    }
+    if (action === 'CONFIRM_TICKET_DRAFT' && payload) {
+        state.pendingDraft = payload;
+        appendAiMessage(data);
+        appendDraftPreview(payload);
+        return;
+    }
+    if (action === 'ASK_MISSING_FIELD' && payload && payload.field) {
+        appendAiMessage(data);
+        appendMissingFieldHint(payload.field);
+        return;
+    }
+    if (action === 'TICKET_CREATED' && payload && payload.ticketNumber) {
+        state.pendingDraft = null;
+        appendAiMessage(data);
+        return;
+    }
+    appendAiMessage(data);
+};
+
+const appendMissingFieldHint = (field) => {
+    if (!dom) return;
+    const hint = document.createElement('div');
+    hint.className = 'ai-msg ai-msg-ai ai-missing-field';
+    const label = fieldLabel(field);
+    hint.textContent = `👉 Can cung cap: ${label}`;
+    dom.body.appendChild(hint);
+    scrollBodyToBottom();
+};
+
+const fieldLabel = (f) => {
+    switch (f) {
+        case 'title': return 'tieu de van de';
+        case 'description': return 'mo ta chi tiet';
+        case 'priority': return 'muc do khan cap (LOW/MEDIUM/HIGH/URGENT/CRITICAL)';
+        case 'category': return 'loai (SOFTWARE/ACCESS/NETWORK/HARDWARE/SECURITY/EMAIL/ACCOUNT/OTHER)';
+        default: return f;
+    }
+};
+
+const appendDraftPreview = (draft) => {
+    if (!dom) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-msg ai-msg-ai ai-draft-preview';
+
+    const heading = document.createElement('strong');
+    heading.textContent = '📝 Ticket se tao:';
+    wrap.appendChild(heading);
+
+    const fields = [
+        ['Tieu de', draft.title],
+        ['Mo ta', draft.description],
+        ['Muc do', draft.priority],
+        ['Loai', draft.category],
+    ];
+    fields.forEach(([k, v]) => {
+        const row = document.createElement('div');
+        row.className = 'ai-draft-row';
+        const kk = document.createElement('span');
+        kk.className = 'ai-draft-key';
+        kk.textContent = k + ':';
+        const vv = document.createElement('span');
+        vv.className = 'ai-draft-val';
+        vv.textContent = v == null ? '(trong)' : String(v);
+        row.appendChild(kk);
+        row.appendChild(vv);
+        wrap.appendChild(row);
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'ai-draft-actions';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'ai-draft-confirm';
+    confirmBtn.textContent = '✓ Tao ticket';
+    confirmBtn.addEventListener('click', () => confirmDraft());
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'ai-draft-cancel';
+    cancelBtn.textContent = 'Huy';
+    cancelBtn.addEventListener('click', () => {
+        state.pendingDraft = null;
+        wrap.remove();
+    });
+
+    actions.appendChild(confirmBtn);
+    actions.appendChild(cancelBtn);
+    wrap.appendChild(actions);
+
+    dom.body.appendChild(wrap);
+    scrollBodyToBottom();
+};
+
+const confirmDraft = async () => {
+    if (!state.sessionId || !state.pendingDraft) return;
+    if (state.isBusy) return;
+    setBusy(true);
+    try {
+        const data = await request(
+            `/api/ai/sessions/${encodeURIComponent(state.sessionId)}/confirm-ticket`,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: state.pendingDraft.title,
+                    description: state.pendingDraft.description,
+                    priority: state.pendingDraft.priority,
+                    category: state.pendingDraft.category,
+                }),
+                timeout: 30000,
+            }
+        );
+        if (data && data.action === 'TICKET_CREATED') {
+            state.pendingDraft = null;
+            appendAiMessage(data);
+        } else if (data && data.answer) {
+            appendAiMessage(data);
+        } else {
+            appendErrorMessage('Tao ticket that bai. Vui long thu lai.');
+        }
+    } catch (err) {
+        appendErrorMessage(
+            (err && err.message) ||
+            'Tao ticket that bai. Vui long thu lai.'
+        );
+    } finally {
+        setBusy(false);
+    }
+};
+
+// PHASE 7.7 hotfix-22: submitSuggestion removed.
+// It was only used by the chat-box suggestion buttons
+// (now removed) and is no longer reachable.
+
+const autoResizeTextarea = () => {
+    if (!dom) return;
+    dom.textarea.style.height = 'auto';
+    const next = Math.min(
+        dom.textarea.scrollHeight,
+        120 // matches CSS max-height
+    );
+    dom.textarea.style.height = `${next}px`;
+};
+
+// ==================== Ticket-detail entry point ====================
+
+const ensureAskTicketBanner = () => {
+    if (!dom) return;
+    if (document.getElementById('ai-ask-ticket-banner')) return;
+    const details = document.getElementById('ticket-details');
+    if (!details) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'ai-ask-ticket hidden';
+    banner.id = 'ai-ask-ticket-banner';
+
+    const text = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = 'Bạn muốn hỏi AI về ticket này?';
+    text.appendChild(strong);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'ai-ask-ticket-btn';
+    btn.textContent = 'Hỏi AI';
+    btn.addEventListener('click', () => {
+        const ticket = window.selectedTicket;
+        if (!ticket) return;
+        const ticketNumber = ticket.ticketNumber || '';
+        if (!ticketNumber) return;
+        const suggestion = `Ticket ${ticketNumber} đang ở trạng thái gì?`;
+        if (!state.isOpen) {
+            openPanel();
+        }
+        dom.textarea.value = suggestion;
+        dom.textarea.focus();
+        autoResizeTextarea();
+        scrollBodyToBottom();
+    });
+
+    banner.appendChild(text);
+    banner.appendChild(btn);
+
+    // Anchor the banner inside the ticket-actions section (or fallback)
+    const actions = document.getElementById('ticket-actions');
+    const parent = actions || details;
+    if (parent && parent.parentNode) {
+        parent.parentNode.insertBefore(banner, parent.nextSibling);
+    } else {
+        details.appendChild(banner);
+    }
+};
+
+const updateAskTicketBanner = () => {
+    if (!dom) return;
+    const banner = document.getElementById('ai-ask-ticket-banner');
+    if (!banner) return;
+    const ticket = window.selectedTicket;
+    if (ticket && ticket.ticketNumber) {
+        banner.classList.remove('hidden');
+    } else {
+        banner.classList.add('hidden');
+    }
+};
+
+// ==================== Visibility ====================
+
+const applyRoleGate = () => {
+    if (!dom) return;
+    const allowed = hasAllowedRole();
+    if (allowed) {
+        dom.fab.classList.remove('hidden');
+        if (state.isOpen) {
+            dom.panel.classList.remove('hidden');
+        }
+    } else {
+        dom.fab.classList.add('hidden');
+        // Hide panel if it was open; also drop the ticket-detail banner
+        dom.panel.classList.add('hidden');
+        state.isOpen = false;
+        const banner = document.getElementById('ai-ask-ticket-banner');
+        if (banner) banner.classList.add('hidden');
+    }
+};
+
+// ==================== Event wiring ====================
+
+const attachEvents = () => {
+    if (!dom) return;
+
+    dom.fab.addEventListener('click', () => {
+        if (state.isOpen && !state.isMinimized) {
+            closePanel();
+        } else if (state.isOpen && state.isMinimized) {
+            toggleMinimize();
+        } else {
+            openPanel();
+        }
+    });
+
+    dom.minBtn.addEventListener('click', toggleMinimize);
+    dom.closeBtn.addEventListener('click', closePanel);
+
+    dom.sendBtn.addEventListener('click', () => {
+        const value = dom.textarea.value;
+        submitQuestion(value);
+        // Clear the textarea on successful send so the next question
+        // starts empty. On error the catch block already restored focus.
+        if (!state.isBusy) {
+            // submitQuestion set busy before returning; if not busy the
+            // call returned early (validation error) — leave text as-is.
+        } else {
+            dom.textarea.value = '';
+            autoResizeTextarea();
+        }
+    });
+
+    dom.textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitQuestion(dom.textarea.value);
+            if (state.isBusy) {
+                dom.textarea.value = '';
+                autoResizeTextarea();
+            }
+        }
+    });
+
+    dom.textarea.addEventListener('input', autoResizeTextarea);
+
+    // ESC closes the panel (or restores from minimized)
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (!state.isOpen) return;
+        if (state.isMinimized) {
+            toggleMinimize();
+        } else {
+            closePanel();
+        }
+    });
+};
+
+// ==================== Bootstrap ====================
+
+export const init = () => {
+    if (state.initialized) return;
+
+    if (!document.body) return;
+    dom = buildDom();
+    attachEvents();
+    applyRoleGate();
+    ensureAskTicketBanner();
+    state.initialized = true;
+
+    // Keep the role gate + ticket banner in sync with the rest of the app.
+    // Re-check when role-affecting UI re-renders (e.g. login/logout).
+    const observer = new MutationObserver(() => {
+        applyRoleGate();
+        updateAskTicketBanner();
+    });
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+    });
+};
+
+// Expose a small surface so other modules can ask the assistant to ask
+// about the currently selected ticket without reaching into internals.
+export const askAboutCurrentTicket = () => {
+    if (!state.initialized) return;
+    if (!dom) return;
+    if (!hasAllowedRole()) return;
+    const ticket = window.selectedTicket;
+    if (!ticket || !ticket.ticketNumber) return;
+    if (!state.isOpen) {
+        openPanel();
+    }
+    dom.textarea.value = `Ticket ${ticket.ticketNumber} đang ở trạng thái gì?`;
+    autoResizeTextarea();
+    dom.textarea.focus();
+};
+
+// Re-evaluate the role gate from outside (e.g. after login)
+export const refreshRoleGate = () => {
+    applyRoleGate();
+    updateAskTicketBanner();
+};
+
+// Default export keeps the rest of the app consistent with the pattern
+// used by SlaPolicy / Escalation / Incident / etc.
+const AIAssistant = {
+    init,
+    askAboutCurrentTicket,
+    refreshRoleGate,
+};
+
+window.AIAssistant = AIAssistant;
+export default AIAssistant;

@@ -177,7 +177,6 @@ public class RagRetrievalService {
             // Fetch tickets maintaining similarity order
             List<RagContextDto.RagSource> sources = buildSources(similarities);
 
-            long processingTime = System.currentTimeMillis() - startTime;
 
             return RagContextDto.RetrievalResponse.builder()
                     .query(request.getQuery())
@@ -255,6 +254,7 @@ public class RagRetrievalService {
 
         return RagContextDto.RagSource.builder()
                 .sourceType("TICKET")
+                .id(ticket.getId())
                 .sourceRef(ticket.getTicketNumber())
                 .title(ticket.getTitle())
                 .description(truncateDescription(ticket.getDescription(), DESCRIPTION_TRUNCATE_LENGTH))

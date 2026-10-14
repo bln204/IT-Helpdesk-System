@@ -54,17 +54,14 @@ class ActorContextServiceTest {
 
     private Department it;
     private Department mkt;
-    private UserAccount admin;
-    private UserAccount itStaff;
-    private UserAccount nonItStaff;
 
     @BeforeEach
     void setUp() {
         it = persistDepartment("IT", "Information Technology");
         mkt = persistDepartment("MKT", "Marketing");
-        admin = persistUser("phase2_admin", UserRole.Role.ADMIN, null);
-        itStaff = persistUser("phase2_itstaff", UserRole.Role.NHAN_VIEN, it);
-        nonItStaff = persistUser("phase2_nonit", UserRole.Role.NHAN_VIEN, mkt);
+        persistUser("phase2_admin", UserRole.Role.ADMIN, null);
+        persistUser("phase2_itstaff", UserRole.Role.NHAN_VIEN, it);
+        persistUser("phase2_nonit", UserRole.Role.NHAN_VIEN, mkt);
     }
 
     @AfterEach

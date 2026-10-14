@@ -236,13 +236,27 @@ public class RagContextDto {
     public static class RagSource {
 
         /**
-         * Type of source (e.g., "TICKET").
+         * Type of source (e.g., "TICKET", "KNOWN_ERROR").
          * Used to identify the source type for future processing.
          */
         private String sourceType;
 
         /**
-         * Human-readable reference to the source (e.g., ticket number).
+         * CP-5: Database primary key of the underlying entity.
+         * Populated by the asset retriever as
+         * {@code asset.getId()}. Null for legacy sources and
+         * for sources that do not map to a single database row
+         * (e.g. RELATIONAL).
+         *
+         * <p>Used internally to thread the Asset ID through the
+         * aggregation and filtering layers so the manifest can
+         * record deduplicated {@code includedInResponseIds}.
+         */
+        private Long id;
+
+        /**
+         * Human-readable reference to the source (e.g., ticket number
+         * TKT-2026-00142, or Known Error code KE-001).
          * This is the business identifier, not the internal database ID.
          */
         private String sourceRef;
@@ -313,6 +327,21 @@ public class RagContextDto {
             this.content = content;
         }
 
+        /**
+         * CP-5: full constructor including the database id. Prefer
+         * this constructor when the source maps to a known database
+         * row. The id is propagated to the manifest's
+         * {@code includedInResponseIds}.
+         */
+        public RagSource(Long id, String sourceType, String sourceRef, String title,
+                         String description, String category, String subcategory,
+                         String priority, String status, LocalDateTime resolvedAt,
+                         double similarityScore, String content) {
+            this(sourceType, sourceRef, title, description, category, subcategory, priority,
+                    status, resolvedAt, similarityScore, content);
+            this.id = id;
+        }
+
         public String getSourceType() {
             return sourceType;
         }
@@ -320,6 +349,9 @@ public class RagContextDto {
         public void setSourceType(String sourceType) {
             this.sourceType = sourceType;
         }
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
 
         public String getSourceRef() {
             return sourceRef;
@@ -408,6 +440,7 @@ public class RagContextDto {
 
         public static class Builder {
             private String sourceType;
+            private Long id;
             private String sourceRef;
             private String title;
             private String description;
@@ -421,6 +454,11 @@ public class RagContextDto {
 
             public Builder sourceType(String sourceType) {
                 this.sourceType = sourceType;
+                return this;
+            }
+
+            public Builder id(Long id) {
+                this.id = id;
                 return this;
             }
 
@@ -475,7 +513,7 @@ public class RagContextDto {
             }
 
             public RagSource build() {
-                return new RagSource(sourceType, sourceRef, title, description, category,
+                return new RagSource(id, sourceType, sourceRef, title, description, category,
                         subcategory, priority, status, resolvedAt, similarityScore, content);
             }
         }

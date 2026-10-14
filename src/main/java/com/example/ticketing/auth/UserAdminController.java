@@ -21,9 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.example.ticketing.auth.UserAccount;
-import com.example.ticketing.auth.UserAccountRepository;
-
 import jakarta.validation.Valid;
 
 @RestController
@@ -47,18 +44,17 @@ public class UserAdminController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<UserDtos.UserResponse> createUser(
-        @Valid @RequestBody UserDtos.UserCreateRequest request,
-        Authentication authentication
-    ) {
+            @Valid @RequestBody UserDtos.UserCreateRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
-        
+
         // GIAM_DOC chỉ được tạo user, không được tự động duyệt
         // (Admin duyệt giúp)
         if ("GIAM_DOC".equals(actor.getRole().name())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Giám đốc không có quyền tạo tài khoản người dùng.");
+                    "Giám đốc không có quyền tạo tài khoản người dùng.");
         }
-        
+
         // TRUONG_PHONG: tự động gán department của họ cho user mới
         // Bỏ qua hoàn toàn departmentId từ request để đảm bảo tính toàn vẹn dữ liệu
         // User mới phải thuộc cùng phòng ban với TRUONG_PHONG tạo họ
@@ -70,21 +66,20 @@ public class UserAdminController {
         } else {
             departmentId = request.getDepartmentId();
         }
-        
+
         UserAccount user = userAdminService.createUser(
-            request.getUsername(),
-            request.getPassword(),
-            request.getRole(),
-            request.getEnabled(),
-            request.getDisplayName(),
-            request.getTitle(),
-            request.getAvatarUrl(),
-            request.getEmail(),
-            departmentId,
-            actor.getUsername(),
-            actor.getRole().name()
-        );
-        
+                request.getUsername(),
+                request.getPassword(),
+                request.getRole(),
+                request.getEnabled(),
+                request.getDisplayName(),
+                request.getTitle(),
+                request.getAvatarUrl(),
+                request.getEmail(),
+                departmentId,
+                actor.getUsername(),
+                actor.getRole().name());
+
         return ResponseEntity.status(HttpStatus.CREATED).body(UserDtos.UserResponse.from(user));
     }
 
@@ -97,15 +92,14 @@ public class UserAdminController {
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public Page<UserDtos.UserResponse> listUsers(
-        Authentication authentication,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "10") int size,
-        @RequestParam(required = false) String search
-    ) {
+            Authentication authentication,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by("username").ascending());
         return userAdminService.listUsers(pageRequest, search).map(UserDtos.UserResponse::from);
     }
-    
+
     /**
      * Lấy danh sách users đang chờ duyệt.
      * Chỉ ADMIN mới xem được.
@@ -114,27 +108,26 @@ public class UserAdminController {
     @PreAuthorize("hasRole('ADMIN')")
     public List<UserDtos.UserResponse> listPendingUsers(Authentication authentication) {
         return userAdminService.listPendingApproval().stream()
-            .map(UserDtos.UserResponse::from)
-            .toList();
+                .map(UserDtos.UserResponse::from)
+                .toList();
     }
 
     @GetMapping("/engineers")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public List<UserDtos.UserResponse> listITStaff(Authentication authentication) {
         return userAdminService.listITStaff().stream()
-            .map(UserDtos.UserResponse::from)
-            .toList();
+                .map(UserDtos.UserResponse::from)
+                .toList();
     }
 
     @GetMapping("/by-department/{departmentId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public List<UserDtos.UserResponse> listUsersByDepartment(
-        @PathVariable Long departmentId,
-        Authentication authentication
-    ) {
+            @PathVariable Long departmentId,
+            Authentication authentication) {
         return userAdminService.listUsersByDepartment(departmentId).stream()
-            .map(UserDtos.UserResponse::from)
-            .toList();
+                .map(UserDtos.UserResponse::from)
+                .toList();
     }
 
     /**
@@ -145,32 +138,30 @@ public class UserAdminController {
     @GetMapping("/audit")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public List<UserDtos.UserAuditResponse> listAudit(
-        @RequestParam(required = false) String targetUsername,
-        Authentication authentication
-    ) {
+            @RequestParam(required = false) String targetUsername,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
-        
+
         List<UserAudit> audits;
         if (targetUsername == null || targetUsername.isBlank()) {
             audits = userAdminService.listAudit(actor.getRole().name(), actor.getDepartmentId());
         } else {
             audits = userAdminService.listAudit(targetUsername, actor.getRole().name(), actor.getDepartmentId());
         }
-        
+
         return audits.stream()
-            .map(UserDtos.UserAuditResponse::from)
-            .toList();
+                .map(UserDtos.UserAuditResponse::from)
+                .toList();
     }
-    
+
     /**
      * Xem chi tiết một user.
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public UserDtos.UserResponse getUser(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         return UserDtos.UserResponse.from(userAdminService.getUser(id));
     }
 
@@ -183,20 +174,17 @@ public class UserAdminController {
     @PatchMapping("/{id}/enabled")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
     public UserDtos.UserResponse updateEnabled(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.UserEnabledRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.UserEnabledRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         return UserDtos.UserResponse.from(
-            userAdminService.updateEnabled(
-                id,
-                request.getEnabled(),
-                actor.getUsername(),
-                actor.getRole().name(),
-                actor.getDepartmentId()
-            )
-        );
+                userAdminService.updateEnabled(
+                        id,
+                        request.getEnabled(),
+                        actor.getUsername(),
+                        actor.getRole().name(),
+                        actor.getDepartmentId()));
     }
 
     /**
@@ -208,19 +196,16 @@ public class UserAdminController {
     @PatchMapping("/{id}/role")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC')")
     public UserDtos.UserResponse updateRole(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.UserRoleUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.UserRoleUpdateRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         return UserDtos.UserResponse.from(
-            userAdminService.updateRole(
-                id,
-                request.getRole(),
-                actor.getUsername(),
-                actor.getRole().name()
-            )
-        );
+                userAdminService.updateRole(
+                        id,
+                        request.getRole(),
+                        actor.getUsername(),
+                        actor.getRole().name()));
     }
 
     /**
@@ -232,23 +217,20 @@ public class UserAdminController {
      */
     @PatchMapping("/{id}/profile")
     public UserDtos.UserResponse updateProfile(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.UserProfileUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.UserProfileUpdateRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         return UserDtos.UserResponse.from(
-            userAdminService.updateProfile(
-                id,
-                request.getDisplayName(),
-                request.getTitle(),
-                request.getAvatarUrl(),
-                request.getEmail(),
-                actor.getUsername(),
-                actor.getRole().name(),
-                actor.getDepartmentId()
-            )
-        );
+                userAdminService.updateProfile(
+                        id,
+                        request.getDisplayName(),
+                        request.getTitle(),
+                        request.getAvatarUrl(),
+                        request.getEmail(),
+                        actor.getUsername(),
+                        actor.getRole().name(),
+                        actor.getDepartmentId()));
     }
 
     /**
@@ -259,49 +241,45 @@ public class UserAdminController {
     @PatchMapping("/{id}/password")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<Void> resetPassword(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.UserPasswordResetRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.UserPasswordResetRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         userAdminService.resetPassword(
-            id,
-            request.getPassword(),
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                request.getPassword(),
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
         return ResponseEntity.noContent().build();
     }
-    
+
     /**
      * Cập nhật profile VÀ reset password trong một thao tác.
      * Gửi một email thông báo chung cho tất cả thay đổi.
      * 
      * - ADMIN: sửa profile bất kỳ user, reset password bất kỳ user
      * - GIAM_DOC: sửa profile bất kỳ user, reset password bất kỳ user
-     * - TRUONG_PHONG: sửa profile user trong phòng mình, reset password NHAN_VIEN trong phòng mình
+     * - TRUONG_PHONG: sửa profile user trong phòng mình, reset password NHAN_VIEN
+     * trong phòng mình
      */
     @PatchMapping("/{id}/profile-and-password")
     public UserDtos.UserResponse updateProfileAndPassword(
-        @PathVariable Long id,
-        @Valid @RequestBody UserDtos.UserProfileAndPasswordUpdateRequest request,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            @Valid @RequestBody UserDtos.UserProfileAndPasswordUpdateRequest request,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         return UserDtos.UserResponse.from(
-            userAdminService.updateProfileAndPassword(
-                id,
-                request.getDisplayName(),
-                request.getTitle(),
-                request.getAvatarUrl(),
-                request.getEmail(),
-                request.getNewPassword(),
-                actor.getUsername(),
-                actor.getRole().name(),
-                actor.getDepartmentId()
-            )
-        );
+                userAdminService.updateProfileAndPassword(
+                        id,
+                        request.getDisplayName(),
+                        request.getTitle(),
+                        request.getAvatarUrl(),
+                        request.getEmail(),
+                        request.getNewPassword(),
+                        actor.getUsername(),
+                        actor.getRole().name(),
+                        actor.getDepartmentId()));
     }
 
     /**
@@ -313,21 +291,19 @@ public class UserAdminController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<Void> deleteUser(
-        @PathVariable Long id,
-        Authentication authentication
-    ) {
+            @PathVariable Long id,
+            Authentication authentication) {
         UserAccount actor = getCurrentUser(authentication);
         userAdminService.deleteUser(
-            id,
-            actor.getUsername(),
-            actor.getRole().name(),
-            actor.getDepartmentId()
-        );
+                id,
+                actor.getUsername(),
+                actor.getRole().name(),
+                actor.getDepartmentId());
         return ResponseEntity.noContent().build();
     }
 
     private UserAccount getCurrentUser(Authentication authentication) {
         return userAccountRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 }

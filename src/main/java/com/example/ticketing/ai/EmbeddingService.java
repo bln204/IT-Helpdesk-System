@@ -113,7 +113,13 @@ public class EmbeddingService {
     /**
      * Re-generate embedding for a ticket.
      * Used when ticket content is updated.
+     *
+     * <p>Uses native UPDATE query with CAST(NULL AS vector) for pgvector
+     * compatibility, avoiding Hibernate entity dirty-checking on the vector
+     * column which would fail with:
+     * "column 'embedding' is of type vector but expression is of type varchar"
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public TicketEmbedding reembedTicket(Long ticketId) {
         TicketEmbedding embedding = findEmbeddingForTicket(ticketId)
                 .orElseGet(() -> {
@@ -123,14 +129,15 @@ public class EmbeddingService {
                     return insertPendingEmbedding(ticket);
                 });
 
-        // Reset status to PENDING
-        embedding.setEmbeddingStatus(EmbeddingStatus.PENDING);
-        embedding.setEmbedding(null);
-        embedding.setEmbeddingError(null);
-        embedding.setEmbeddedAt(null);
-
+        Long embeddingId = embedding.getId();
         log.info("Re-embedding ticket: {}", ticketId);
-        return embeddingRepository.save(embedding);
+
+        // Use native UPDATE to avoid Hibernate vector type issues
+        embeddingRepository.resetEmbeddingToPending(embeddingId);
+
+        // Return fresh entity state
+        return findEmbeddingForTicket(ticketId)
+                .orElseThrow(() -> new IllegalStateException("Embedding not found after reset: " + embeddingId));
     }
 
     /**
@@ -331,21 +338,51 @@ public class EmbeddingService {
                     HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                throw new RuntimeException("Ollama API returned status " + response.statusCode() + ": " + response.body());
+                // Surface non-2xx as a structured embedding error so /api/ai/ask can
+                // return a controlled 503 / 502 instead of leaking the raw Ollama
+                // body or letting the exception cascade to a generic 500.
+                throw new RuntimeException(
+                    "Ollama embeddings endpoint returned status " + response.statusCode());
             }
 
             OllamaResponse ollamaResponse = objectMapper.readValue(response.body(), OllamaResponse.class);
 
             if (ollamaResponse == null || ollamaResponse.getEmbedding() == null) {
-                throw new RuntimeException("Ollama API returned null response");
+                throw new RuntimeException("Ollama embeddings endpoint returned an empty body");
             }
 
             return ollamaResponse.getEmbedding();
 
+        } catch (LlmGenerationException e) {
+            // Already structured; do not re-wrap.
+            throw e;
+        } catch (java.net.http.HttpConnectTimeoutException e) {
+            log.warn("Connection to Ollama embeddings endpoint timed out");
+            throw LlmGenerationException.embeddingTimeout(e);
+        } catch (java.net.http.HttpTimeoutException e) {
+            log.warn("Ollama embeddings request timed out");
+            throw LlmGenerationException.embeddingTimeout(e);
+        } catch (java.net.ConnectException e) {
+            log.warn("Cannot connect to Ollama embeddings endpoint: {}", e.getMessage());
+            throw LlmGenerationException.embeddingUnavailable(e);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            log.warn("Failed to parse Ollama embeddings response");
+            throw LlmGenerationException.embeddingMalformedResponse(e);
         } catch (RuntimeException e) {
+            // Raised above (non-2xx / empty body). Inspect the cause class to pick the
+            // right structured code without leaking the original message.
+            Throwable cause = e.getCause();
+            if (cause instanceof java.net.http.HttpConnectTimeoutException
+                || cause instanceof java.net.http.HttpTimeoutException) {
+                throw LlmGenerationException.embeddingTimeout(cause);
+            }
+            if (cause instanceof java.net.ConnectException) {
+                throw LlmGenerationException.embeddingUnavailable(cause);
+            }
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to call Ollama API: " + e.getMessage(), e);
+            log.warn("Failed to call Ollama embeddings endpoint");
+            throw LlmGenerationException.embeddingMalformedResponse(e);
         }
     }
 

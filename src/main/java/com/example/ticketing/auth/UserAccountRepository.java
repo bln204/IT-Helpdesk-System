@@ -6,10 +6,11 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface UserAccountRepository extends JpaRepository<UserAccount, Long> {
+public interface UserAccountRepository extends JpaRepository<UserAccount, Long>, JpaSpecificationExecutor<UserAccount> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"department"})
     Optional<UserAccount> findByUsername(String username);
 
@@ -121,4 +122,36 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
      * Check if email already exists
      */
     boolean existsByEmail(String email);
+
+    // ==================== Phase: AI System-Wide Access ====================
+    // Search methods used by the AI user-context retriever. The
+    // queries are deliberately narrow (active + approved) so the AI
+    // never surfaces disabled or pending-approval accounts to the
+    // prompt.
+
+    /**
+     * Search active + approved users by username / display name / title.
+     * Username / display-name matches are case-insensitive. Used by the
+     * AI user-context retriever for the ALLOW_ALL branch.
+     */
+    @Query("SELECT u FROM UserAccount u WHERE u.enabled = true AND u.approved = true AND ("
+            + "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR "
+            + "LOWER(u.displayName) LIKE LOWER(CONCAT('%', :search, '%')) OR "
+            + "LOWER(u.title) LIKE LOWER(CONCAT('%', :search, '%'))) "
+            + "ORDER BY u.username ASC")
+    Page<UserAccount> searchActiveUsers(@Param("search") String search, Pageable pageable);
+
+    /**
+     * Same as {@link #searchActiveUsers} but additionally restricted to
+     * a single department. Used for the DEPARTMENT_SCOPED branch.
+     */
+    @Query("SELECT u FROM UserAccount u WHERE u.enabled = true AND u.approved = true "
+            + "AND u.department.code = :deptCode AND ("
+            + "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR "
+            + "LOWER(u.displayName) LIKE LOWER(CONCAT('%', :search, '%')) OR "
+            + "LOWER(u.title) LIKE LOWER(CONCAT('%', :search, '%'))) "
+            + "ORDER BY u.username ASC")
+    Page<UserAccount> searchActiveUsersByDepartment(@Param("search") String search,
+                                                    @Param("deptCode") String deptCode,
+                                                    Pageable pageable);
 }

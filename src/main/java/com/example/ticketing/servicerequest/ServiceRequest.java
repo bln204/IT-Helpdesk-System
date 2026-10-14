@@ -7,7 +7,9 @@ import java.util.List;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Service Request Entity - Yêu cầu dịch vụ từ user.
@@ -84,6 +86,16 @@ public class ServiceRequest {
     @Column(name = "approval_notes", columnDefinition = "TEXT")
     private String approvalNotes;
 
+    // CP-3.3.9: the column is JSONB in the schema (V48) and must
+    // round-trip structured payloads. Without @JdbcTypeCode(SqlTypes.JSON)
+    // Hibernate binds the parameter as varchar, which PostgreSQL rejects
+    // with SQLSTATE 42804 ("column is of type jsonb but expression is
+    // of type character varying"). This annotation matches the proven
+    // ChangeTimeline.event_data mapping (CP-3.3.7) and the proven
+    // ChangeRequest.risk_factors mapping (CP-3.3.8) used in production
+    // for other JSONB columns. CP-3.3.9 baseline run on PostgreSQL
+    // reproduced the error before this annotation was added.
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "form_data", columnDefinition = "jsonb")
     private String formData;
 

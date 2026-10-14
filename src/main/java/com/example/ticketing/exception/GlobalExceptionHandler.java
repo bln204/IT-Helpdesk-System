@@ -429,15 +429,18 @@ public class GlobalExceptionHandler {
 
     /**
      * Handle LlmGenerationException - AI/LLM service errors.
-     * 
-     * Maps LLM error codes to appropriate HTTP status codes:
+     *
+     * Maps LLM/embedding error codes to appropriate HTTP status codes:
      * - LLM_UNAVAILABLE -> 503 Service Unavailable
      * - LLM_TIMEOUT -> 504 Gateway Timeout
      * - LLM_ERROR_RESPONSE -> 502 Bad Gateway
      * - LLM_MALFORMED_RESPONSE -> 502 Bad Gateway
      * - LLM_EMPTY_RESPONSE -> 502 Bad Gateway
+     * - EMBEDDING_TIMEOUT -> 504 Gateway Timeout
+     * - EMBEDDING_UNAVAILABLE -> 503 Service Unavailable
+     * - EMBEDDING_MALFORMED_RESPONSE -> 502 Bad Gateway
      * - Other/unknown -> 500 Internal Server Error
-     * 
+     *
      * The exception message is already user-friendly and safe to display.
      * Internal details (cause, stack trace) are NOT exposed to the client.
      */
@@ -466,6 +469,12 @@ public class GlobalExceptionHandler {
 
     /**
      * Map LLM error code to HTTP status.
+     *
+     * <p>Embedding-side codes (EMBEDDING_TIMEOUT, EMBEDDING_UNAVAILABLE,
+     * EMBEDDING_MALFORMED_RESPONSE) are mapped symmetrically with their chat-side
+     * counterparts so that {@code /api/ai/ask} exposes the embedding half of the
+     * AI pipeline as a 504 / 503 / 502 instead of letting a timeout or connection
+     * failure cascade into a generic 500.
      */
     private HttpStatus mapLlmErrorCodeToStatus(String errorCode) {
         if (errorCode == null) {
@@ -478,6 +487,9 @@ public class GlobalExceptionHandler {
             case "LLM_ERROR_RESPONSE" -> HttpStatus.BAD_GATEWAY;
             case "LLM_MALFORMED_RESPONSE" -> HttpStatus.BAD_GATEWAY;
             case "LLM_EMPTY_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            case "EMBEDDING_TIMEOUT" -> HttpStatus.GATEWAY_TIMEOUT;
+            case "EMBEDDING_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "EMBEDDING_MALFORMED_RESPONSE" -> HttpStatus.BAD_GATEWAY;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

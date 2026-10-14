@@ -2,7 +2,6 @@ package com.example.ticketing.incident;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -71,7 +70,7 @@ public class IncidentService {
         incident.setIncidentNumber(generateIncidentNumber());
         incident.setStatus(Incident.IncidentStatus.INVESTIGATING);
         incident.setCreatedBy(createdBy);
-        
+
         // Set reportedByUsername nếu chưa có
         if (incident.getReportedByUsername() == null || incident.getReportedByUsername().isBlank()) {
             incident.setReportedByUsername(createdBy);
@@ -93,16 +92,15 @@ public class IncidentService {
 
         return saved;
     }
-    
+
     /**
      * Tính và set SLA deadlines cho incident dựa trên priority.
      */
     private void calculateAndSetSlaDeadlines(Incident incident) {
         SlaPolicyService.SlaDeadline deadline = slaPolicyService.calculateSlaDeadlines(
-                incident.getPriority(), 
-                LocalDateTime.now()
-        );
-        
+                incident.getPriority(),
+                LocalDateTime.now());
+
         incident.setResponseDeadline(deadline.getResponseDeadline());
         incident.setResolutionDeadline(deadline.getResolutionDeadline());
         incident.setSlaResponseMinutes(deadline.getResponseMinutes());
@@ -153,14 +151,14 @@ public class IncidentService {
      */
     public void deleteIncident(Long id, String username, String userRole) {
         log.info("Delete incident: {} by user: {} ({})", id, username, userRole);
-        
+
         Incident incident = getIncidentById(id);
-        
+
         // Check permission: ADMIN, TRUONG_PHONG IT, hoặc người tạo
-        boolean isCreator = incident.getCreatedBy() != null && 
-                           incident.getCreatedBy().equals(username);
+        boolean isCreator = incident.getCreatedBy() != null &&
+                incident.getCreatedBy().equals(username);
         boolean isAdmin = "ADMIN".equals(userRole);
-        
+
         // TRUONG_PHONG chỉ xóa được nếu thuộc phòng IT
         boolean isTruongPhongIT = false;
         if ("TRUONG_PHONG".equals(userRole)) {
@@ -172,11 +170,11 @@ public class IncidentService {
                 }
             }
         }
-        
+
         if (!isAdmin && !isCreator && !isTruongPhongIT) {
             throw new SecurityException("Bạn không có quyền xóa incident này");
         }
-        
+
         incidentRepository.deleteById(id);
     }
 
@@ -227,8 +225,7 @@ public class IncidentService {
      */
     public Incident assignIncident(Long id, String assigneeUsername, String actorName) {
         Incident incident = getIncidentById(id);
-        String oldAssignee = incident.getAssignedTo() != null ? 
-                incident.getAssignedTo().getUsername() : null;
+        String oldAssignee = incident.getAssignedTo() != null ? incident.getAssignedTo().getUsername() : null;
 
         UserAccount assignee = userAccountRepository.findByUsername(assigneeUsername)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + assigneeUsername));
@@ -265,10 +262,8 @@ public class IncidentService {
         // Get current user
         UserAccount user = userAccountRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
-        
+
         Incident.IncidentStatus oldStatus = incident.getStatus();
-        String oldAssignee = incident.getAssignedTo() != null ? 
-                incident.getAssignedTo().getUsername() : null;
 
         // Assign to current user
         incident.setAssignedTo(user);
@@ -286,7 +281,8 @@ public class IncidentService {
 
         // Gửi notification về việc nhận incident và đổi status
         incidentNotificationService.notifyIncidentAssigned(saved, username);
-        incidentNotificationService.notifyStatusChanged(saved, oldStatus, Incident.IncidentStatus.IN_PROGRESS, username);
+        incidentNotificationService.notifyStatusChanged(saved, oldStatus, Incident.IncidentStatus.IN_PROGRESS,
+                username);
 
         return saved;
     }
@@ -579,7 +575,7 @@ public class IncidentService {
     }
 
     private void logTimeline(Incident incident, IncidentTimeline.EventType eventType,
-                            String title, String actorName, String oldValue, String newValue) {
+            String title, String actorName, String oldValue, String newValue) {
         IncidentTimeline timeline = IncidentTimeline.builder()
                 .incident(incident)
                 .eventType(eventType)

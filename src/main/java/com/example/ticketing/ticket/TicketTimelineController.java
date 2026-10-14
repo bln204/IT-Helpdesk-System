@@ -17,7 +17,6 @@ import org.springframework.http.HttpStatus;
 
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.authorization.ActorContextService;
-import com.example.ticketing.authorization.TicketAuthorization;
 
 /**
  * REST Controller cho Ticket Timeline operations.
@@ -33,15 +32,12 @@ public class TicketTimelineController {
 
     private final TicketTimelineService timelineService;
     private final ActorContextService actorContextService;
-    private final TicketAuthorization ticketAuthorization;
 
     public TicketTimelineController(
             TicketTimelineService timelineService,
-            ActorContextService actorContextService,
-            TicketAuthorization ticketAuthorization) {
+            ActorContextService actorContextService) {
         this.timelineService = timelineService;
         this.actorContextService = actorContextService;
-        this.ticketAuthorization = ticketAuthorization;
     }
 
     /**

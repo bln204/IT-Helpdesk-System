@@ -3,7 +3,6 @@ package com.example.ticketing.escalation;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,15 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
-import com.example.ticketing.team.Team;
 import com.example.ticketing.team.TeamRepository;
 import com.example.ticketing.ticket.AssignmentTargetValidator;
 import com.example.ticketing.ticket.AssignmentTargetVerdict;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketNotFoundException;
-import com.example.ticketing.ticket.TicketTypes;
-import com.example.ticketing.ticket.TicketTypes.TicketPriority;
+import com.example.ticketing.ticket.TicketNotificationService;
 import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 
 /**
@@ -33,8 +30,10 @@ public class EscalationService {
 
     /**
      * PHASE 3.1: system-actor convention for automatic SLA escalations.
-     * The SLA scheduler is not a human user; the history row records {@code "SYSTEM"}
-     * as the actor. Manual escalations continue to record the authenticated username.
+     * The SLA scheduler is not a human user; the history row records
+     * {@code "SYSTEM"}
+     * as the actor. Manual escalations continue to record the authenticated
+     * username.
      * The column already exists on {@link EscalationHistory#getCreatedBy()}.
      */
     public static final String SYSTEM_ACTOR = "SYSTEM";
@@ -47,6 +46,7 @@ public class EscalationService {
     private final UserAccountRepository userAccountRepository;
     private final TeamRepository teamRepository;
     private final AssignmentTargetValidator assignmentTargetValidator;
+    private final TicketNotificationService ticketNotificationService;
 
     public EscalationService(
             EscalationRuleRepository ruleRepository,
@@ -54,13 +54,15 @@ public class EscalationService {
             TicketRepository ticketRepository,
             UserAccountRepository userAccountRepository,
             TeamRepository teamRepository,
-            AssignmentTargetValidator assignmentTargetValidator) {
+            AssignmentTargetValidator assignmentTargetValidator,
+            TicketNotificationService ticketNotificationService) {
         this.ruleRepository = ruleRepository;
         this.historyRepository = historyRepository;
         this.ticketRepository = ticketRepository;
         this.userAccountRepository = userAccountRepository;
         this.teamRepository = teamRepository;
         this.assignmentTargetValidator = assignmentTargetValidator;
+        this.ticketNotificationService = ticketNotificationService;
     }
 
     // ==================== Rule Management ====================
@@ -149,8 +151,8 @@ public class EscalationService {
 
         // Không escalate resolved/closed tickets
         if (ticket.getStatus() == TicketStatus.RESOLVED ||
-            ticket.getStatus() == TicketStatus.CLOSED ||
-            ticket.getStatus() == TicketStatus.CANCELLED) {
+                ticket.getStatus() == TicketStatus.CLOSED ||
+                ticket.getStatus() == TicketStatus.CANCELLED) {
             return;
         }
 
@@ -165,11 +167,12 @@ public class EscalationService {
      * Check SLA Response Warning.
      */
     private void checkSlaResponseWarning(Ticket ticket) {
-        if (ticket.getSlaResponseAt() == null) return;
-        if (ticket.getFirstResponseAt() != null) return; // Đã response
+        if (ticket.getSlaResponseAt() == null)
+            return;
+        if (ticket.getFirstResponseAt() != null)
+            return; // Đã response
 
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime warningTime = ticket.getSlaResponseAt();
 
         // Check nếu đã đến thời điểm warning (75% threshold)
         long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResponseAt()).toMinutes();
@@ -185,8 +188,10 @@ public class EscalationService {
      * Check SLA Response Breached.
      */
     private void checkSlaResponseBreached(Ticket ticket) {
-        if (ticket.getSlaResponseAt() == null) return;
-        if (ticket.getFirstResponseAt() != null) return;
+        if (ticket.getSlaResponseAt() == null)
+            return;
+        if (ticket.getFirstResponseAt() != null)
+            return;
 
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(ticket.getSlaResponseAt())) {
@@ -199,8 +204,10 @@ public class EscalationService {
      * Check SLA Resolution Warning.
      */
     private void checkSlaResolutionWarning(Ticket ticket) {
-        if (ticket.getSlaResolutionAt() == null) return;
-        if (ticket.isResolutionSLABreached()) return;
+        if (ticket.getSlaResolutionAt() == null)
+            return;
+        if (ticket.isResolutionSLABreached())
+            return;
 
         LocalDateTime now = LocalDateTime.now();
         long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionAt()).toMinutes();
@@ -216,8 +223,10 @@ public class EscalationService {
      * Check SLA Resolution Breached.
      */
     private void checkSlaResolutionBreached(Ticket ticket) {
-        if (ticket.getSlaResolutionAt() == null) return;
-        if (ticket.isResolutionSLABreached()) return;
+        if (ticket.getSlaResolutionAt() == null)
+            return;
+        if (ticket.isResolutionSLABreached())
+            return;
 
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(ticket.getSlaResolutionAt())) {
@@ -234,8 +243,10 @@ public class EscalationService {
         List<EscalationRule> rules = ruleRepository.findApplicableRules(triggerType, ticket.getPriority());
 
         for (EscalationRule rule : rules) {
-            if (!rule.isCurrentlyApplicable()) continue;
-            if (!rule.isPriorityApplicable(ticket.getPriority())) continue;
+            if (!rule.isCurrentlyApplicable())
+                continue;
+            if (!rule.isPriorityApplicable(ticket.getPriority()))
+                continue;
 
             // Check nếu đã escalate quá max
             long currentEscalations = historyRepository.countByTicketId(ticket.getId());
@@ -267,12 +278,15 @@ public class EscalationService {
     /**
      * Thực hiện escalation action.
      *
-     * <p>PHASE 3.1: this is the SLA-driven path (no human actor). The history row's
+     * <p>
+     * PHASE 3.1: this is the SLA-driven path (no human actor). The history row's
      * {@code createdBy} is recorded as {@link #SYSTEM_ACTOR} so audit trails can
      * distinguish a system escalation from a manual one. There is no
      * {@code TicketAuthorization.canAssignOthers()} call here: the SLA scheduler is
-     * not a human and so the actor-side policy does not apply; the configured target
-     * is still validated by {@link #performReassignment(Ticket, EscalationRule, EscalationHistory)}
+     * not a human and so the actor-side policy does not apply; the configured
+     * target
+     * is still validated by
+     * {@link #performReassignment(Ticket, EscalationRule, EscalationHistory)}
      * through the canonical {@link AssignmentTargetValidator}.
      */
     private void executeEscalation(Ticket ticket, EscalationRule rule, String reason) {
@@ -293,8 +307,8 @@ public class EscalationService {
         // Execute action
         switch (rule.getActionType()) {
             case NOTIFY:
+                ticketNotificationService.notifyTicketEscalated(ticket, SYSTEM_ACTOR, reason);
                 history.setNotificationSent(true);
-                // TODO: Send notification
                 break;
 
             case REASSIGN:
@@ -312,11 +326,17 @@ public class EscalationService {
     /**
      * Thực hiện reassignment.
      *
-     * <p>PHASE 3.1: this method now validates the configured target through the canonical
-     * {@link AssignmentTargetValidator} before mutating the ticket. Invalid targets (disabled,
-     * unapproved, non-NHAN_VIEN, non-IT, missing) are rejected safely: the history records
-     * the attempted escalation but the ticket's {@code assignee} and {@code assigneeName}
-     * are NOT changed and the existing escalation history entry is marked as not having
+     * <p>
+     * PHASE 3.1: this method now validates the configured target through the
+     * canonical
+     * {@link AssignmentTargetValidator} before mutating the ticket. Invalid targets
+     * (disabled,
+     * unapproved, non-NHAN_VIEN, non-IT, missing) are rejected safely: the history
+     * records
+     * the attempted escalation but the ticket's {@code assignee} and
+     * {@code assigneeName}
+     * are NOT changed and the existing escalation history entry is marked as not
+     * having
      * reassigned. No silent fallback to another user is performed.
      */
     private void performReassignment(Ticket ticket, EscalationRule rule, EscalationHistory history) {
@@ -332,13 +352,14 @@ public class EscalationService {
                 } else {
                     // Race: the user was deleted between verdict and load. Treat as
                     // TARGET_NOT_FOUND - safe no-op, no fallback.
-                    log.warn("Escalation target user id={} disappeared between validate and load; skipping reassignment for ticket {}",
-                        rule.getEscalateToUserId(), ticket.getTicketNumber());
+                    log.warn(
+                            "Escalation target user id={} disappeared between validate and load; skipping reassignment for ticket {}",
+                            rule.getEscalateToUserId(), ticket.getTicketNumber());
                     history.setActionTaken("REASSIGN_FAILED_TARGET_MISSING");
                 }
             } else {
                 log.warn("Escalation REASSIGN target id={} is invalid ({}); skipping reassignment for ticket {}",
-                    rule.getEscalateToUserId(), verdict, ticket.getTicketNumber());
+                        rule.getEscalateToUserId(), verdict, ticket.getTicketNumber());
                 history.setActionTaken("REASSIGN_FAILED_INVALID_TARGET");
             }
         } else if (rule.getEscalateToTeamId() != null) {

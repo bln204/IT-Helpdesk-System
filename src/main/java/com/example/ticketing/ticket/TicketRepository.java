@@ -6,10 +6,11 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface TicketRepository extends JpaRepository<Ticket, Long> {
+public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecificationExecutor<Ticket> {
     Optional<Ticket> findByTicketNumber(String ticketNumber);
 
     Page<Ticket> findByAssigneeName(String assigneeName, Pageable pageable);
@@ -212,6 +213,72 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
         Pageable pageable
     );
 
+    // ============ PHASE 7.7 hotfix-15: token-based OR match ============
+    //
+    // The substring search above (LIKE %query%) requires the full
+    // query string to appear in some field. For relational-style
+    // questions like "may do cham lag" that produces zero hits even
+    // when 2+ tickets are about a "may" problem, because no single
+    // ticket contains the exact phrase "may do cham lag".
+    //
+    // This method treats the query as a list of space-separated
+    // tokens and matches a ticket if ANY token appears in the
+    // title or description. The 2-arg signature keeps the same
+    // RBAC bypass pattern as searchTickets above; callers MUST
+    // have already applied the authorization decision. Used by
+    // TicketContextRetriever.fetchByTokenOrMatch as a final
+    // fallback for LOOKUP_TICKETS_BY_TOPIC intent.
+    @Query("""
+        SELECT DISTINCT t FROM Ticket t
+        WHERE (
+            LOWER(t.title) LIKE LOWER(CONCAT('%', :t1, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t2, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t3, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t4, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t5, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t1, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t2, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t3, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t4, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t5, '%'))
+        )
+        """)
+    Page<Ticket> searchTicketsByAnyToken(
+        @Param("t1") String t1,
+        @Param("t2") String t2,
+        @Param("t3") String t3,
+        @Param("t4") String t4,
+        @Param("t5") String t5,
+        Pageable pageable
+    );
+
+    // Department-scoped variant of searchTicketsByAnyToken.
+    @Query("""
+        SELECT DISTINCT t FROM Ticket t
+        WHERE t.department.id = :departmentId
+          AND (
+            LOWER(t.title) LIKE LOWER(CONCAT('%', :t1, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t2, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t3, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t4, '%'))
+            OR LOWER(t.title) LIKE LOWER(CONCAT('%', :t5, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t1, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t2, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t3, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t4, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :t5, '%'))
+        )
+        """)
+    Page<Ticket> searchTicketsByAnyTokenByDepartment(
+        @Param("departmentId") Long departmentId,
+        @Param("t1") String t1,
+        @Param("t2") String t2,
+        @Param("t3") String t3,
+        @Param("t4") String t4,
+        @Param("t5") String t5,
+        Pageable pageable
+    );
+
     // ============ PHASE 5.1 (C-7) authorization-aware read queries ============
     //
     // These queries implement the canonical object-level READ scope at the SQL boundary
@@ -301,7 +368,34 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
         @Param("applyExcludeClosed") boolean applyExcludeClosed,
         Pageable pageable
     );
-    
+
+    /** Unassigned, non-terminal tickets (ALL scope). Filtered in SQL so paging is not applied before the filter. */
+    @Query("""
+        SELECT t FROM Ticket t
+        WHERE t.assignee IS NULL
+          AND (t.assigneeName IS NULL OR t.assigneeName = '')
+          AND t.status NOT IN :excludedStatuses
+        """)
+    Page<Ticket> findUnassignedAuthorizedAll(
+        @Param("excludedStatuses") java.util.Collection<TicketTypes.TicketStatus> excludedStatuses,
+        Pageable pageable
+    );
+
+    /** Unassigned, non-terminal tickets in the actor's department OR requested by the actor. */
+    @Query("""
+        SELECT t FROM Ticket t
+        WHERE (t.department.id = :departmentId OR LOWER(t.requesterUsername) = LOWER(:username))
+          AND t.assignee IS NULL
+          AND (t.assigneeName IS NULL OR t.assigneeName = '')
+          AND t.status NOT IN :excludedStatuses
+        """)
+    Page<Ticket> findUnassignedByDepartmentOrOwner(
+        @Param("departmentId") Long departmentId,
+        @Param("username") String username,
+        @Param("excludedStatuses") java.util.Collection<TicketTypes.TicketStatus> excludedStatuses,
+        Pageable pageable
+    );
+
     // ============ SLA Queries ============
     
     /**

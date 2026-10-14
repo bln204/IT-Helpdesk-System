@@ -39,8 +39,9 @@ class AiAssistantControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+
     @MockitoBean
-    private LlmGenerationService llmGenerationService;
+    private com.example.ticketing.ai.query.AiAssistantPipeline aiAssistantPipeline;
 
     @MockitoBean
     private JwtService jwtService;
@@ -50,6 +51,12 @@ class AiAssistantControllerTest {
 
     @MockitoBean
     private UserAccountRepository userAccountRepository;
+
+    @MockitoBean
+    private com.example.ticketing.ai.session.AiSessionService aiSessionService;
+
+    @MockitoBean
+    private com.example.ticketing.ticket.TicketService ticketService;
 
     private static final String ENDPOINT = "/api/ai/ask";
 
@@ -76,7 +83,7 @@ class AiAssistantControllerTest {
         void authenticatedRequestShouldReachService() throws Exception {
             // Arrange
             AnswerResponse mockResponse = createMockResponse("Test answer");
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenReturn(mockResponse);
 
             // Act & Assert
@@ -90,7 +97,7 @@ class AiAssistantControllerTest {
                     .andExpect(jsonPath("$.hasContext").value(true));
 
             // Verify service was called
-            verify(llmGenerationService).generateAnswer(any(), eq("testuser"));
+            verify(aiAssistantPipeline).answer(any(), eq("testuser"));
         }
     }
 
@@ -103,7 +110,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "admin", roles = {"ADMIN"})
         void adminRoleShouldBeAllowed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Admin answer");
-            when(llmGenerationService.generateAnswer(any(), eq("admin")))
+            when(aiAssistantPipeline.answer(any(), eq("admin")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -112,7 +119,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"Test question\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(any(), eq("admin"));
+            verify(aiAssistantPipeline).answer(any(), eq("admin"));
         }
 
         @Test
@@ -120,7 +127,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "giamdoc", roles = {"GIAM_DOC"})
         void giamDocRoleShouldBeAllowed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Giam Doc answer");
-            when(llmGenerationService.generateAnswer(any(), eq("giamdoc")))
+            when(aiAssistantPipeline.answer(any(), eq("giamdoc")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -129,7 +136,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"Test question\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(any(), eq("giamdoc"));
+            verify(aiAssistantPipeline).answer(any(), eq("giamdoc"));
         }
 
         @Test
@@ -137,7 +144,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "truongphong", roles = {"TRUONG_PHONG"})
         void truongPhongRoleShouldBeAllowed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Truong Phong answer");
-            when(llmGenerationService.generateAnswer(any(), eq("truongphong")))
+            when(aiAssistantPipeline.answer(any(), eq("truongphong")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -146,7 +153,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"Test question\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(any(), eq("truongphong"));
+            verify(aiAssistantPipeline).answer(any(), eq("truongphong"));
         }
 
         @Test
@@ -154,7 +161,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "nhanvien", roles = {"NHAN_VIEN"})
         void nhanVienRoleShouldBeAllowed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Nhan Vien answer");
-            when(llmGenerationService.generateAnswer(any(), eq("nhanvien")))
+            when(aiAssistantPipeline.answer(any(), eq("nhanvien")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -163,7 +170,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"Test question\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(any(), eq("nhanvien"));
+            verify(aiAssistantPipeline).answer(any(), eq("nhanvien"));
         }
 
         @Test
@@ -177,7 +184,7 @@ class AiAssistantControllerTest {
                     .andExpect(status().isForbidden());
 
             // Service should not be called
-            verify(llmGenerationService, never()).generateAnswer(any(), any());
+            verify(aiAssistantPipeline, never()).answer(any(), any());
         }
     }
 
@@ -223,7 +230,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "testuser", roles = {"ADMIN"})
         void defaultParametersShouldBeUsed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Answer");
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -232,7 +239,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"What is Docker?\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(
+            verify(aiAssistantPipeline).answer(
                     argThat(req -> 
                         req.getQuestion().equals("What is Docker?") &&
                         req.getLimit() == 5 && // default
@@ -247,7 +254,7 @@ class AiAssistantControllerTest {
         @WithMockUser(username = "testuser", roles = {"ADMIN"})
         void customParametersShouldBePassed() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Answer");
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -256,7 +263,7 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"Test question\", \"limit\": 3, \"minScore\": 0.7}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(
+            verify(aiAssistantPipeline).answer(
                     argThat(req -> 
                         req.getLimit() == 3 &&
                         req.getMinScore() == 0.7
@@ -282,10 +289,10 @@ class AiAssistantControllerTest {
                             new SourceReference("TKT-002", "Database connection", 0.78)
                     ))
                     .hasContext(true)
-                    .metadata(new ResponseMetadata(150, "qwen3:4b", "department_filtered"))
+                    .metadata(new ResponseMetadata(150, "gemma3:4b", "department_filtered"))
                     .build();
 
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -298,7 +305,7 @@ class AiAssistantControllerTest {
                     .andExpect(jsonPath("$.hasContext").value(true))
                     .andExpect(jsonPath("$.sources[0].ticketNumber").value("TKT-001"))
                     .andExpect(jsonPath("$.sources[0].similarityScore").value(0.85))
-                    .andExpect(jsonPath("$.metadata.model").value("qwen3:4b"));
+                    .andExpect(jsonPath("$.metadata.model").value("gemma3:4b"));
         }
 
         @Test
@@ -310,10 +317,10 @@ class AiAssistantControllerTest {
                     .contextCount(0)
                     .sources(List.of())
                     .hasContext(false)
-                    .metadata(new ResponseMetadata(100, "qwen3:4b", "no_results"))
+                    .metadata(new ResponseMetadata(100, "gemma3:4b", "no_results"))
                     .build();
 
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenReturn(mockResponse);
 
             mockMvc.perform(post(ENDPOINT)
@@ -336,7 +343,7 @@ class AiAssistantControllerTest {
         @DisplayName("LlmGenerationException should propagate (not be swallowed)")
         @WithMockUser(username = "testuser", roles = {"ADMIN"})
         void llmGenerationExceptionShouldPropagate() throws Exception {
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenThrow(LlmGenerationException.ollamaUnavailable(
                             new RuntimeException("Connection refused")));
 
@@ -366,7 +373,7 @@ class AiAssistantControllerTest {
         @DisplayName("Timeout exception should propagate")
         @WithMockUser(username = "testuser", roles = {"ADMIN"})
         void timeoutExceptionShouldPropagate() throws Exception {
-            when(llmGenerationService.generateAnswer(any(), eq("testuser")))
+            when(aiAssistantPipeline.answer(any(), eq("testuser")))
                     .thenThrow(LlmGenerationException.timeout(
                             new RuntimeException("Request timeout")));
 
@@ -405,7 +412,7 @@ class AiAssistantControllerTest {
         @DisplayName("Username should resolve when principal is a String (JWT filter behavior)")
         void usernameShouldResolveWithStringPrincipal() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Answer");
-            when(llmGenerationService.generateAnswer(any(), eq("tech.smith")))
+            when(aiAssistantPipeline.answer(any(), eq("tech.smith")))
                     .thenReturn(mockResponse);
 
             // withAuthentication() with a String principal mirrors the real
@@ -421,14 +428,14 @@ class AiAssistantControllerTest {
                     .andExpect(status().isOk());
 
             // The username must be passed to the service, NOT null.
-            verify(llmGenerationService).generateAnswer(any(), eq("tech.smith"));
+            verify(aiAssistantPipeline).answer(any(), eq("tech.smith"));
         }
 
         @Test
         @DisplayName("Username should resolve when principal is a UserDetails instance")
         void usernameShouldResolveWithUserDetailsPrincipal() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Answer");
-            when(llmGenerationService.generateAnswer(any(), eq("detail.user")))
+            when(aiAssistantPipeline.answer(any(), eq("detail.user")))
                     .thenReturn(mockResponse);
 
             org.springframework.security.core.userdetails.User userDetails =
@@ -444,14 +451,14 @@ class AiAssistantControllerTest {
                             .content("{\"question\": \"How to reset password?\"}"))
                     .andExpect(status().isOk());
 
-            verify(llmGenerationService).generateAnswer(any(), eq("detail.user"));
+            verify(aiAssistantPipeline).answer(any(), eq("detail.user"));
         }
 
         @Test
         @DisplayName("Username must never be sourced from the request body")
         void usernameMustNotComeFromRequestBody() throws Exception {
             AnswerResponse mockResponse = createMockResponse("Answer");
-            when(llmGenerationService.generateAnswer(any(), any()))
+            when(aiAssistantPipeline.answer(any(), any()))
                     .thenReturn(mockResponse);
 
             // A client-supplied username field must be ignored for logging/authz.
@@ -465,7 +472,7 @@ class AiAssistantControllerTest {
                     .andExpect(status().isOk());
 
             // The authenticated principal wins over any client-supplied value.
-            verify(llmGenerationService).generateAnswer(any(), eq("real.user"));
+            verify(aiAssistantPipeline).answer(any(), eq("real.user"));
         }
     }
 
@@ -479,7 +486,7 @@ class AiAssistantControllerTest {
                 .contextCount(1)
                 .sources(List.of(new SourceReference("TKT-001", "Test ticket", 0.85)))
                 .hasContext(true)
-                .metadata(new ResponseMetadata(100, "qwen3:4b", "department_filtered"))
+                .metadata(new ResponseMetadata(100, "gemma3:4b", "department_filtered"))
                 .build();
     }
 }

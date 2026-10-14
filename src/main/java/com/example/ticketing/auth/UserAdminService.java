@@ -656,12 +656,10 @@ public class UserAdminService {
         }
         
         // Track password change
-        boolean passwordChanged = false;
         if (newPassword != null && !newPassword.isBlank()) {
             user.setPasswordHash(passwordEncoder.encode(newPassword));
             user.markPasswordChanged();
             changes.addChange("Mật khẩu", "(không hiển thị)", newPassword);
-            passwordChanged = true;
             
             userAuditService.log(
                 UserAuditAction.PASSWORD_RESET,
@@ -977,16 +975,6 @@ public class UserAdminService {
         }
     }
 
-    private void rejectAvatarChange(String currentAvatarUrl, String requestedAvatarUrl) {
-        // Normalize both values: null becomes empty string, trim whitespace
-        String current = normalize(currentAvatarUrl);
-        String requested = normalize(requestedAvatarUrl);
-        
-        // Only reject if there's an actual change (not just null vs empty string)
-        if (!current.equals(requested)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar changes are disabled.");
-        }
-    }
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();

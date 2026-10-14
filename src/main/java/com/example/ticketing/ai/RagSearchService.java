@@ -171,7 +171,6 @@ public class RagSearchService {
                 }
             }
 
-            long processingTime = System.currentTimeMillis() - startTime;
 
             return RagSearchDto.SearchResponse.builder()
                     .query(request.getQuery())

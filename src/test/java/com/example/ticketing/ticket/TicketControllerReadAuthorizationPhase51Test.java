@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
@@ -18,8 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -45,22 +42,23 @@ import com.example.ticketing.ticket.TicketTypes.TicketStatus;
  * PHASE 5.1 (C-7) - HTTP-level integration tests for the canonical object-level
  * read policy.
  *
- * <p>Verifies the wire-level behavior:
+ * <p>
+ * Verifies the wire-level behavior:
  * <ul>
- *   <li>GET /api/tickets/{id} returns 200 for full-scope actors and 403 for
- *       unauthorized non-IT actors in a different department.</li>
- *   <li>Comments, audit, audit/export, assignments, attachments (list and
- *       download) all enforce the same policy.</li>
- *   <li>The canonical IT operator scope is preserved (MKT/HR/FIN requesters are
- *       readable).</li>
- *   <li>Unauthenticated requests still return 401 (regression of the existing
- *       baseline).</li>
+ * <li>GET /api/tickets/{id} returns 200 for full-scope actors and 403 for
+ * unauthorized non-IT actors in a different department.</li>
+ * <li>Comments, audit, audit/export, assignments, attachments (list and
+ * download) all enforce the same policy.</li>
+ * <li>The canonical IT operator scope is preserved (MKT/HR/FIN requesters are
+ * readable).</li>
+ * <li>Unauthenticated requests still return 401 (regression of the existing
+ * baseline).</li>
  * </ul>
  */
 @WebMvcTest(controllers = TicketController.class)
-@Import({SecurityConfig.class, ItDepartmentResolver.class,
-    ActorContextService.class, TicketAuthorization.class,
-    TicketExceptionHandler.class})
+@Import({ SecurityConfig.class, ItDepartmentResolver.class,
+        ActorContextService.class, TicketAuthorization.class,
+        TicketExceptionHandler.class })
 class TicketControllerReadAuthorizationPhase51Test {
 
     @Autowired
@@ -117,8 +115,8 @@ class TicketControllerReadAuthorizationPhase51Test {
 
     private static UsernamePasswordAuthenticationToken stringPrincipal(UserAccount user) {
         return new UsernamePasswordAuthenticationToken(
-            user.getUsername(), null,
-            List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                user.getUsername(), null,
+                List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
     }
 
     private void givenUserExists(UserAccount user) {
@@ -150,93 +148,96 @@ class TicketControllerReadAuthorizationPhase51Test {
         // bean so the same policy runs in the @WebMvcTest slice. This keeps the test
         // honest: the controller does NOT short-circuit, the policy does.
         when(ticketService.getTicket(eq(TICKET_ID), anyString()))
-            .thenAnswer(invocation -> {
-                String principal = invocation.getArgument(1);
-                if (principal == null) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Authentication required.");
-                }
-                UserAccount principalUser = userAccountRepository.findByUsername(principal).orElse(null);
-                if (principalUser == null) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.UNAUTHORIZED, "User not found: " + principal);
-                }
-                com.example.ticketing.department.Department principalDept = principalUser.getDepartment();
-                boolean isIt = principalDept != null
-                    && "IT".equals(principalDept.getCode());
-                ActorContext actor = ActorContext.of(principalUser, isIt);
-                if (!new TicketAuthorization().canReadTicket(actor, t)) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN,
-                        "You don't have permission to read this ticket.");
-                }
-                return t;
-            });
+                .thenAnswer(invocation -> {
+                    String principal = invocation.getArgument(1);
+                    if (principal == null) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED, "Authentication required.");
+                    }
+                    UserAccount principalUser = userAccountRepository.findByUsername(principal).orElse(null);
+                    if (principalUser == null) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED, "User not found: " + principal);
+                    }
+                    com.example.ticketing.department.Department principalDept = principalUser.getDepartment();
+                    boolean isIt = principalDept != null
+                            && "IT".equals(principalDept.getCode());
+                    ActorContext actor = ActorContext.of(principalUser, isIt);
+                    if (!new TicketAuthorization().canReadTicket(actor, t)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.FORBIDDEN,
+                                "You don't have permission to read this ticket.");
+                    }
+                    return t;
+                });
         when(ticketService.getTicket(eq(TICKET_ID), any(org.springframework.security.core.Authentication.class)))
-            .thenAnswer(invocation -> {
-                org.springframework.security.core.Authentication auth = invocation.getArgument(1);
-                if (auth == null || auth.getName() == null) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Authentication required.");
-                }
-                UserAccount principalUser = userAccountRepository.findByUsername(auth.getName()).orElse(null);
-                if (principalUser == null) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.UNAUTHORIZED, "User not found: " + auth.getName());
-                }
-                com.example.ticketing.department.Department principalDept = principalUser.getDepartment();
-                boolean isIt = principalDept != null
-                    && "IT".equals(principalDept.getCode());
-                ActorContext actor = ActorContext.of(principalUser, isIt);
-                if (!new TicketAuthorization().canReadTicket(actor, t)) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN,
-                        "You don't have permission to read this ticket.");
-                }
-                return t;
-            });
+                .thenAnswer(invocation -> {
+                    org.springframework.security.core.Authentication auth = invocation.getArgument(1);
+                    if (auth == null || auth.getName() == null) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED, "Authentication required.");
+                    }
+                    UserAccount principalUser = userAccountRepository.findByUsername(auth.getName()).orElse(null);
+                    if (principalUser == null) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED, "User not found: " + auth.getName());
+                    }
+                    com.example.ticketing.department.Department principalDept = principalUser.getDepartment();
+                    boolean isIt = principalDept != null
+                            && "IT".equals(principalDept.getCode());
+                    ActorContext actor = ActorContext.of(principalUser, isIt);
+                    if (!new TicketAuthorization().canReadTicket(actor, t)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.FORBIDDEN,
+                                "You don't have permission to read this ticket.");
+                    }
+                    return t;
+                });
         // Nested-resource stubs also consult the canonical C-7 policy. The controller
-        // calls the actor-aware overload, the service throws ResponseStatusException(403)
+        // calls the actor-aware overload, the service throws
+        // ResponseStatusException(403)
         // when the actor is not allowed to read the parent ticket.
         java.util.function.Function<String, Boolean> isAllowed = (principal) -> {
-            if (principal == null) return false;
+            if (principal == null)
+                return false;
             UserAccount principalUser = userAccountRepository.findByUsername(principal).orElse(null);
-            if (principalUser == null) return false;
+            if (principalUser == null)
+                return false;
             com.example.ticketing.department.Department principalDept = principalUser.getDepartment();
             boolean isIt = principalDept != null && "IT".equals(principalDept.getCode());
             ActorContext actor = ActorContext.of(principalUser, isIt);
             return new TicketAuthorization().canReadTicket(actor, t);
         };
         when(ticketService.listComments(eq(TICKET_ID), anyString(), any()))
-            .thenAnswer(invocation -> {
-                String principal = invocation.getArgument(1);
-                if (!isAllowed.apply(principal)) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN,
-                        "You don't have permission to read this ticket.");
-                }
-                return List.of();
-            });
+                .thenAnswer(invocation -> {
+                    String principal = invocation.getArgument(1);
+                    if (!isAllowed.apply(principal)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.FORBIDDEN,
+                                "You don't have permission to read this ticket.");
+                    }
+                    return List.of();
+                });
         when(ticketService.listAudit(eq(TICKET_ID), anyString()))
-            .thenAnswer(invocation -> {
-                String principal = invocation.getArgument(1);
-                if (!isAllowed.apply(principal)) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN,
-                        "You don't have permission to read this ticket.");
-                }
-                return List.of();
-            });
+                .thenAnswer(invocation -> {
+                    String principal = invocation.getArgument(1);
+                    if (!isAllowed.apply(principal)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.FORBIDDEN,
+                                "You don't have permission to read this ticket.");
+                    }
+                    return List.of();
+                });
         when(ticketService.listAssignments(eq(TICKET_ID), anyString()))
-            .thenAnswer(invocation -> {
-                String principal = invocation.getArgument(1);
-                if (!isAllowed.apply(principal)) {
-                    throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN,
-                        "You don't have permission to read this ticket.");
-                }
-                return List.of();
-            });
+                .thenAnswer(invocation -> {
+                    String principal = invocation.getArgument(1);
+                    if (!isAllowed.apply(principal)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                org.springframework.http.HttpStatus.FORBIDDEN,
+                                "You don't have permission to read this ticket.");
+                    }
+                    return List.of();
+                });
     }
 
     // ============================================================
@@ -255,7 +256,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(ADMIN))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -266,7 +267,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(GIAM_DOC))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -277,7 +278,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -288,7 +289,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -299,7 +300,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(TRUONG_PHONG_MKT))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -310,7 +311,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_MKT))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -321,7 +322,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -332,14 +333,14 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_MKT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
 
         @Test
         @DisplayName("PHASE 5.1: unauthenticated GET returns 401 (regression)")
         void unauthenticatedReturns401() throws Exception {
             mockMvc.perform(get("/api/tickets/{id}", TICKET_ID))
-                .andExpect(status().isUnauthorized());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -359,7 +360,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/comments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -370,7 +371,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/audit", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -381,7 +382,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/audit/export", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -392,7 +393,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/assignments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -404,7 +405,7 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/attachments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_HR))))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -416,19 +417,19 @@ class TicketControllerReadAuthorizationPhase51Test {
 
             mockMvc.perform(get("/api/tickets/{id}/comments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
             mockMvc.perform(get("/api/tickets/{id}/audit", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
             mockMvc.perform(get("/api/tickets/{id}/audit/export", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
             mockMvc.perform(get("/api/tickets/{id}/assignments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
             mockMvc.perform(get("/api/tickets/{id}/attachments", TICKET_ID)
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT))))
-                .andExpect(status().isOk());
+                    .andExpect(status().isOk());
         }
     }
 }

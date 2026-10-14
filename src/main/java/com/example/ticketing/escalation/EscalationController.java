@@ -145,7 +145,7 @@ public class EscalationController {
             @PathVariable Long ticketId,
             Authentication authentication) {
         log.info("GET /api/escalation/history/{}", ticketId);
-        ActorContext actor = actorContextService.fromAuthentication(authentication);
+        actorContextService.fromAuthentication(authentication); // rejects missing/disabled/unapproved users
         // The history is ticket-derived data. We must be allowed to read the parent
         // ticket before we can list its history.
         ticketService.getTicket(ticketId, authentication.getName());

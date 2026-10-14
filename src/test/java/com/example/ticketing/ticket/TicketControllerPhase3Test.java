@@ -1,7 +1,6 @@
 package com.example.ticketing.ticket;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -40,27 +39,35 @@ import com.example.ticketing.security.JwtBlacklistService;
 import com.example.ticketing.ticket.TicketTypes.TicketPriority;
 
 /**
- * PHASE 3 - HTTP-level controller tests for the create-time assignee policy (H-3) and
+ * PHASE 3 - HTTP-level controller tests for the create-time assignee policy
+ * (H-3) and
  * the canonical target validation contract (C-3).
  *
- * <p>This suite covers brief \u00a725 - verify the actual HTTP behavior:
+ * <p>
+ * This suite covers brief \u00a725 - verify the actual HTTP behavior:
  * <ul>
- *   <li>HTTP success for authorized create-time assignment (TRUONG_PHONG + IT + valid target).</li>
- *   <li>HTTP success for create without an assignee (every authenticated role).</li>
- *   <li>HTTP 4xx for unauthorized create-time assignment attempts (per the existing
- *       project exception-to-HTTP mapping: 400 for TicketRuleViolationException,
- *       404 for TicketNotFoundException).</li>
+ * <li>HTTP success for authorized create-time assignment (TRUONG_PHONG + IT +
+ * valid target).</li>
+ * <li>HTTP success for create without an assignee (every authenticated
+ * role).</li>
+ * <li>HTTP 4xx for unauthorized create-time assignment attempts (per the
+ * existing
+ * project exception-to-HTTP mapping: 400 for TicketRuleViolationException,
+ * 404 for TicketNotFoundException).</li>
  * </ul>
  *
- * <p>The actual C-3 target validation is exercised end-to-end by
- * {@link TicketServicePhase3IntegrationTest}. This suite verifies the HTTP seam: that
- * the controller does not bypass the service, and that an unauthorized actor never
+ * <p>
+ * The actual C-3 target validation is exercised end-to-end by
+ * {@link TicketServicePhase3IntegrationTest}. This suite verifies the HTTP
+ * seam: that
+ * the controller does not bypass the service, and that an unauthorized actor
+ * never
  * reaches the service for create-time assignment.
  */
 @WebMvcTest(controllers = TicketController.class)
-@Import({SecurityConfig.class, ItDepartmentResolver.class,
-    ActorContextService.class, TicketAuthorization.class,
-    TicketExceptionHandler.class})
+@Import({ SecurityConfig.class, ItDepartmentResolver.class,
+        ActorContextService.class, TicketAuthorization.class,
+        TicketExceptionHandler.class })
 class TicketControllerPhase3Test {
 
     @Autowired
@@ -118,8 +125,8 @@ class TicketControllerPhase3Test {
     /** Mirrors JwtAuthenticationFilter: principal is the String username. */
     private static UsernamePasswordAuthenticationToken stringPrincipal(UserAccount user) {
         return new UsernamePasswordAuthenticationToken(
-            user.getUsername(), null,
-            List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                user.getUsername(), null,
+                List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
     }
 
     private void givenUserExists(UserAccount user) {
@@ -128,7 +135,7 @@ class TicketControllerPhase3Test {
 
     private void givenCreateTicketReturns(UserAccount actor, Ticket ticket) {
         when(ticketService.createTicket(any(), eq(actor.getUsername()), eq(actor.getRole())))
-            .thenReturn(ticket);
+                .thenReturn(ticket);
     }
 
     private void givenCreateTicketThrows(RuntimeException toThrow) {
@@ -184,7 +191,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(ADMIN)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("Admin request", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
 
             verify(ticketService).createTicket(any(), eq(ADMIN.getUsername()), eq(UserRole.Role.ADMIN));
         }
@@ -199,7 +206,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(GIAM_DOC)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("GD request", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
         }
 
         @Test
@@ -212,7 +219,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(TRUONG_PHONG_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP non-IT", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
         }
 
         @Test
@@ -225,7 +232,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(NHAN_VIEN_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("NV non-IT", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
         }
 
         @Test
@@ -238,7 +245,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP IT", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
         }
 
         @Test
@@ -251,7 +258,7 @@ class TicketControllerPhase3Test {
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("NV IT", null)))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
         }
     }
 
@@ -268,17 +275,19 @@ class TicketControllerPhase3Test {
         void truongPhongItCreateWithValidAssignee() throws Exception {
             givenUserExists(TRUONG_PHONG_IT);
             givenCreateTicketReturns(TRUONG_PHONG_IT,
-                responseTicket(TRUONG_PHONG_IT, NHAN_VIEN_IT2.getUsername()));
+                    responseTicket(TRUONG_PHONG_IT, NHAN_VIEN_IT2.getUsername()));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP IT", NHAN_VIEN_IT2.getUsername())))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
 
             // The controller forwards the assignee string to the service. The service
-            // applies C-3 target validation (verified by TicketServicePhase3IntegrationTest).
-            verify(ticketService).createTicket(any(), eq(TRUONG_PHONG_IT.getUsername()), eq(UserRole.Role.TRUONG_PHONG));
+            // applies C-3 target validation (verified by
+            // TicketServicePhase3IntegrationTest).
+            verify(ticketService).createTicket(any(), eq(TRUONG_PHONG_IT.getUsername()),
+                    eq(UserRole.Role.TRUONG_PHONG));
         }
     }
 
@@ -297,15 +306,15 @@ class TicketControllerPhase3Test {
             // The target is valid; the actor is not. Server rejects on actor.
             givenUserExists(ADMIN);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(ADMIN)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("Admin request", NHAN_VIEN_IT.getUsername())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(
-                    org.hamcrest.Matchers.containsString("IT Helpdesk manager")));
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value(
+                            org.hamcrest.Matchers.containsString("IT Helpdesk manager")));
         }
 
         @Test
@@ -313,13 +322,13 @@ class TicketControllerPhase3Test {
         void giamDocWithValidTargetIsRejected() throws Exception {
             givenUserExists(GIAM_DOC);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(GIAM_DOC)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("GD request", NHAN_VIEN_IT.getUsername())))
-                .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
@@ -327,13 +336,13 @@ class TicketControllerPhase3Test {
         void truongPhongNonItWithValidTargetIsRejected() throws Exception {
             givenUserExists(TRUONG_PHONG_MKT);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(TRUONG_PHONG_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP non-IT", NHAN_VIEN_IT.getUsername())))
-                .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
@@ -341,13 +350,13 @@ class TicketControllerPhase3Test {
         void nhanVienNonItWithValidTargetIsRejected() throws Exception {
             givenUserExists(NHAN_VIEN_MKT);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(NHAN_VIEN_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("NV non-IT", NHAN_VIEN_IT.getUsername())))
-                .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
@@ -355,13 +364,13 @@ class TicketControllerPhase3Test {
         void nhanVienItWithAnotherAssigneeIsRejected() throws Exception {
             givenUserExists(NHAN_VIEN_IT);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
+                    "Only the IT Helpdesk manager may specify an assignee during ticket creation."));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("NV IT", NHAN_VIEN_IT2.getUsername())))
-                .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
@@ -369,13 +378,13 @@ class TicketControllerPhase3Test {
         void truongPhongItWithAdminAsTargetIsRejected() throws Exception {
             givenUserExists(TRUONG_PHONG_IT);
             givenCreateTicketThrows(new TicketRuleViolationException(
-                "Assignment target role is not NHAN_VIEN: admin_p3"));
+                    "Assignment target role is not NHAN_VIEN: admin_p3"));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP IT", ADMIN.getUsername())))
-                .andExpect(status().isBadRequest());
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
@@ -383,18 +392,19 @@ class TicketControllerPhase3Test {
         void truongPhongItWithNonexistentTargetIsRejected() throws Exception {
             givenUserExists(TRUONG_PHONG_IT);
             givenCreateTicketThrows(new TicketNotFoundException(
-                "Assignment target not found: ghost.user"));
+                    "Assignment target not found: ghost.user"));
 
             mockMvc.perform(post("/api/tickets")
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(createPayload("TP IT", "ghost.user")))
-                .andExpect(status().isNotFound());
+                    .andExpect(status().isNotFound());
         }
     }
 
     // ========================================================================
-    // POST /api/tickets without a token - 401 (regression of unauthenticated baseline)
+    // POST /api/tickets without a token - 401 (regression of unauthenticated
+    // baseline)
     // ========================================================================
 
     @Test
@@ -403,7 +413,7 @@ class TicketControllerPhase3Test {
         mockMvc.perform(post("/api/tickets")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(createPayload("Anonymous", null)))
-            .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized());
 
         verify(ticketService, never()).createTicket(any(), any(), any());
     }

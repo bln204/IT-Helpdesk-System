@@ -11,8 +11,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.ticketing.department.Department;
-import com.example.ticketing.department.DepartmentRepository;
 
 /**
  * Service cho Service Request Management.
@@ -26,17 +24,14 @@ public class ServiceRequestService {
     private final ServiceRequestRepository serviceRequestRepository;
     private final ServiceRequestCommentRepository commentRepository;
     private final ServiceCatalogRepository catalogRepository;
-    private final DepartmentRepository departmentRepository;
 
     public ServiceRequestService(
             ServiceRequestRepository serviceRequestRepository,
             ServiceRequestCommentRepository commentRepository,
-            ServiceCatalogRepository catalogRepository,
-            DepartmentRepository departmentRepository) {
+            ServiceCatalogRepository catalogRepository) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.commentRepository = commentRepository;
         this.catalogRepository = catalogRepository;
-        this.departmentRepository = departmentRepository;
     }
 
     // ==================== Service Catalog ====================
@@ -88,7 +83,7 @@ public class ServiceRequestService {
 
         // Generate request number
         request.setRequestNumber(generateRequestNumber());
-        
+
         // Set requester info
         request.setRequesterUsername(requesterUsername);
         request.setRequesterName(requesterName);
@@ -166,7 +161,6 @@ public class ServiceRequestService {
      */
     public ServiceRequest updateStatus(Long id, ServiceRequest.ServiceStatus newStatus, String actorName) {
         ServiceRequest request = getRequestById(id);
-        ServiceRequest.ServiceStatus oldStatus = request.getStatus();
 
         request.setStatus(newStatus);
         request.setUpdatedBy(actorName);
@@ -276,15 +270,14 @@ public class ServiceRequestService {
     /**
      * Thêm comment.
      */
-    public ServiceRequestComment addComment(Long requestId, String body, String authorName, 
-                                           String authorUsername, boolean isInternal) {
+    public ServiceRequestComment addComment(Long requestId, String body, String authorName,
+            String authorUsername, boolean isInternal) {
         ServiceRequest request = getRequestById(requestId);
 
         ServiceRequestComment comment = new ServiceRequestComment(request, authorName, authorUsername, body);
         comment.setAuthorRole("IT_STAFF");
-        comment.setVisibility(isInternal ? 
-                ServiceRequestComment.Visibility.INTERNAL : 
-                ServiceRequestComment.Visibility.PUBLIC);
+        comment.setVisibility(
+                isInternal ? ServiceRequestComment.Visibility.INTERNAL : ServiceRequestComment.Visibility.PUBLIC);
 
         return commentRepository.save(comment);
     }
@@ -320,8 +313,15 @@ public class ServiceRequestService {
      */
     @Transactional(readOnly = true)
     public Page<ServiceRequest> getPendingRequests(Pageable pageable) {
-        return serviceRequestRepository.findByStatusOrderByCreatedAtDesc(
-                ServiceRequest.ServiceStatus.PENDING_APPROVAL, pageable);
+        return getRequestsByStatus(ServiceRequest.ServiceStatus.PENDING_APPROVAL, pageable);
+    }
+
+    /**
+     * Lấy requests theo trạng thái.
+     */
+    @Transactional(readOnly = true)
+    public Page<ServiceRequest> getRequestsByStatus(ServiceRequest.ServiceStatus status, Pageable pageable) {
+        return serviceRequestRepository.findByStatusOrderByCreatedAtDesc(status, pageable);
     }
 
     /**

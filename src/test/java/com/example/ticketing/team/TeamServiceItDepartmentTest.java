@@ -62,7 +62,7 @@ class TeamServiceItDepartmentTest {
         Department it = persistDepartment("IT", "Information Technology");
         Department mkt = persistDepartment("MKT", "Marketing");
 
-        Team itTeam = persistTeam("Network", "NET", it, true);
+        persistTeam("Network", "NET", it, true);
         persistTeam("Hardware", "HW", mkt, true);
 
         var result = teamService.getITTeams();

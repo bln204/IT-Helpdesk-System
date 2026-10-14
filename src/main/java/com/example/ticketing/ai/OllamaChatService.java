@@ -17,15 +17,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Service for communicating with Ollama's chat API.
- * 
- * Uses JDK HttpClient to call local Ollama for LLM generation.
- * This service is independent of prompt construction - it accepts
- * a prepared list of messages and returns the generated response.
- * 
- * Security:
- * - Does NOT log raw prompts, responses, or sensitive data
- * - Maps errors to user-friendly messages
- * - Uses configured timeouts to prevent runaway requests
+ *
+ * <p>Uses JDK HttpClient to call the local Ollama daemon for LLM
+ * generation. The service is independent of prompt construction: it
+ * accepts a prepared list of messages and returns the generated response.
+ *
+ * <p>Production default chat model is {@code gemma3:4b} (Phase 6.3). The
+ * model is configurable via {@code OLLAMA_CHAT_MODEL}.
+ *
+ * <p>Security:
+ * <ul>
+ *   <li>Does NOT log raw prompts, responses, or sensitive data.</li>
+ *   <li>Maps errors to user-friendly messages.</li>
+ *   <li>Uses configured timeouts to prevent runaway requests.</li>
+ * </ul>
  */
 @Service
 public class OllamaChatService {
@@ -46,18 +51,29 @@ public class OllamaChatService {
 
     /**
      * Send a chat request to Ollama and return the generated response.
-     * 
+     *
+     * <p>Implements a single-shot retry when the model returns an empty
+     * {@code content} field (the failure shape produced when a reasoning-
+     * heavy model spends the entire token budget on internal reasoning).
+     * The retry sends the exact same prompt; further failures propagate
+     * as {@link LlmGenerationException#emptyResponse()}.
+     *
      * @param messages List of chat messages (system + user) prepared by the caller
      * @return The assistant's response content
      * @throws LlmGenerationException if Ollama is unavailable, times out, or returns an error
      */
     public String generate(List<ChatMessage> messages) {
+        return generate(messages, null);
+    }
+
+    /** Same as {@link #generate(List)} with per-call overrides (JSON Schema format, temperature, timeout). */
+    public String generate(List<ChatMessage> messages, ChatOptions options) {
         long startTime = System.currentTimeMillis();
         String endpoint = properties.getBaseUrl() + "/api/chat";
 
         try {
             // Build Ollama request body
-            Map<String, Object> requestBody = buildRequestBody(messages);
+            Map<String, Object> requestBody = buildRequestBody(messages, options);
 
             // Create HTTP request with configured timeout
             String requestJson = objectMapper.writeValueAsString(requestBody);
@@ -65,12 +81,28 @@ public class OllamaChatService {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(properties.getChatTimeoutSeconds()))
+                    .timeout(Duration.ofSeconds(options != null && options.timeoutSeconds() != null
+                            ? options.timeoutSeconds() : properties.getChatTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(requestJson))
                     .build();
 
-            // Log safe technical info only
-            log.debug("Sending chat request to Ollama: model={}", properties.getChatModel());
+            // Log safe technical info only. The num_predict log
+            // line is critical for Phase 7.7 hotfix-4
+            // diagnostics: a done_reason=length result could be
+            // caused by the budget being too small, the context
+            // window being full, or Ollama deciding to stop
+            // early. The num_predict value logged here is the
+            // actual budget sent in this request, so a future
+            // operator can correlate the eval_count vs num_predict
+            // to find the cause.
+            log.info(
+                "Ollama chat request: model={}, num_predict={}, message_count={}, "
+                    + "approx_prompt_chars={}",
+                properties.getChatModel(),
+                properties.getChatMaxTokens(),
+                messages.size(),
+                messages.stream().mapToInt(m -> m.content() == null ? 0 : m.content().length()).sum()
+            );
 
             // Send request
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -85,15 +117,27 @@ public class OllamaChatService {
             }
 
             // Parse response
-            String responseContent = parseResponse(response.body());
+            OllamaChatReply firstReply = parseResponse(response.body());
 
-            // Handle empty response
-            if (responseContent == null || responseContent.isBlank()) {
-                log.warn("Ollama returned empty response");
-                throw LlmGenerationException.emptyResponse();
+            // Single-shot retry on empty content. Small open-weight models can
+            // occasionally emit a done_reason="length" with no visible answer;
+            // a second attempt with the same prompt usually succeeds.
+            if (firstReply.content() == null || firstReply.content().isBlank()) {
+                log.warn("Ollama returned empty response; retrying once with the same prompt");
+                HttpResponse<String> retryResponse = httpClient.send(request,
+                        HttpResponse.BodyHandlers.ofString());
+                if (retryResponse.statusCode() < 200 || retryResponse.statusCode() >= 300) {
+                    log.warn("Ollama retry returned non-success status: {}", retryResponse.statusCode());
+                    throw LlmGenerationException.nonSuccessfulResponse(retryResponse.statusCode());
+                }
+                OllamaChatReply retried = parseResponse(retryResponse.body());
+                if (retried.content() == null || retried.content().isBlank()) {
+                    throw LlmGenerationException.emptyResponse();
+                }
+                return forOptions(cleanAnswer(retried.content()), options);
             }
 
-            return responseContent;
+            return forOptions(cleanAnswer(firstReply.content()), options);
 
         } catch (LlmGenerationException e) {
             throw e;
@@ -124,31 +168,72 @@ public class OllamaChatService {
     }
 
     /**
+     * Lightweight post-processing of the model output. Gemma3 occasionally
+     * emits a leading artifact (for example a stray code fence) before the
+     * actual answer. We trim common wrappers and never alter the visible
+     * content beyond that. Empty / whitespace-only inputs are left as-is
+     * so the caller can detect them.
+     */
+    private String cleanAnswer(String raw) {
+        if (raw == null) return "";
+        String trimmed = raw.strip();
+        // Strip a single leading "```" / "```json" / "```text" code fence
+        // sometimes emitted by small models, and a matching trailing fence.
+        if (trimmed.startsWith("```")) {
+            int firstNewline = trimmed.indexOf('\n');
+            if (firstNewline > 0) {
+                trimmed = trimmed.substring(firstNewline + 1);
+            }
+            if (trimmed.endsWith("```")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 3);
+            }
+            trimmed = trimmed.strip();
+        }
+        return trimmed;
+    }
+
+    /**
      * Build the Ollama chat request body.
      */
-    private Map<String, Object> buildRequestBody(List<ChatMessage> messages) {
-        return Map.of(
-            "model", properties.getChatModel(),
-            "messages", messages.stream()
+    private Map<String, Object> buildRequestBody(List<ChatMessage> messages, ChatOptions options) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("model", properties.getChatModel());
+        body.put("messages", messages.stream()
                 .map(m -> Map.of(
                     "role", m.role(),
                     "content", m.content()
                 ))
-                .toList(),
-            "stream", false,
-            "options", Map.of(
-                "temperature", properties.getChatTemperature(),
-                "num_predict", properties.getChatMaxTokens()
-            )
-        );
+                .toList());
+        body.put("stream", false);
+        double temperature = options != null && options.temperature() != null
+                ? options.temperature() : properties.getChatTemperature();
+        // num_ctx is mandatory: without it Ollama falls back to a 2048-token
+        // window and silently drops most of the system prompt.
+        body.put("options", Map.of(
+                "temperature", temperature,
+                "num_predict", options != null && options.maxTokens() != null
+                        ? options.maxTokens() : properties.getChatMaxTokens(),
+                "num_ctx", properties.getChatNumCtx()
+        ));
+        if (options != null && options.format() != null) {
+            body.put("format", options.format());
+        }
+        if (properties.getChatThink() != null) {
+            body.put("think", properties.getChatThink());
+        }
+        if (properties.getChatKeepAlive() != null && !properties.getChatKeepAlive().isBlank()) {
+            body.put("keep_alive", properties.getChatKeepAlive());
+        }
+        return body;
     }
 
     /**
-     * Parse Ollama's response to extract the assistant's message content.
-     * 
-     * Expected response format:
+     * Parse Ollama's response and return the assistant's message content.
+     *
+     * <p>Expected response format:
+     * <pre>
      * {
-     *   "model": "qwen3:4b",
+     *   "model": "gemma3:4b",
      *   "message": {
      *     "role": "assistant",
      *     "content": "..."
@@ -156,8 +241,14 @@ public class OllamaChatService {
      *   "done": true,
      *   ...
      * }
+     * </pre>
+     *
+     * <p>The raw body is parsed and returned as an {@link OllamaChatReply}
+     * record. The {@code content} field is the only value consumed by the
+     * caller; the record leaves room to surface additional fields (for
+     * example {@code done_reason}) without changing the signature.
      */
-    private String parseResponse(String responseBody) {
+    private OllamaChatReply parseResponse(String responseBody) {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = objectMapper.readValue(responseBody, Map.class);
@@ -178,7 +269,29 @@ public class OllamaChatService {
 
             logGenerationMetadata(response, message, content.toString());
 
-            return content.toString();
+            // PHASE 7.7 hotfix-3: when the model hits the
+            // num_predict ceiling, Ollama returns done_reason
+            // "length" and the content is truncated mid-sentence.
+            // Returning the truncated content silently would
+            // confuse the user (the assistant's self-service
+            // answer would just stop halfway through a fix step).
+            // We detect this case and append a short Vietnamese
+            // notice so the user knows the answer was cut off
+            // and can ask the assistant to continue, or open a
+            // ticket. The notice is a single, neutral sentence
+            // — not an apology, not a "khong tim thay" fallback,
+            // and not an auto-ticket-creation.
+            String finalContent = content.toString();
+            Object doneReason = response.get("done_reason");
+            if ("length".equals(doneReason) && !finalContent.isBlank()) {
+                log.warn(
+                    "Ollama response truncated by num_predict (chat_max_tokens={}). "
+                        + "Appending continuation hint to the user-visible answer.",
+                    properties.getChatMaxTokens());
+                finalContent = finalContent + TRUNCATION_HINT;
+            }
+
+            return new OllamaChatReply(finalContent);
 
         } catch (LlmGenerationException e) {
             throw e;
@@ -224,6 +337,16 @@ public class OllamaChatService {
             doneReason, evalCount, promptEvalCount,
             contentLength, thinkingLength, emptyContent);
 
+        // Ollama truncates silently when the prompt does not fit num_ctx.
+        if (promptEvalCount instanceof Number n
+                && n.intValue() + properties.getChatMaxTokens() >= properties.getChatNumCtx()) {
+            log.warn(
+                "Ollama prompt is close to / over the context window (prompt_eval_count={}, "
+                    + "num_predict={}, num_ctx={}). The prompt may be truncated; "
+                    + "consider increasing ollama.chat-num-ctx or shrinking the prompt.",
+                n, properties.getChatMaxTokens(), properties.getChatNumCtx());
+        }
+
         // Surface budget exhaustion explicitly - this is the failure mode that
         // produced LLM_EMPTY_RESPONSE in production.
         if (emptyContent) {
@@ -241,6 +364,24 @@ public class OllamaChatService {
      * @param role The role (e.g., "system", "user", "assistant")
      * @param content The message content
      */
+    static final String TRUNCATION_HINT = "\n\n[Phần còn lại của câu trả lời đã bị giới hạn bởi số token tối đa. "
+            + "Bạn có thể nhắn 'tiếp tục' để nhận phần còn lại, hoặc nhờ tôi tạo ticket hỗ trợ cho đội IT.]";
+
+    /** A JSON-Schema reply is parsed, not read: a prose hint appended to it would only break the parse. */
+    static String forOptions(String content, ChatOptions options) {
+        if (options != null && options.format() != null && content != null && content.endsWith(TRUNCATION_HINT)) {
+            return content.substring(0, content.length() - TRUNCATION_HINT.length());
+        }
+        return content;
+    }
+
+    /** Per-call overrides; null fields fall back to OllamaProperties. format = JSON Schema for structured output. */
+    public record ChatOptions(Map<String, Object> format, Double temperature, Integer timeoutSeconds, Integer maxTokens) {
+        public ChatOptions(Map<String, Object> format, Double temperature, Integer timeoutSeconds) {
+            this(format, temperature, timeoutSeconds, null);
+        }
+    }
+
     public record ChatMessage(String role, String content) {
 
         /**
@@ -264,4 +405,12 @@ public class OllamaChatService {
             return new ChatMessage("assistant", content);
         }
     }
+
+    /**
+     * Internal record representing a parsed Ollama chat reply. Currently
+     * only {@code content} is consumed by the caller, but the record leaves
+     * room for additional fields (for example {@code done_reason}) without
+     * changing the {@link #parseResponse(String)} signature.
+     */
+    public record OllamaChatReply(String content) { }
 }

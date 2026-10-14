@@ -21,7 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -45,20 +44,22 @@ import com.example.ticketing.ticket.TicketService;
 /**
  * PHASE 3.1 - HTTP-level controller tests for the manual escalation endpoint.
  *
- * <p>Verifies the canonical authorization fix:
+ * <p>
+ * Verifies the canonical authorization fix:
  *
  * <ul>
- *   <li>{@code POST /api/escalation/escalate/{ticketId}} requires the actor to satisfy
- *       {@link TicketAuthorization#canAssignOthers(actor)}.</li>
- *   <li>The recorded actor on the escalation history is the actual authenticated
- *       principal, not the legacy hardcoded {@code "admin"}.</li>
- *   <li>Unauthenticated requests return 401.</li>
+ * <li>{@code POST /api/escalation/escalate/{ticketId}} requires the actor to
+ * satisfy
+ * {@link TicketAuthorization#canAssignOthers(actor)}.</li>
+ * <li>The recorded actor on the escalation history is the actual authenticated
+ * principal, not the legacy hardcoded {@code "admin"}.</li>
+ * <li>Unauthenticated requests return 401.</li>
  * </ul>
  */
 @WebMvcTest(controllers = EscalationController.class)
-@Import({SecurityConfig.class, ItDepartmentResolver.class,
-    ActorContextService.class, TicketAuthorization.class,
-    TicketExceptionHandler.class})
+@Import({ SecurityConfig.class, ItDepartmentResolver.class,
+        ActorContextService.class, TicketAuthorization.class,
+        TicketExceptionHandler.class })
 class EscalationControllerPhase31Test {
 
     @Autowired
@@ -111,8 +112,8 @@ class EscalationControllerPhase31Test {
 
     private static UsernamePasswordAuthenticationToken stringPrincipal(UserAccount user) {
         return new UsernamePasswordAuthenticationToken(
-            user.getUsername(), null,
-            List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                user.getUsername(), null,
+                List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
     }
 
     private void givenUserExists(UserAccount user) {
@@ -133,7 +134,8 @@ class EscalationControllerPhase31Test {
         ticket.setTicketNumber("PHASE31-STUB");
         ticket.setDepartment(MKT);
         when(ticketService.getTicket(eq(ticketId), any(String.class))).thenReturn(ticket);
-        when(ticketService.getTicket(eq(ticketId), any(org.springframework.security.core.Authentication.class))).thenReturn(ticket);
+        when(ticketService.getTicket(eq(ticketId), any(org.springframework.security.core.Authentication.class)))
+                .thenReturn(ticket);
     }
 
     private void givenManualEscalateReturns(EscalationHistory history) {
@@ -173,12 +175,12 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isCreated());
+                    .andExpect(status().isCreated());
 
             // PHASE 3.1: the actual authenticated username must be passed to the
             // service as the audit actor, NOT the legacy hardcoded "admin".
             verify(escalationService).manualEscalate(eq(TICKET_ID), any(),
-                eq(TRUONG_PHONG_IT.getUsername()));
+                    eq(TRUONG_PHONG_IT.getUsername()));
         }
 
         @Test
@@ -190,7 +192,7 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(ADMIN)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -204,7 +206,7 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(GIAM_DOC)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -218,7 +220,7 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(TRUONG_PHONG_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -232,7 +234,7 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(NHAN_VIEN_MKT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -246,7 +248,7 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(NHAN_VIEN_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isForbidden());
+                    .andExpect(status().isForbidden());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -257,7 +259,7 @@ class EscalationControllerPhase31Test {
             mockMvc.perform(post("/api/escalation/escalate/{id}", TICKET_ID)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isUnauthorized());
+                    .andExpect(status().isUnauthorized());
 
             verify(escalationService, never()).manualEscalate(anyLong(), any(), any());
         }
@@ -281,14 +283,14 @@ class EscalationControllerPhase31Test {
                     .with(authentication(stringPrincipal(TRUONG_PHONG_IT)))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(escalatePayload()))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.ticketId").value(TICKET_ID));
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.ticketId").value(TICKET_ID));
 
             // The controller must pass the real principal, not the legacy "admin" string.
             verify(escalationService).manualEscalate(
-                eq(TICKET_ID),
-                any(),
-                eq(TRUONG_PHONG_IT.getUsername()));
+                    eq(TICKET_ID),
+                    any(),
+                    eq(TRUONG_PHONG_IT.getUsername()));
         }
     }
 }

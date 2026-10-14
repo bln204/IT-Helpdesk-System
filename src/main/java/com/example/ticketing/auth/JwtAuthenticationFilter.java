@@ -7,7 +7,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.example.ticketing.security.JwtBlacklistService;
@@ -21,18 +20,15 @@ import jakarta.servlet.http.HttpServletResponse;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
     private final JwtBlacklistService jwtBlacklistService;
     private final UserAccountRepository userAccountRepository;
 
     public JwtAuthenticationFilter(
         JwtService jwtService, 
-        UserDetailsService userDetailsService,
         JwtBlacklistService jwtBlacklistService,
         UserAccountRepository userAccountRepository
     ) {
         this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
         this.jwtBlacklistService = jwtBlacklistService;
         this.userAccountRepository = userAccountRepository;
     }
@@ -43,7 +39,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
-        String uri = request.getRequestURI();
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         
         if (header == null || !header.startsWith("Bearer ")) {

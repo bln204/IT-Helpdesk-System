@@ -1,6 +1,5 @@
 package com.example.ticketing.asset;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -41,36 +40,35 @@ public class AssetTicketLinkService {
      * Liên kết asset với incident.
      */
     public AssetIncidentLink linkAssetToIncident(
-            Long assetId, 
-            Long incidentId, 
+            Long assetId,
+            Long incidentId,
             LinkRole linkRole,
             String impactDescription,
             String createdBy) {
-        
+
         log.info("Linking asset {} to incident {} as {}", assetId, incidentId, linkRole);
-        
+
         // Check if already linked
         if (incidentLinkRepository.findByAssetIdAndIncidentId(assetId, incidentId).isPresent()) {
             throw new IllegalStateException("Asset đã được liên kết với incident này");
         }
-        
+
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new AssetService.AssetNotFoundException(assetId));
-        
+
         AssetIncidentLink link = new AssetIncidentLink(asset, incidentId, linkRole);
         link.setImpactDescription(impactDescription);
         link.setCreatedBy(createdBy);
-        
+
         // Update asset health if root cause
         if (linkRole == LinkRole.ROOT_CAUSE) {
             assetService.updateHealthStatus(
-                    assetId, 
-                    Asset.HealthStatus.WARNING, 
+                    assetId,
+                    Asset.HealthStatus.WARNING,
                     "Identified as root cause in incident #" + incidentId,
-                    createdBy
-            );
+                    createdBy);
         }
-        
+
         return incidentLinkRepository.save(link);
     }
 
@@ -79,7 +77,7 @@ public class AssetTicketLinkService {
      */
     public void unlinkAssetFromIncident(Long assetId, Long incidentId) {
         log.info("Unlinking asset {} from incident {}", assetId, incidentId);
-        
+
         incidentLinkRepository.findByAssetIdAndIncidentId(assetId, incidentId)
                 .ifPresent(incidentLinkRepository::delete);
     }
@@ -106,19 +104,18 @@ public class AssetTicketLinkService {
     public AssetIncidentLink updateLinkRole(Long linkId, LinkRole newRole, String actorName) {
         AssetIncidentLink link = incidentLinkRepository.findById(linkId)
                 .orElseThrow(() -> new LinkNotFoundException(linkId));
-        
+
         link.setLinkRole(newRole);
-        
+
         // Update asset health if changed to/from root cause
         if (newRole == LinkRole.ROOT_CAUSE) {
             assetService.updateHealthStatus(
                     link.getAsset().getId(),
                     Asset.HealthStatus.WARNING,
                     "Identified as root cause in incident #" + link.getIncidentId(),
-                    actorName
-            );
+                    actorName);
         }
-        
+
         return incidentLinkRepository.save(link);
     }
 
@@ -132,15 +129,15 @@ public class AssetTicketLinkService {
             Long ticketId,
             AssetTicketLink.LinkType linkType,
             String notes) {
-        
+
         log.info("Linking asset {} to ticket {} as {}", assetId, ticketId, linkType);
-        
+
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new AssetService.AssetNotFoundException(assetId));
-        
+
         AssetTicketLink link = new AssetTicketLink(asset, ticketId, linkType);
         link.setNotes(notes);
-        
+
         return ticketLinkRepository.save(link);
     }
 

@@ -2,7 +2,6 @@ package com.example.ticketing.ticket;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +11,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.example.ticketing.auth.NotificationPreferencesRepository;
 import com.example.ticketing.escalation.EscalationService;
 import com.example.ticketing.sla.SlaPolicy;
 import com.example.ticketing.sla.SlaPolicyService;
@@ -23,31 +21,28 @@ import com.example.ticketing.sla.SlaPolicyService;
  */
 @Service
 public class SlaSchedulerService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(SlaSchedulerService.class);
-    
+
     private final TicketRepository ticketRepository;
     private final SlaAlertLogRepository slaAlertLogRepository;
-    private final NotificationPreferencesRepository preferencesRepository;
     private final TicketNotificationService notificationService;
     private final SlaPolicyService slaPolicyService;
     private final EscalationService escalationService;
-    
+
     public SlaSchedulerService(
             TicketRepository ticketRepository,
             SlaAlertLogRepository slaAlertLogRepository,
-            NotificationPreferencesRepository preferencesRepository,
             TicketNotificationService notificationService,
             SlaPolicyService slaPolicyService,
             EscalationService escalationService) {
         this.ticketRepository = ticketRepository;
         this.slaAlertLogRepository = slaAlertLogRepository;
-        this.preferencesRepository = preferencesRepository;
         this.notificationService = notificationService;
         this.slaPolicyService = slaPolicyService;
         this.escalationService = escalationService;
     }
-    
+
     /**
      * Kiểm tra SLA mỗi 15 phút.
      */
@@ -55,26 +50,30 @@ public class SlaSchedulerService {
     @Transactional
     public void checkSlaCompliance() {
         log.info("Starting SLA compliance check...");
-        
+
         int warningCount = 0;
         int breachCount = 0;
-        
+
         // Lấy tất cả open tickets (paginated để tránh OOM)
         Page<Ticket> openTickets = ticketRepository.findOpenTicketsForSlaCheck(PageRequest.of(0, 100));
-        
+
         for (Ticket ticket : openTickets) {
             // Check Response SLA
             boolean responseWarning = checkResponseSla(ticket);
             boolean responseBreach = checkResponseSlaBreach(ticket);
-            if (responseWarning) warningCount++;
-            if (responseBreach) breachCount++;
-            
+            if (responseWarning)
+                warningCount++;
+            if (responseBreach)
+                breachCount++;
+
             // Check Resolution SLA
             boolean resolutionWarning = checkResolutionSla(ticket);
             boolean resolutionBreach = checkResolutionSlaBreach(ticket);
-            if (resolutionWarning) warningCount++;
-            if (resolutionBreach) breachCount++;
-            
+            if (resolutionWarning)
+                warningCount++;
+            if (resolutionBreach)
+                breachCount++;
+
             // Trigger escalation check
             try {
                 escalationService.checkAndEscalate(ticket);
@@ -82,24 +81,26 @@ public class SlaSchedulerService {
                 log.error("Error checking escalation for ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
             }
         }
-        
+
         log.info("SLA check completed. Warnings: {}, Breaches: {}", warningCount, breachCount);
     }
-    
+
     /**
      * Kiểm tra Response SLA warning.
      */
     private boolean checkResponseSla(Ticket ticket) {
-        if (ticket.getSlaResponseAt() == null) return false;
-        if (ticket.getFirstResponseAt() != null) return false; // Đã response
-        
+        if (ticket.getSlaResponseAt() == null)
+            return false;
+        if (ticket.getFirstResponseAt() != null)
+            return false; // Đã response
+
         // Lấy warning threshold từ SlaPolicy
         double warningThreshold = getWarningThreshold(ticket) / 100.0;
-        
+
         LocalDateTime now = LocalDateTime.now();
         long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResponseAt()).toMinutes();
         long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
-        
+
         // Kiểm tra đã qua threshold chưa
         if (totalMinutes > 0 && elapsedMinutes >= totalMinutes * warningThreshold) {
             // Kiểm tra đã gửi warning chưa
@@ -111,7 +112,7 @@ public class SlaSchedulerService {
         }
         return false;
     }
-    
+
     /**
      * Lấy warning threshold từ SlaPolicy.
      */
@@ -119,14 +120,16 @@ public class SlaSchedulerService {
         SlaPolicy policy = slaPolicyService.getEffectivePolicyForPriority(ticket.getPriority());
         return policy.getWarningThreshold() != null ? policy.getWarningThreshold() : 75;
     }
-    
+
     /**
      * Kiểm tra Response SLA breach.
      */
     private boolean checkResponseSlaBreach(Ticket ticket) {
-        if (ticket.getSlaResponseAt() == null) return false;
-        if (ticket.getFirstResponseAt() != null) return false; // Đã response
-        
+        if (ticket.getSlaResponseAt() == null)
+            return false;
+        if (ticket.getFirstResponseAt() != null)
+            return false; // Đã response
+
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(ticket.getSlaResponseAt())) {
             // Kiểm tra đã gửi breach alert chưa
@@ -138,21 +141,23 @@ public class SlaSchedulerService {
         }
         return false;
     }
-    
+
     /**
      * Kiểm tra Resolution SLA warning.
      */
     private boolean checkResolutionSla(Ticket ticket) {
-        if (ticket.getSlaResolutionAt() == null) return false;
-        if (ticket.isResolutionSLABreached()) return false; // Đã breach
-        
+        if (ticket.getSlaResolutionAt() == null)
+            return false;
+        if (ticket.isResolutionSLABreached())
+            return false; // Đã breach
+
         // Lấy warning threshold từ SlaPolicy
         double warningThreshold = getWarningThreshold(ticket) / 100.0;
-        
+
         LocalDateTime now = LocalDateTime.now();
         long totalMinutes = Duration.between(ticket.getCreatedAt(), ticket.getSlaResolutionAt()).toMinutes();
         long elapsedMinutes = Duration.between(ticket.getCreatedAt(), now).toMinutes();
-        
+
         if (totalMinutes > 0 && elapsedMinutes >= totalMinutes * warningThreshold) {
             if (!slaAlertLogRepository.existsByTicketIdAndSlaTypeAndAlertType(
                     ticket.getId(), "RESOLUTION", "WARNING")) {
@@ -162,14 +167,16 @@ public class SlaSchedulerService {
         }
         return false;
     }
-    
+
     /**
      * Kiểm tra Resolution SLA breach.
      */
     private boolean checkResolutionSlaBreach(Ticket ticket) {
-        if (ticket.getSlaResolutionAt() == null) return false;
-        if (ticket.isResolutionSLABreached()) return false; // Đã breach
-        
+        if (ticket.getSlaResolutionAt() == null)
+            return false;
+        if (ticket.isResolutionSLABreached())
+            return false; // Đã breach
+
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(ticket.getSlaResolutionAt())) {
             if (!slaAlertLogRepository.existsByTicketIdAndSlaTypeAndAlertType(
@@ -180,14 +187,14 @@ public class SlaSchedulerService {
         }
         return false;
     }
-    
+
     /**
      * Gửi SLA warning.
      */
     private void sendSlaWarning(Ticket ticket, String slaType, long totalHours, long elapsedHours) {
-        log.warn("SLA Warning - Ticket {} - {} SLA: {}/{} hours", 
-            ticket.getTicketNumber(), slaType, elapsedHours, totalHours);
-        
+        log.warn("SLA Warning - Ticket {} - {} SLA: {}/{} hours",
+                ticket.getTicketNumber(), slaType, elapsedHours, totalHours);
+
         // Log alert
         SlaAlertLog alert = new SlaAlertLog();
         alert.setTicketId(ticket.getId());
@@ -197,17 +204,17 @@ public class SlaSchedulerService {
         alert.setActualHours((int) elapsedHours);
         alert.setNotified(true);
         slaAlertLogRepository.save(alert);
-        
+
         // Gửi notification
         notificationService.notifySlaWarning(ticket, slaType);
     }
-    
+
     /**
      * Gửi SLA breach.
      */
     private void sendSlaBreach(Ticket ticket, String slaType) {
         log.error("SLA BREACH - Ticket {} - {} SLA", ticket.getTicketNumber(), slaType);
-        
+
         // Log alert
         SlaAlertLog alert = new SlaAlertLog();
         alert.setTicketId(ticket.getId());
@@ -217,22 +224,22 @@ public class SlaSchedulerService {
         alert.setActualHours(0);
         alert.setNotified(true);
         slaAlertLogRepository.save(alert);
-        
+
         // Gửi notification
         notificationService.notifySlaBreached(ticket, slaType);
     }
-    
+
     /**
      * Kiểm tra thủ công SLA cho một ticket.
      */
     @Transactional(readOnly = true)
     public SlaStatus checkTicketSla(Long ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-        
+                .orElseThrow(() -> new TicketNotFoundException(ticketId));
+
         return buildSlaStatus(ticket);
     }
-    
+
     /**
      * Build SLA status cho ticket.
      */
@@ -240,49 +247,49 @@ public class SlaSchedulerService {
         SlaStatus status = new SlaStatus();
         status.setTicketId(ticket.getId());
         status.setTicketNumber(ticket.getTicketNumber());
-        
+
         // Lấy SLA policy để hiển thị target hours
         SlaPolicy policy = slaPolicyService.getEffectivePolicyForPriority(ticket.getPriority());
-        
+
         LocalDateTime now = LocalDateTime.now();
-        
+
         // Response SLA
         if (ticket.getSlaResponseAt() != null) {
             status.setResponseSlaTarget(ticket.getSlaResponseAt());
             status.setResponseHours(policy.getResponseMinutes() / 60); // Convert minutes to hours
-            
+
             if (ticket.getFirstResponseAt() != null) {
                 status.setFirstResponseAt(ticket.getFirstResponseAt());
                 status.setResponseMet(true);
                 status.setResponseHoursUsed(
-                    (int) Duration.between(ticket.getCreatedAt(), ticket.getFirstResponseAt()).toHours());
+                        (int) Duration.between(ticket.getCreatedAt(), ticket.getFirstResponseAt()).toHours());
             } else {
                 status.setResponseMet(null);
                 status.setResponseHoursUsed((int) Duration.between(ticket.getCreatedAt(), now).toHours());
                 status.setResponseBreached(now.isAfter(ticket.getSlaResponseAt()));
             }
         }
-        
+
         // Resolution SLA
         if (ticket.getSlaResolutionAt() != null) {
             status.setResolutionSlaTarget(ticket.getSlaResolutionAt());
             status.setResolutionHours(policy.getResolutionMinutes() / 60); // Convert minutes to hours
-            
+
             if (ticket.getResolvedAt() != null) {
                 status.setResolvedAt(ticket.getResolvedAt());
                 status.setResolutionMet(true);
                 status.setResolutionHoursUsed(
-                    (int) Duration.between(ticket.getCreatedAt(), ticket.getResolvedAt()).toHours());
+                        (int) Duration.between(ticket.getCreatedAt(), ticket.getResolvedAt()).toHours());
             } else {
                 status.setResolutionMet(null);
                 status.setResolutionHoursUsed((int) Duration.between(ticket.getCreatedAt(), now).toHours());
                 status.setResolutionBreached(ticket.isResolutionSLABreached());
             }
         }
-        
+
         return status;
     }
-    
+
     /**
      * SLA Status DTO.
      */
@@ -301,35 +308,118 @@ public class SlaSchedulerService {
         private Integer resolutionHoursUsed;
         private Boolean resolutionMet;
         private Boolean resolutionBreached;
-        
+
         // Getters & Setters
-        public Long getTicketId() { return ticketId; }
-        public void setTicketId(Long ticketId) { this.ticketId = ticketId; }
-        public String getTicketNumber() { return ticketNumber; }
-        public void setTicketNumber(String ticketNumber) { this.ticketNumber = ticketNumber; }
-        public LocalDateTime getResponseSlaTarget() { return responseSlaTarget; }
-        public void setResponseSlaTarget(LocalDateTime responseSlaTarget) { this.responseSlaTarget = responseSlaTarget; }
-        public Integer getResponseHours() { return responseHours; }
-        public void setResponseHours(Integer responseHours) { this.responseHours = responseHours; }
-        public LocalDateTime getFirstResponseAt() { return firstResponseAt; }
-        public void setFirstResponseAt(LocalDateTime firstResponseAt) { this.firstResponseAt = firstResponseAt; }
-        public Integer getResponseHoursUsed() { return responseHoursUsed; }
-        public void setResponseHoursUsed(Integer responseHoursUsed) { this.responseHoursUsed = responseHoursUsed; }
-        public Boolean getResponseMet() { return responseMet; }
-        public void setResponseMet(Boolean responseMet) { this.responseMet = responseMet; }
-        public Boolean getResponseBreached() { return responseBreached; }
-        public void setResponseBreached(Boolean responseBreached) { this.responseBreached = responseBreached; }
-        public LocalDateTime getResolutionSlaTarget() { return resolutionSlaTarget; }
-        public void setResolutionSlaTarget(LocalDateTime resolutionSlaTarget) { this.resolutionSlaTarget = resolutionSlaTarget; }
-        public Integer getResolutionHours() { return resolutionHours; }
-        public void setResolutionHours(Integer resolutionHours) { this.resolutionHours = resolutionHours; }
-        public LocalDateTime getResolvedAt() { return resolvedAt; }
-        public void setResolvedAt(LocalDateTime resolvedAt) { this.resolvedAt = resolvedAt; }
-        public Integer getResolutionHoursUsed() { return resolutionHoursUsed; }
-        public void setResolutionHoursUsed(Integer resolutionHoursUsed) { this.resolutionHoursUsed = resolutionHoursUsed; }
-        public Boolean getResolutionMet() { return resolutionMet; }
-        public void setResolutionMet(Boolean resolutionMet) { this.resolutionMet = resolutionMet; }
-        public Boolean getResolutionBreached() { return resolutionBreached; }
-        public void setResolutionBreached(Boolean resolutionBreached) { this.resolutionBreached = resolutionBreached; }
+        public Long getTicketId() {
+            return ticketId;
+        }
+
+        public void setTicketId(Long ticketId) {
+            this.ticketId = ticketId;
+        }
+
+        public String getTicketNumber() {
+            return ticketNumber;
+        }
+
+        public void setTicketNumber(String ticketNumber) {
+            this.ticketNumber = ticketNumber;
+        }
+
+        public LocalDateTime getResponseSlaTarget() {
+            return responseSlaTarget;
+        }
+
+        public void setResponseSlaTarget(LocalDateTime responseSlaTarget) {
+            this.responseSlaTarget = responseSlaTarget;
+        }
+
+        public Integer getResponseHours() {
+            return responseHours;
+        }
+
+        public void setResponseHours(Integer responseHours) {
+            this.responseHours = responseHours;
+        }
+
+        public LocalDateTime getFirstResponseAt() {
+            return firstResponseAt;
+        }
+
+        public void setFirstResponseAt(LocalDateTime firstResponseAt) {
+            this.firstResponseAt = firstResponseAt;
+        }
+
+        public Integer getResponseHoursUsed() {
+            return responseHoursUsed;
+        }
+
+        public void setResponseHoursUsed(Integer responseHoursUsed) {
+            this.responseHoursUsed = responseHoursUsed;
+        }
+
+        public Boolean getResponseMet() {
+            return responseMet;
+        }
+
+        public void setResponseMet(Boolean responseMet) {
+            this.responseMet = responseMet;
+        }
+
+        public Boolean getResponseBreached() {
+            return responseBreached;
+        }
+
+        public void setResponseBreached(Boolean responseBreached) {
+            this.responseBreached = responseBreached;
+        }
+
+        public LocalDateTime getResolutionSlaTarget() {
+            return resolutionSlaTarget;
+        }
+
+        public void setResolutionSlaTarget(LocalDateTime resolutionSlaTarget) {
+            this.resolutionSlaTarget = resolutionSlaTarget;
+        }
+
+        public Integer getResolutionHours() {
+            return resolutionHours;
+        }
+
+        public void setResolutionHours(Integer resolutionHours) {
+            this.resolutionHours = resolutionHours;
+        }
+
+        public LocalDateTime getResolvedAt() {
+            return resolvedAt;
+        }
+
+        public void setResolvedAt(LocalDateTime resolvedAt) {
+            this.resolvedAt = resolvedAt;
+        }
+
+        public Integer getResolutionHoursUsed() {
+            return resolutionHoursUsed;
+        }
+
+        public void setResolutionHoursUsed(Integer resolutionHoursUsed) {
+            this.resolutionHoursUsed = resolutionHoursUsed;
+        }
+
+        public Boolean getResolutionMet() {
+            return resolutionMet;
+        }
+
+        public void setResolutionMet(Boolean resolutionMet) {
+            this.resolutionMet = resolutionMet;
+        }
+
+        public Boolean getResolutionBreached() {
+            return resolutionBreached;
+        }
+
+        public void setResolutionBreached(Boolean resolutionBreached) {
+            this.resolutionBreached = resolutionBreached;
+        }
     }
 }

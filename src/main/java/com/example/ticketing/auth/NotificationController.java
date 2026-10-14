@@ -19,16 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.ticketing.ticket.SlaSchedulerService;
-import com.example.ticketing.ticket.SlaSchedulerService.SlaStatus;
-
-// #region agent debug log
-import org.springframework.beans.factory.annotation.Value;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-// #endregion
 
 /**
  * REST Controller for managing notifications.
@@ -36,42 +26,8 @@ import java.time.Duration;
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationController {
-    
-    // #region agent debug log
+
     private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
-    
-    @Value("${debug.logging.endpoint:}")
-    private String debugEndpoint;
-    
-    @Value("${debug.logging.session-id:}")
-    private String sessionId;
-    
-    private void debugLog(String hypothesisId, String runId, String location, String message, Object data) {
-        if (debugEndpoint == null || debugEndpoint.isBlank()) return;
-        try {
-            String payload = String.format(
-                "{\"sessionId\":\"%s\",\"hypothesisId\":\"%s\",\"runId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\",\"data\":%s,\"timestamp\":%d}",
-                sessionId != null ? sessionId : "",
-                hypothesisId,
-                runId,
-                location,
-                message.replace("\"", "\\\""),
-                data != null ? new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(data) : "null",
-                System.currentTimeMillis()
-            );
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(debugEndpoint))
-                .timeout(Duration.ofSeconds(5))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload))
-                .build();
-            client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
-        } catch (Exception e) {
-            log.warn("Debug log failed: {}", e.getMessage());
-        }
-    }
-    // #endregion
 
     private final NotificationService notificationService;
     private final NotificationPreferencesRepository preferencesRepository;
@@ -89,7 +45,7 @@ public class NotificationController {
     // ============================================================
     // NOTIFICATION ENDPOINTS
     // ============================================================
-    
+
     /**
      * Get all notifications for the current user.
      */
@@ -109,10 +65,11 @@ public class NotificationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         String username = authentication.getName();
-        Page<Notification.NotificationResponse> notifications = notificationService.getNotifications(username, page, size);
+        Page<Notification.NotificationResponse> notifications = notificationService.getNotifications(username, page,
+                size);
         return ResponseEntity.ok(notifications);
     }
-    
+
     /**
      * Get unread notification count for the current user.
      */
@@ -122,7 +79,7 @@ public class NotificationController {
         long count = notificationService.getUnreadCount(username);
         return ResponseEntity.ok(Map.of("count", count));
     }
-    
+
     /**
      * Get unread count by type.
      */
@@ -130,14 +87,13 @@ public class NotificationController {
     public ResponseEntity<Map<String, Long>> getUnreadCountByType(Authentication authentication) {
         String username = authentication.getName();
         List<Notification.NotificationResponse> notifications = notificationService.getNotifications(username);
-        
+
         Map<String, Long> counts = notifications.stream()
-            .filter(n -> !n.isRead())
-            .collect(java.util.stream.Collectors.groupingBy(
-                Notification.NotificationResponse::getType,
-                java.util.stream.Collectors.counting()
-            ));
-        
+                .filter(n -> !n.isRead())
+                .collect(java.util.stream.Collectors.groupingBy(
+                        Notification.NotificationResponse::getType,
+                        java.util.stream.Collectors.counting()));
+
         return ResponseEntity.ok(counts);
     }
 
@@ -162,7 +118,7 @@ public class NotificationController {
         }
         return ResponseEntity.notFound().build();
     }
-    
+
     /**
      * Delete a single notification.
      */
@@ -171,7 +127,7 @@ public class NotificationController {
         notificationService.deleteNotification(id);
         return ResponseEntity.noContent().build();
     }
-    
+
     /**
      * Delete all notifications for the current user.
      */
@@ -185,18 +141,19 @@ public class NotificationController {
     // ============================================================
     // NOTIFICATION PREFERENCES ENDPOINTS
     // ============================================================
-    
+
     /**
      * Get notification preferences for current user.
      */
     @GetMapping("/preferences")
-    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> getPreferences(Authentication authentication) {
+    public ResponseEntity<NotificationPreferences.NotificationPreferencesResponse> getPreferences(
+            Authentication authentication) {
         String username = authentication.getName();
         return preferencesRepository.findByUserUsername(username)
-            .map(prefs -> ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs)))
-            .orElse(ResponseEntity.notFound().build());
+                .map(prefs -> ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs)))
+                .orElse(ResponseEntity.notFound().build());
     }
-    
+
     /**
      * Update notification preferences.
      */
@@ -208,7 +165,7 @@ public class NotificationController {
         NotificationPreferences prefs = notificationService.updatePreferences(username, request);
         return ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs));
     }
-    
+
     /**
      * Enable/disable email notifications.
      */
@@ -220,7 +177,7 @@ public class NotificationController {
         NotificationPreferences prefs = notificationService.setEmailEnabled(username, enabled);
         return ResponseEntity.ok(new NotificationPreferences.NotificationPreferencesResponse(prefs));
     }
-    
+
     /**
      * Enable/disable in-app notifications.
      */
@@ -236,7 +193,7 @@ public class NotificationController {
     // ============================================================
     // SLA ENDPOINTS
     // ============================================================
-    
+
     /**
      * Get SLA status for a ticket.
      */
@@ -249,7 +206,7 @@ public class NotificationController {
     // ============================================================
     // LEGACY ENDPOINTS (for frontend compatibility)
     // ============================================================
-    
+
     /**
      * Create a new notification (for frontend to save to backend).
      */
@@ -258,7 +215,7 @@ public class NotificationController {
             Authentication authentication,
             @RequestBody CreateNotificationRequest request) {
         String username = authentication.getName();
-        
+
         Notification.NotificationType type;
         switch (request.type) {
             case "approve":
@@ -281,8 +238,7 @@ public class NotificationController {
                 request.title,
                 request.message,
                 request.userId,
-                "SYSTEM"
-        );
+                "SYSTEM");
 
         return ResponseEntity.ok(new Notification.NotificationResponse(notification));
     }

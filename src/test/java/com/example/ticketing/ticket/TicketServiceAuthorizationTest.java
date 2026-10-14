@@ -65,8 +65,6 @@ class TicketServiceAuthorizationTest {
     @Autowired
     private UserAccountRepository userAccountRepository;
 
-    @Autowired
-    private com.example.ticketing.department.DepartmentRepository departmentRepository;
 
     // PHASE 3: helper for tests that need an extra user beyond the standard fixtures.
     private UserAccount persistUser(String username, UserRole.Role role,

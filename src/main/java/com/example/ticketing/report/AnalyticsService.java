@@ -2,8 +2,6 @@ package com.example.ticketing.report;
 
 import java.util.*;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +21,6 @@ import com.example.ticketing.ticket.TicketTypes.TicketStatus;
 @Transactional(readOnly = true)
 public class AnalyticsService {
 
-    private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
 
     private final TicketRepository ticketRepository;
     private final AssetRepository assetRepository;

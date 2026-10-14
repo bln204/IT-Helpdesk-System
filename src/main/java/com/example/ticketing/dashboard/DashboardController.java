@@ -21,7 +21,6 @@ import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketRepository;
 import com.example.ticketing.ticket.TicketTypes;
-import com.example.ticketing.ticket.SlaSchedulerService;
 import com.example.ticketing.team.TeamService;
 
 /**
@@ -47,8 +46,6 @@ public class DashboardController {
     @Autowired
     private ItDepartmentResolver itDepartmentResolver;
 
-    @Autowired
-    private SlaSchedulerService slaSchedulerService;
     
     /**
      * Lấy dashboard overview cho IT staff.

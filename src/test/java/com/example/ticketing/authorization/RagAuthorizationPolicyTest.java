@@ -200,7 +200,7 @@ class RagAuthorizationPolicyTest {
     @Test
     @DisplayName("A DEPARTMENT_SCOPED verdict resolves to a single-element filter list")
     void departmentScopedResolvesToSingleElementList() {
-        RagAuthorizationDecision decision = RagAuthorizationDecision.departmentScoped("MKT");
+        RagAuthorizationDecision.departmentScoped("MKT");
         List<Long> filter = List.of(42L); // resolved by the service from department code MKT
         assertEquals(1, filter.size(),
             "a DEPARTMENT_SCOPED verdict must materialize into a single-element SQL filter list");

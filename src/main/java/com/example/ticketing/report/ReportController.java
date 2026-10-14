@@ -3,19 +3,13 @@ package com.example.ticketing.report;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.ticketing.report.ReportGenerationService.*;
@@ -51,8 +45,8 @@ public class ReportController {
      * POST /api/reports/tickets
      * 
      * @param startDate Start date (yyyy-MM-dd)
-     * @param endDate End date (yyyy-MM-dd)
-     * @param days Pre-defined range (7, 30, 90) - overrides dates if provided
+     * @param endDate   End date (yyyy-MM-dd)
+     * @param days      Pre-defined range (7, 30, 90) - overrides dates if provided
      */
     @PostMapping("/tickets")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
@@ -60,12 +54,12 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
+
         log.info("Generating ticket report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
-        
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         TicketReport report = reportGenerationService.generateTicketReport(start, end);
         return ResponseEntity.ok(report);
     }
@@ -82,12 +76,12 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
+
         log.info("Generating SLA compliance report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
-        
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         SLAComplianceReport report = reportGenerationService.generateSlaComplianceReport(start, end);
         return ResponseEntity.ok(report);
     }
@@ -104,12 +98,12 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
+
         log.info("Generating asset report - startDate: {}, endDate: {}, days: {}", startDate, endDate, days);
-        
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         AssetReport report = reportGenerationService.generateAssetReport(start, end);
         return ResponseEntity.ok(report);
     }
@@ -118,7 +112,8 @@ public class ReportController {
 
     /**
      * Export ticket report
-     * GET /api/reports/tickets/export?format=csv|excel&startDate=...&endDate=...&days=...
+     * GET
+     * /api/reports/tickets/export?format=csv|excel&startDate=...&endDate=...&days=...
      */
     @GetMapping("/tickets/export")
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
@@ -127,18 +122,19 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
-        log.info("Exporting ticket report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate, endDate, days);
-        
+
+        log.info("Exporting ticket report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate,
+                endDate, days);
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         TicketReport report = reportGenerationService.generateTicketReport(start, end);
-        
+
         String filename;
         byte[] content;
         String contentType;
-        
+
         if ("excel".equalsIgnoreCase(format)) {
             content = reportExportService.exportTicketReportToExcel(report);
             filename = "ticket-report.xlsx";
@@ -148,7 +144,7 @@ public class ReportController {
             filename = "ticket-report.csv";
             contentType = "text/csv";
         }
-        
+
         return buildExportResponse(content, filename, contentType);
     }
 
@@ -163,18 +159,19 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
-        log.info("Exporting SLA report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate, endDate, days);
-        
+
+        log.info("Exporting SLA report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate, endDate,
+                days);
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         SLAComplianceReport report = reportGenerationService.generateSlaComplianceReport(start, end);
-        
+
         String filename;
         byte[] content;
         String contentType;
-        
+
         if ("excel".equalsIgnoreCase(format)) {
             content = reportExportService.exportSlaReportToExcel(report);
             filename = "sla-compliance-report.xlsx";
@@ -184,7 +181,7 @@ public class ReportController {
             filename = "sla-compliance-report.csv";
             contentType = "text/csv";
         }
-        
+
         return buildExportResponse(content, filename, contentType);
     }
 
@@ -199,18 +196,19 @@ public class ReportController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) Integer days) {
-        
-        log.info("Exporting asset report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate, endDate, days);
-        
+
+        log.info("Exporting asset report - format: {}, startDate: {}, endDate: {}, days: {}", format, startDate,
+                endDate, days);
+
         LocalDateTime start = parseStartDate(startDate, days);
         LocalDateTime end = parseEndDate(endDate, days);
-        
+
         AssetReport report = reportGenerationService.generateAssetReport(start, end);
-        
+
         String filename;
         byte[] content;
         String contentType;
-        
+
         if ("excel".equalsIgnoreCase(format)) {
             content = reportExportService.exportAssetReportToExcel(report);
             filename = "asset-inventory-report.xlsx";
@@ -220,7 +218,7 @@ public class ReportController {
             filename = "asset-inventory-report.csv";
             contentType = "text/csv";
         }
-        
+
         return buildExportResponse(content, filename, contentType);
     }
 
@@ -234,10 +232,12 @@ public class ReportController {
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN', 'ROLE_GIAM_DOC', 'ROLE_TRUONG_PHONG', 'ROLE_NHAN_VIEN')")
     public ResponseEntity<List<ReportTemplate>> getReportTemplates() {
         List<ReportTemplate> templates = List.of(
-            new ReportTemplate("TICKETS", "Ticket Report", "Overview of tickets with status, priority, and volume analysis", "ticket"),
-            new ReportTemplate("SLA", "SLA Compliance Report", "Track SLA compliance rates and breach analysis", "sla"),
-            new ReportTemplate("ASSETS", "Asset Inventory Report", "Complete asset inventory with health and status", "asset")
-        );
+                new ReportTemplate("TICKETS", "Ticket Report",
+                        "Overview of tickets with status, priority, and volume analysis", "ticket"),
+                new ReportTemplate("SLA", "SLA Compliance Report", "Track SLA compliance rates and breach analysis",
+                        "sla"),
+                new ReportTemplate("ASSETS", "Asset Inventory Report",
+                        "Complete asset inventory with health and status", "asset"));
         return ResponseEntity.ok(templates);
     }
 
@@ -290,13 +290,36 @@ public class ReportController {
             this.icon = icon;
         }
 
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getIcon() { return icon; }
-        public void setIcon(String icon) { this.icon = icon; }
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getIcon() {
+            return icon;
+        }
+
+        public void setIcon(String icon) {
+            this.icon = icon;
+        }
     }
 }

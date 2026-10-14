@@ -379,6 +379,7 @@ class RagAuthorizationFlowCharacterizationTest {
             UserAccount actor = persisted(fixtures.truongPhongMkt());
             Long mktId = actor.getDepartment().getId();
 
+            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> allowedCaptor = ArgumentCaptor.forClass(List.class);
             doReturn(List.of()).when(vectorSearchRepository).searchBySimilarityWithDepartmentFilter(
                 anyString(), anyDouble(), anyInt(), allowedCaptor.capture());
@@ -398,6 +399,7 @@ class RagAuthorizationFlowCharacterizationTest {
             UserAccount actor = persisted(fixtures.nhanVienMkt());
             Long mktId = actor.getDepartment().getId();
 
+            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> allowedCaptor = ArgumentCaptor.forClass(List.class);
             doReturn(List.of()).when(vectorSearchRepository).searchBySimilarityWithDepartmentFilter(
                 anyString(), anyDouble(), anyInt(), allowedCaptor.capture());
@@ -432,6 +434,7 @@ class RagAuthorizationFlowCharacterizationTest {
             UserAccount actor = persisted(fixtures.nhanVienMkt());
             Long mktId = actor.getDepartment().getId();
 
+            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> allowedCaptor = ArgumentCaptor.forClass(List.class);
             doReturn(List.of()).when(vectorSearchRepository).searchBySimilarityWithDepartmentFilter(
                 anyString(), anyDouble(), anyInt(), allowedCaptor.capture());
@@ -480,10 +483,10 @@ class RagAuthorizationFlowCharacterizationTest {
     // ========================================================================
     // /api/ai/ask context boundary
     //
-    // LlmGenerationService composes the prompt from whatever RagRetrievalService returns.
-    // The authorization boundary is therefore LlmGenerationService's INPUT, not its internal
-    // policy. This test verifies that whatever RagRetrievalService returns is the same set
-    // that reaches the LLM via PromptBuilder.
+    // semantic_match (Ticket/KnownError query adapters) and TroubleshootService only see what
+    // RagRetrievalService returns, so its scoped output is the authorization boundary for
+    // embedding search. This test verifies that whatever RagRetrievalService returns is the
+    // scoped set.
     // ========================================================================
 
     @Nested
@@ -599,6 +602,7 @@ class RagAuthorizationFlowCharacterizationTest {
             UserAccount actor = persisted(fixtures.truongPhongMkt());
             Long mktId = actor.getDepartment().getId();
 
+            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> allowedCaptor = ArgumentCaptor.forClass(List.class);
             doReturn(List.of()).when(vectorSearchRepository).searchBySimilarityWithDepartmentFilter(
                 anyString(), anyDouble(), anyInt(), allowedCaptor.capture());
@@ -616,6 +620,7 @@ class RagAuthorizationFlowCharacterizationTest {
             UserAccount actor = persisted(fixtures.nhanVienMkt());
             Long mktId = actor.getDepartment().getId();
 
+            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Long>> allowedCaptor = ArgumentCaptor.forClass(List.class);
             doReturn(List.of()).when(vectorSearchRepository).searchBySimilarityWithDepartmentFilter(
                 anyString(), anyDouble(), anyInt(), allowedCaptor.capture());

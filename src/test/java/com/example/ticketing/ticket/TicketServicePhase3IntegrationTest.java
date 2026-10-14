@@ -1,11 +1,9 @@
 package com.example.ticketing.ticket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -30,24 +28,34 @@ import com.example.ticketing.ticket.TicketTypes.TicketPriority;
  * PHASE 3 - CANONICAL ASSIGNMENT TARGET VALIDATION (C-3) and CREATE-TIME
  * ASSIGNEE POLICY (H-3).
  *
- * <p>This suite covers the Phase 3 brief \u00a719 test matrix:
+ * <p>
+ * This suite covers the Phase 3 brief \u00a719 test matrix:
  *
  * <ul>
- *   <li>\u00a719.1 CREATE: every authenticated actor may create without an assignee.</li>
- *   <li>\u00a719.2 CREATE + ASSIGNEE: TRUONG_PHONG + IT may create with a target, but only
- *       when the target is an enabled NHAN_VIEN in IT.</li>
- *   <li>\u00a719.3 Unauthorized create-time assignee: every other role is denied.</li>
- *   <li>\u00a720 RECEIVE: NHAN_VIEN + IT may self-receive; everyone else is denied.</li>
- *   <li>\u00a721 ASSIGN-OTHERS: TRUONG_PHONG + IT may assign others (enabled NHAN_VIEN + IT
- *       only); every other role is denied.</li>
- *   <li>\u00a722 ASSIGNEE CONSISTENCY: assignee_id and assignee_name stay synchronized.</li>
- *   <li>\u00a723 CROSS-DEPARTMENT: IT Helpdesk may handle tickets from any requester
- *       department (MKT, HR, Finance, etc.).</li>
- *   <li>\u00a724 NEGATIVE SECURITY: a malicious client cannot bypass the policy by
- *       supplying a valid target with an invalid actor.</li>
+ * <li>\u00a719.1 CREATE: every authenticated actor may create without an
+ * assignee.</li>
+ * <li>\u00a719.2 CREATE + ASSIGNEE: TRUONG_PHONG + IT may create with a target,
+ * but only
+ * when the target is an enabled NHAN_VIEN in IT.</li>
+ * <li>\u00a719.3 Unauthorized create-time assignee: every other role is
+ * denied.</li>
+ * <li>\u00a720 RECEIVE: NHAN_VIEN + IT may self-receive; everyone else is
+ * denied.</li>
+ * <li>\u00a721 ASSIGN-OTHERS: TRUONG_PHONG + IT may assign others (enabled
+ * NHAN_VIEN + IT
+ * only); every other role is denied.</li>
+ * <li>\u00a722 ASSIGNEE CONSISTENCY: assignee_id and assignee_name stay
+ * synchronized.</li>
+ * <li>\u00a723 CROSS-DEPARTMENT: IT Helpdesk may handle tickets from any
+ * requester
+ * department (MKT, HR, Finance, etc.).</li>
+ * <li>\u00a724 NEGATIVE SECURITY: a malicious client cannot bypass the policy
+ * by
+ * supplying a valid target with an invalid actor.</li>
  * </ul>
  *
- * <p>All assertions use the real TicketService production code path; this is an
+ * <p>
+ * All assertions use the real TicketService production code path; this is an
  * end-to-end integration test that exercises the Phase 3 implementation as the
  * application would.
  */
@@ -87,7 +95,7 @@ class TicketServicePhase3IntegrationTest {
         void adminCreateWithoutAssignee() {
             Ticket ticket = fixtures.mktRequestedTicket("Admin request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.admin().getUsername(), fixtures.admin().getRole());
+                    ticket, fixtures.admin().getUsername(), fixtures.admin().getRole());
             assertNotNull(created.getId());
             assertNull(created.getAssigneeName(), "ADMIN must not be auto-assigned");
             assertNull(created.getAssignee(), "ADMIN must not be auto-assigned (FK stays null)");
@@ -98,7 +106,7 @@ class TicketServicePhase3IntegrationTest {
         void giamDocCreateWithoutAssignee() {
             Ticket ticket = fixtures.mktRequestedTicket("GD request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.giamDoc().getUsername(), fixtures.giamDoc().getRole());
+                    ticket, fixtures.giamDoc().getUsername(), fixtures.giamDoc().getRole());
             assertNotNull(created.getId());
             assertNull(created.getAssigneeName(), "GIAM_DOC must not be auto-assigned");
             assertNull(created.getAssignee(), "GIAM_DOC must not be auto-assigned (FK stays null)");
@@ -109,7 +117,7 @@ class TicketServicePhase3IntegrationTest {
         void truongPhongNonItCreateWithoutAssignee() {
             Ticket ticket = fixtures.mktRequestedTicket("TP non-IT request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.truongPhongMkt().getUsername(), fixtures.truongPhongMkt().getRole());
+                    ticket, fixtures.truongPhongMkt().getUsername(), fixtures.truongPhongMkt().getRole());
             assertNotNull(created.getId());
             assertNull(created.getAssigneeName());
         }
@@ -119,7 +127,7 @@ class TicketServicePhase3IntegrationTest {
         void nhanVienNonItCreateWithoutAssignee() {
             Ticket ticket = fixtures.mktRequestedTicket("NV non-IT request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.nhanVienMkt().getUsername(), fixtures.nhanVienMkt().getRole());
+                    ticket, fixtures.nhanVienMkt().getUsername(), fixtures.nhanVienMkt().getRole());
             assertNotNull(created.getId());
             assertNull(created.getAssigneeName());
         }
@@ -129,15 +137,15 @@ class TicketServicePhase3IntegrationTest {
         void truongPhongItCreateWithoutAssignee() {
             Ticket ticket = fixtures.mktRequestedTicket("TP IT request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.truongPhongIT().getUsername(), fixtures.truongPhongIT().getRole());
+                    ticket, fixtures.truongPhongIT().getUsername(), fixtures.truongPhongIT().getRole());
             assertNotNull(created.getId());
             // Phase 3: TRUONG_PHONG + IT is not auto-self-assigned at creation time.
             // Self-receive (and assignment of others) happens through /assign/me and
             // /assignee respectively.
             assertNull(created.getAssigneeName(),
-                "TRUONG_PHONG + IT must NOT be auto-self-assigned at creation time");
+                    "TRUONG_PHONG + IT must NOT be auto-self-assigned at creation time");
             assertNull(created.getAssignee(),
-                "TRUONG_PHONG + IT auto-self-assignment FK must be null at creation time");
+                    "TRUONG_PHONG + IT auto-self-assignment FK must be null at creation time");
         }
 
         @Test
@@ -149,17 +157,18 @@ class TicketServicePhase3IntegrationTest {
             // take the ticket via /assign/me.
             Ticket ticket = fixtures.mktRequestedTicket("NV IT request", TicketPriority.LOW);
             Ticket created = ticketService.createTicket(
-                ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole());
+                    ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole());
             assertNotNull(created.getId());
             assertNull(created.getAssigneeName(),
-                "NHAN_VIEN + IT must NOT be auto-self-assigned at creation time");
+                    "NHAN_VIEN + IT must NOT be auto-self-assigned at creation time");
             assertNull(created.getAssignee(),
-                "NHAN_VIEN + IT auto-self-assignment FK must be null at creation time");
+                    "NHAN_VIEN + IT auto-self-assignment FK must be null at creation time");
         }
     }
 
     // ========================================================================
-    // \u00a719.2 - CREATE + ASSIGNEE: only TRUONG_PHONG + IT may supply one, and only
+    // \u00a719.2 - CREATE + ASSIGNEE: only TRUONG_PHONG + IT may supply one, and
+    // only
     // to an enabled NHAN_VIEN + IT.
     // ========================================================================
 
@@ -176,12 +185,12 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(staff.getUsername());
 
             Ticket created = ticketService.createTicket(
-                ticket, manager.getUsername(), manager.getRole());
+                    ticket, manager.getUsername(), manager.getRole());
 
             assertEquals(staff.getUsername(), created.getAssigneeName());
             assertNotNull(created.getAssignee());
             assertEquals(staff.getId(), created.getAssignee().getId(),
-                "create-time assignee_id and assigneeName must refer to the same user");
+                    "create-time assignee_id and assigneeName must refer to the same user");
         }
 
         @Test
@@ -193,24 +202,25 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(target.getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()),
-                "TRUONG_PHONG + IT must not assign to NHAN_VIEN outside IT");
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()),
+                    "TRUONG_PHONG + IT must not assign to NHAN_VIEN outside IT");
         }
 
         @Test
         @DisplayName("TRUONG_PHONG + IT + TRUONG_PHONG (even in IT) - DENIED (role check)")
         void truongPhongItCannotCreateWithTruongPhong() {
-            // The brief \u00a78 is explicit: a TRUONG_PHONG + IT target is denied even though
+            // The brief \u00a78 is explicit: a TRUONG_PHONG + IT target is denied even
+            // though
             // they belong to IT - only NHAN_VIEN + IT is a valid target.
             UserAccount manager = fixtures.truongPhongIT();
             Ticket ticket = fixtures.mktRequestedTicket("Self assign on create", TicketPriority.HIGH);
             ticket.setAssigneeName(manager.getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()),
-                "TRUONG_PHONG + IT must not assign to themselves at create time");
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()),
+                    "TRUONG_PHONG + IT must not assign to themselves at create time");
         }
 
         @Test
@@ -222,8 +232,8 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(target.getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()));
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()));
         }
 
         @Test
@@ -235,8 +245,8 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(target.getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()));
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()));
         }
 
         @Test
@@ -252,9 +262,9 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(target.getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()),
-                "a disabled NHAN_VIEN + IT must not be a valid create-time assignee");
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()),
+                    "a disabled NHAN_VIEN + IT must not be a valid create-time assignee");
         }
 
         @Test
@@ -265,9 +275,9 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName("ghost.user");
 
             assertThrows(TicketNotFoundException.class,
-                () -> ticketService.createTicket(
-                    ticket, manager.getUsername(), manager.getRole()),
-                "a nonexistent username must raise TicketNotFoundException");
+                    () -> ticketService.createTicket(
+                            ticket, manager.getUsername(), manager.getRole()),
+                    "a nonexistent username must raise TicketNotFoundException");
         }
     }
 
@@ -286,9 +296,9 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.admin().getUsername(), fixtures.admin().getRole()),
-                "ADMIN must NOT be allowed to specify a create-time assignee");
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.admin().getUsername(), fixtures.admin().getRole()),
+                    "ADMIN must NOT be allowed to specify a create-time assignee");
         }
 
         @Test
@@ -298,8 +308,8 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.giamDoc().getUsername(), fixtures.giamDoc().getRole()));
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.giamDoc().getUsername(), fixtures.giamDoc().getRole()));
         }
 
         @Test
@@ -309,8 +319,8 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.truongPhongMkt().getUsername(), fixtures.truongPhongMkt().getRole()));
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.truongPhongMkt().getUsername(), fixtures.truongPhongMkt().getRole()));
         }
 
         @Test
@@ -320,8 +330,8 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.nhanVienMkt().getUsername(), fixtures.nhanVienMkt().getRole()));
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.nhanVienMkt().getUsername(), fixtures.nhanVienMkt().getRole()));
         }
 
         @Test
@@ -331,9 +341,9 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT2().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole()),
-                "NHAN_VIEN + IT must NOT bypass self-receive by pre-populating assignee");
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole()),
+                    "NHAN_VIEN + IT must NOT bypass self-receive by pre-populating assignee");
         }
     }
 
@@ -352,13 +362,13 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.assignTicket(
-                saved.getId(), actor.getUsername(), actor.getRole(),
-                actor.getDepartmentId(), actor.getUsername());
+                    saved.getId(), actor.getUsername(), actor.getRole(),
+                    actor.getDepartmentId(), actor.getUsername());
 
             assertEquals(actor.getUsername(), updated.getAssigneeName());
             assertNotNull(updated.getAssignee());
             assertEquals(actor.getId(), updated.getAssignee().getId(),
-                "self-receive must set the FK alongside the name");
+                    "self-receive must set the FK alongside the name");
         }
 
         @Test
@@ -369,12 +379,13 @@ class TicketServicePhase3IntegrationTest {
             UserAccount peer = fixtures.nhanVienIT2();
 
             // The actor passes themselves as actor but supplies peer as the new assignee.
-            // The isSelfReceive check (peer == actor) is false, so canAssignOthers is consulted
+            // The isSelfReceive check (peer == actor) is false, so canAssignOthers is
+            // consulted
             // and that returns false for NHAN_VIEN + IT.
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), peer.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), peer.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -384,9 +395,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.nhanVienMkt();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), actor.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), actor.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -396,9 +407,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.admin();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), actor.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), actor.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -408,9 +419,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.giamDoc();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), actor.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), actor.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -420,9 +431,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.truongPhongMkt();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), actor.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), actor.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -435,15 +446,16 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.truongPhongIT();
 
             Ticket updated = ticketService.assignTicket(
-                saved.getId(), actor.getUsername(), actor.getRole(),
-                actor.getDepartmentId(), actor.getUsername());
+                    saved.getId(), actor.getUsername(), actor.getRole(),
+                    actor.getDepartmentId(), actor.getUsername());
 
             assertEquals(actor.getUsername(), updated.getAssigneeName());
         }
     }
 
     // ========================================================================
-    // \u00a721 - ASSIGN-OTHERS: TRUONG_PHONG + IT may assign others (NHAN_VIEN + IT only)
+    // \u00a721 - ASSIGN-OTHERS: TRUONG_PHONG + IT may assign others (NHAN_VIEN + IT
+    // only)
     // ========================================================================
 
     @Nested
@@ -458,8 +470,8 @@ class TicketServicePhase3IntegrationTest {
             UserAccount staff = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    saved.getId(), staff.getUsername(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
 
             assertEquals(staff.getUsername(), updated.getAssigneeName());
             assertNotNull(updated.getAssignee());
@@ -474,9 +486,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount target = fixtures.admin();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), target.getUsername(), manager.getRole(),
-                    manager.getDepartmentId(), manager.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), target.getUsername(), manager.getRole(),
+                            manager.getDepartmentId(), manager.getUsername()));
         }
 
         @Test
@@ -487,9 +499,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount target = fixtures.nhanVienMkt();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), target.getUsername(), manager.getRole(),
-                    manager.getDepartmentId(), manager.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), target.getUsername(), manager.getRole(),
+                            manager.getDepartmentId(), manager.getUsername()));
         }
 
         @Test
@@ -502,9 +514,9 @@ class TicketServicePhase3IntegrationTest {
             userAccountRepository.save(staff);
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), staff.getUsername(), manager.getRole(),
-                    manager.getDepartmentId(), manager.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), staff.getUsername(), manager.getRole(),
+                            manager.getDepartmentId(), manager.getUsername()));
         }
 
         @Test
@@ -514,9 +526,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount manager = fixtures.truongPhongIT();
 
             assertThrows(TicketNotFoundException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), "no.such.user", manager.getRole(),
-                    manager.getDepartmentId(), manager.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), "no.such.user", manager.getRole(),
+                            manager.getDepartmentId(), manager.getUsername()));
         }
 
         @Test
@@ -527,9 +539,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount peer = fixtures.nhanVienIT2();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), peer.getUsername(), actor.getRole(),
-                    actor.getDepartmentId(), actor.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), peer.getUsername(), actor.getRole(),
+                            actor.getDepartmentId(), actor.getUsername()));
         }
 
         @Test
@@ -540,9 +552,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount staff = fixtures.nhanVienIT();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), staff.getUsername(), admin.getRole(),
-                    admin.getDepartmentId(), admin.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), staff.getUsername(), admin.getRole(),
+                            admin.getDepartmentId(), admin.getUsername()));
         }
 
         @Test
@@ -553,9 +565,9 @@ class TicketServicePhase3IntegrationTest {
             UserAccount staff = fixtures.nhanVienIT();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), staff.getUsername(), giamDoc.getRole(),
-                    giamDoc.getDepartmentId(), giamDoc.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), staff.getUsername(), giamDoc.getRole(),
+                            giamDoc.getDepartmentId(), giamDoc.getUsername()));
         }
 
         @Test
@@ -566,14 +578,15 @@ class TicketServicePhase3IntegrationTest {
             UserAccount staff = fixtures.nhanVienIT();
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.assignTicket(
-                    saved.getId(), staff.getUsername(), tpMkt.getRole(),
-                    tpMkt.getDepartmentId(), tpMkt.getUsername()));
+                    () -> ticketService.assignTicket(
+                            saved.getId(), staff.getUsername(), tpMkt.getRole(),
+                            tpMkt.getDepartmentId(), tpMkt.getUsername()));
         }
     }
 
     // ========================================================================
-    // \u00a722 - ASSIGNEE CONSISTENCY: assignee_id and assignee_name must refer to the
+    // \u00a722 - ASSIGNEE CONSISTENCY: assignee_id and assignee_name must refer to
+    // the
     // SAME user after assignment, both cleared after unassignment
     // ========================================================================
 
@@ -590,16 +603,16 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(staff.getUsername());
 
             Ticket created = ticketService.createTicket(
-                ticket, manager.getUsername(), manager.getRole());
+                    ticket, manager.getUsername(), manager.getRole());
 
             assertEquals(staff.getUsername(), created.getAssigneeName(),
-                "assigneeName must be the target username");
+                    "assigneeName must be the target username");
             assertNotNull(created.getAssignee(),
-                "assignee FK must be populated");
+                    "assignee FK must be populated");
             assertEquals(staff.getId(), created.getAssignee().getId(),
-                "assignee_id must equal the target user id");
+                    "assignee_id must equal the target user id");
             assertEquals(staff.getUsername(), created.getAssignee().getUsername(),
-                "assignee FK.username must equal assignee_name");
+                    "assignee FK.username must equal assignee_name");
         }
 
         @Test
@@ -610,13 +623,13 @@ class TicketServicePhase3IntegrationTest {
             UserAccount staff = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    saved.getId(), staff.getUsername(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
 
             assertEquals(staff.getUsername(), updated.getAssigneeName());
             assertNotNull(updated.getAssignee());
             assertEquals(staff.getId(), updated.getAssignee().getId(),
-                "assignee_id must equal the target user id after assignTicket");
+                    "assignee_id must equal the target user id after assignTicket");
         }
 
         @Test
@@ -626,13 +639,13 @@ class TicketServicePhase3IntegrationTest {
             UserAccount actor = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.assignTicket(
-                saved.getId(), actor.getUsername(), actor.getRole(),
-                actor.getDepartmentId(), actor.getUsername());
+                    saved.getId(), actor.getUsername(), actor.getRole(),
+                    actor.getDepartmentId(), actor.getUsername());
 
             assertEquals(actor.getUsername(), updated.getAssigneeName());
             assertNotNull(updated.getAssignee());
             assertEquals(actor.getId(), updated.getAssignee().getId(),
-                "self-receive: assignee_id must equal the actor's user id");
+                    "self-receive: assignee_id must equal the actor's user id");
         }
 
         @Test
@@ -644,15 +657,15 @@ class TicketServicePhase3IntegrationTest {
 
             // Assign first.
             Ticket assigned = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    saved.getId(), staff.getUsername(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
             assertEquals(staff.getUsername(), assigned.getAssigneeName());
             assertNotNull(assigned.getAssignee());
 
             // Unassign.
             Ticket unassigned = ticketService.unassignTicket(
-                assigned.getId(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    assigned.getId(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
             assertNull(unassigned.getAssigneeName(), "unassign must null out the legacy name");
             assertNull(unassigned.getAssignee(), "unassign must null out the FK");
         }
@@ -660,7 +673,8 @@ class TicketServicePhase3IntegrationTest {
         @Test
         @DisplayName("Validation rejects a target whose assignee_id and assignee_name would diverge")
         void assignmentTargetValidationCannotLeaveFieldsDiverged() {
-            // Indirect: a non-existent username is rejected (TicketNotFoundException) BEFORE
+            // Indirect: a non-existent username is rejected (TicketNotFoundException)
+            // BEFORE
             // any state mutation, so assigneeName can never be set to an unknown name with
             // a null FK. The previous code path silently set assigneeName = "ghost.user"
             // while leaving assignee = null; that is now impossible.
@@ -668,8 +682,8 @@ class TicketServicePhase3IntegrationTest {
             UserAccount manager = fixtures.truongPhongIT();
 
             assertThrows(TicketNotFoundException.class, () -> ticketService.assignTicket(
-                saved.getId(), "ghost.user", manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername()));
+                    saved.getId(), "ghost.user", manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername()));
 
             // Confirm the ticket was not mutated.
             Ticket reread = ticketService.getTicket(saved.getId());
@@ -679,7 +693,8 @@ class TicketServicePhase3IntegrationTest {
     }
 
     // ========================================================================
-    // \u00a723 - CROSS-DEPARTMENT: IT Helpdesk may process tickets from any requester
+    // \u00a723 - CROSS-DEPARTMENT: IT Helpdesk may process tickets from any
+    // requester
     // department. The requester department is NOT an authorization boundary.
     // ========================================================================
 
@@ -692,19 +707,19 @@ class TicketServicePhase3IntegrationTest {
         void mktRequesterAssignedByTruongPhongIt() {
             Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
             assertEquals(TicketAuthorizationFixtures.MKT_CODE, saved.getDepartment().getCode(),
-                "sanity: ticket.department mirrors requester (MKT)");
+                    "sanity: ticket.department mirrors requester (MKT)");
 
             UserAccount manager = fixtures.truongPhongIT();
             UserAccount staff = fixtures.nhanVienIT();
             Ticket assigned = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    saved.getId(), staff.getUsername(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
 
             assertEquals(staff.getUsername(), assigned.getAssigneeName(),
-                "IT manager may assign IT staff to a MKT-requester ticket");
+                    "IT manager may assign IT staff to a MKT-requester ticket");
             // Department is the REQUESTER's department, not the operator's.
             assertEquals(TicketAuthorizationFixtures.MKT_CODE, assigned.getDepartment().getCode(),
-                "ticket.department must remain MKT (requester) - not switch to operator");
+                    "ticket.department must remain MKT (requester) - not switch to operator");
         }
 
         @Test
@@ -715,13 +730,13 @@ class TicketServicePhase3IntegrationTest {
 
             UserAccount staff = fixtures.nhanVienIT();
             Ticket self = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), staff.getRole(),
-                staff.getDepartmentId(), staff.getUsername());
+                    saved.getId(), staff.getUsername(), staff.getRole(),
+                    staff.getDepartmentId(), staff.getUsername());
 
             assertEquals(staff.getUsername(), self.getAssigneeName(),
-                "IT staff may self-receive a MKT-requester ticket");
+                    "IT staff may self-receive a MKT-requester ticket");
             assertEquals(TicketAuthorizationFixtures.MKT_CODE, self.getDepartment().getCode(),
-                "ticket.department must remain MKT - not become IT");
+                    "ticket.department must remain MKT - not become IT");
         }
 
         @Test
@@ -745,17 +760,18 @@ class TicketServicePhase3IntegrationTest {
             UserAccount manager = fixtures.truongPhongIT();
             UserAccount staff = fixtures.nhanVienIT();
             Ticket assigned = ticketService.assignTicket(
-                saved.getId(), staff.getUsername(), manager.getRole(),
-                manager.getDepartmentId(), manager.getUsername());
+                    saved.getId(), staff.getUsername(), manager.getRole(),
+                    manager.getDepartmentId(), manager.getUsername());
 
             assertEquals(staff.getUsername(), assigned.getAssigneeName());
             assertEquals("HR", assigned.getDepartment().getCode(),
-                "HR requester ticket.department stays HR");
+                    "HR requester ticket.department stays HR");
         }
     }
 
     // ========================================================================
-    // \u00a724 - NEGATIVE SECURITY: client-supplied valid target cannot bypass actor policy
+    // \u00a724 - NEGATIVE SECURITY: client-supplied valid target cannot bypass
+    // actor policy
     // ========================================================================
 
     @Nested
@@ -776,13 +792,13 @@ class TicketServicePhase3IntegrationTest {
                     fixtures.truongPhongMkt(),
                     fixtures.nhanVienMkt())) {
                 Ticket attempt = fixtures.mktRequestedTicket(
-                    "Bypass attempt " + actor.getRole(), TicketPriority.HIGH);
+                        "Bypass attempt " + actor.getRole(), TicketPriority.HIGH);
                 attempt.setAssigneeName(fixtures.nhanVienIT().getUsername());
 
                 assertThrows(TicketRuleViolationException.class,
-                    () -> ticketService.createTicket(
-                        attempt, actor.getUsername(), actor.getRole()),
-                    actor.getRole() + " must NOT bypass create-time authorization via a valid target");
+                        () -> ticketService.createTicket(
+                                attempt, actor.getUsername(), actor.getRole()),
+                        actor.getRole() + " must NOT bypass create-time authorization via a valid target");
             }
         }
 
@@ -793,15 +809,15 @@ class TicketServicePhase3IntegrationTest {
             ticket.setAssigneeName(fixtures.nhanVienIT2().getUsername());
 
             assertThrows(TicketRuleViolationException.class,
-                () -> ticketService.createTicket(
-                    ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole()),
-                "NHAN_VIEN + IT must NOT bypass self-receive via create-time assignment");
+                    () -> ticketService.createTicket(
+                            ticket, fixtures.nhanVienIT().getUsername(), fixtures.nhanVienIT().getRole()),
+                    "NHAN_VIEN + IT must NOT bypass self-receive via create-time assignment");
         }
 
         @Test
         @DisplayName("A non-IT user supplies a valid NHAN_VIEN + IT assignee on PATCH /assignee - REJECTED")
         void nonItClientCannotAssignWithValidTarget() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            ticketRepository.save(fixtures.mktRequestedTicket());
             UserAccount validTarget = fixtures.nhanVienIT();
 
             // The actor policy is the gate, regardless of how valid the target looks.
@@ -812,10 +828,10 @@ class TicketServicePhase3IntegrationTest {
                     fixtures.nhanVienMkt())) {
                 Ticket toAssign = ticketRepository.save(fixtures.mktRequestedTicket());
                 assertThrows(TicketRuleViolationException.class,
-                    () -> ticketService.assignTicket(
-                        toAssign.getId(), validTarget.getUsername(), actor.getRole(),
-                        actor.getDepartmentId(), actor.getUsername()),
-                    actor.getRole() + " must NOT bypass assignment authorization via a valid target");
+                        () -> ticketService.assignTicket(
+                                toAssign.getId(), validTarget.getUsername(), actor.getRole(),
+                                actor.getDepartmentId(), actor.getUsername()),
+                        actor.getRole() + " must NOT bypass assignment authorization via a valid target");
             }
         }
     }
@@ -832,11 +848,11 @@ class TicketServicePhase3IntegrationTest {
         @DisplayName("validateAssignmentTarget returns TARGET_NOT_FOUND for an unknown username")
         void nullTarget() {
             assertEquals(AssignmentTargetValidation.TARGET_NOT_FOUND,
-                ticketService.validateAssignmentTarget(null));
+                    ticketService.validateAssignmentTarget(null));
             assertEquals(AssignmentTargetValidation.TARGET_NOT_FOUND,
-                ticketService.validateAssignmentTarget(""));
+                    ticketService.validateAssignmentTarget(""));
             assertEquals(AssignmentTargetValidation.TARGET_NOT_FOUND,
-                ticketService.validateAssignmentTarget("ghost.user"));
+                    ticketService.validateAssignmentTarget("ghost.user"));
         }
 
         @Test
@@ -847,7 +863,7 @@ class TicketServicePhase3IntegrationTest {
             userAccountRepository.save(target);
 
             assertEquals(AssignmentTargetValidation.TARGET_DISABLED,
-                ticketService.validateAssignmentTarget(target.getUsername()));
+                    ticketService.validateAssignmentTarget(target.getUsername()));
         }
 
         @Test
@@ -857,13 +873,13 @@ class TicketServicePhase3IntegrationTest {
             // The role check is the first gate after the existence/enabled gates, so these
             // actors never reach the department check (role takes precedence by design).
             assertEquals(AssignmentTargetValidation.INVALID_ROLE,
-                ticketService.validateAssignmentTarget(fixtures.admin().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.admin().getUsername()));
             assertEquals(AssignmentTargetValidation.INVALID_ROLE,
-                ticketService.validateAssignmentTarget(fixtures.giamDoc().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.giamDoc().getUsername()));
             assertEquals(AssignmentTargetValidation.INVALID_ROLE,
-                ticketService.validateAssignmentTarget(fixtures.truongPhongIT().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.truongPhongIT().getUsername()));
             assertEquals(AssignmentTargetValidation.INVALID_ROLE,
-                ticketService.validateAssignmentTarget(fixtures.truongPhongMkt().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.truongPhongMkt().getUsername()));
         }
 
         @Test
@@ -873,16 +889,16 @@ class TicketServicePhase3IntegrationTest {
             // passes and the department check fails. (NHAN_VIEN non-IT is the canonical
             // "wrong department" target.)
             assertEquals(AssignmentTargetValidation.INVALID_DEPARTMENT,
-                ticketService.validateAssignmentTarget(fixtures.nhanVienMkt().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.nhanVienMkt().getUsername()));
         }
 
         @Test
         @DisplayName("validateAssignmentTarget returns VALID for enabled NHAN_VIEN + IT")
         void validTarget() {
             assertEquals(AssignmentTargetValidation.VALID,
-                ticketService.validateAssignmentTarget(fixtures.nhanVienIT().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.nhanVienIT().getUsername()));
             assertEquals(AssignmentTargetValidation.VALID,
-                ticketService.validateAssignmentTarget(fixtures.nhanVienIT2().getUsername()));
+                    ticketService.validateAssignmentTarget(fixtures.nhanVienIT2().getUsername()));
         }
 
         @Test

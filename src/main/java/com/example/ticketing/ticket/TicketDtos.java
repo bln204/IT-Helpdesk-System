@@ -700,7 +700,6 @@ public final class TicketDtos {
     // ============================================================
     public static class EngineerReportRow {
         private String engineer;
-        private Long assigneeId;
         private long ticketsAssigned;
         private long ticketsCompleted;
         private double avgAssignedPerDay;

@@ -226,7 +226,7 @@ public interface TicketEmbeddingRepository extends JpaRepository<TicketEmbedding
 
     /**
      * Update embedding to FAILED status.
-     * Does NOT cast embedding since it's NULL for failures.
+     * Uses CAST(NULL AS vector) for pgvector compatibility.
      *
      * @param id embedding record ID
      * @param errorMessage error description
@@ -234,7 +234,7 @@ public interface TicketEmbeddingRepository extends JpaRepository<TicketEmbedding
     @Modifying
     @Query(value = """
         UPDATE ticket_embeddings
-        SET embedding = NULL,
+        SET embedding = CAST(NULL AS vector),
             embedding_status = 'FAILED',
             embedded_at = NULL,
             embedding_error = :errorMessage,
@@ -245,4 +245,22 @@ public interface TicketEmbeddingRepository extends JpaRepository<TicketEmbedding
         @Param("id") Long id,
         @Param("errorMessage") String errorMessage
     );
+
+    /**
+     * Reset embedding to PENDING status (for re-embedding).
+     * Uses CAST(NULL AS vector) for pgvector compatibility.
+     *
+     * @param id embedding record ID
+     */
+    @Modifying
+    @Query(value = """
+        UPDATE ticket_embeddings
+        SET embedding = CAST(NULL AS vector),
+            embedding_status = 'PENDING',
+            embedded_at = NULL,
+            embedding_error = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+        """, nativeQuery = true)
+    void resetEmbeddingToPending(@Param("id") Long id);
 }

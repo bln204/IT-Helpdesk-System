@@ -63,11 +63,7 @@ class TicketObjectLevelReadCharacterizationTest {
     @Autowired
     private TicketRepository ticketRepository;
 
-    @Autowired
-    private TicketCommentRepository ticketCommentRepository;
 
-    @Autowired
-    private TicketAuditRepository ticketAuditRepository;
 
     @Autowired
     private TicketAttachmentRepository ticketAttachmentRepository;
@@ -75,8 +71,6 @@ class TicketObjectLevelReadCharacterizationTest {
     @Autowired
     private TicketTimelineRepository ticketTimelineRepository;
 
-    @Autowired
-    private TicketAssignmentRepository ticketAssignmentRepository;
 
     @Autowired
     private UserAccountRepository userAccountRepository;
@@ -117,9 +111,6 @@ class TicketObjectLevelReadCharacterizationTest {
         return persistUser("phase50_hr_req", UserRole.Role.NHAN_VIEN, hrDepartment());
     }
 
-    private UserAccount financeRequester() {
-        return persistUser("phase50_fin_req", UserRole.Role.NHAN_VIEN, financeDepartment());
-    }
 
     private UserAccount persistUser(String username, UserRole.Role role, Department dept) {
         return userAccountRepository.findByUsername(username).orElseGet(() -> {

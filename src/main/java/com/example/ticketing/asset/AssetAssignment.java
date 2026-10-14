@@ -3,7 +3,6 @@ package com.example.ticketing.asset;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.*;
-import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * Asset Assignment Entity.
@@ -59,26 +58,85 @@ public class AssetAssignment {
 
     // ==================== Getters and Setters ====================
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Asset getAsset() { return asset; }
-    public void setAsset(Asset asset) { this.asset = asset; }
-    public String getAssignedTo() { return assignedTo; }
-    public void setAssignedTo(String assignedTo) { this.assignedTo = assignedTo; }
-    public String getAssignedToName() { return assignedToName; }
-    public void setAssignedToName(String assignedToName) { this.assignedToName = assignedToName; }
-    public String getAssignedDepartment() { return assignedDepartment; }
-    public void setAssignedDepartment(String assignedDepartment) { this.assignedDepartment = assignedDepartment; }
-    public LocalDateTime getAssignedAt() { return assignedAt; }
-    public void setAssignedAt(LocalDateTime assignedAt) { this.assignedAt = assignedAt; }
-    public LocalDateTime getReturnedAt() { return returnedAt; }
-    public void setReturnedAt(LocalDateTime returnedAt) { this.returnedAt = returnedAt; }
-    public String getPurpose() { return purpose; }
-    public void setPurpose(String purpose) { this.purpose = purpose; }
-    public String getNotes() { return notes; }
-    public void setNotes(String notes) { this.notes = notes; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Asset getAsset() {
+        return asset;
+    }
+
+    public void setAsset(Asset asset) {
+        this.asset = asset;
+    }
+
+    public String getAssignedTo() {
+        return assignedTo;
+    }
+
+    public void setAssignedTo(String assignedTo) {
+        this.assignedTo = assignedTo;
+    }
+
+    public String getAssignedToName() {
+        return assignedToName;
+    }
+
+    public void setAssignedToName(String assignedToName) {
+        this.assignedToName = assignedToName;
+    }
+
+    public String getAssignedDepartment() {
+        return assignedDepartment;
+    }
+
+    public void setAssignedDepartment(String assignedDepartment) {
+        this.assignedDepartment = assignedDepartment;
+    }
+
+    public LocalDateTime getAssignedAt() {
+        return assignedAt;
+    }
+
+    public void setAssignedAt(LocalDateTime assignedAt) {
+        this.assignedAt = assignedAt;
+    }
+
+    public LocalDateTime getReturnedAt() {
+        return returnedAt;
+    }
+
+    public void setReturnedAt(LocalDateTime returnedAt) {
+        this.returnedAt = returnedAt;
+    }
+
+    public String getPurpose() {
+        return purpose;
+    }
+
+    public void setPurpose(String purpose) {
+        this.purpose = purpose;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
 
     @Override
     public String toString() {
