@@ -65,8 +65,26 @@ class OtherDomainAdaptersTest {
         changes.save(draft);
         DomainDef d = ChangeQueryAdapter.DEF;
         QueryResult r = changeAdapter.execute(list(d,
-                filter(d, "status", FilterOp.EQ, ChangeRequest.ChangeStatus.APPROVED)), actor(fixtures.nhanVienMkt()));
+                filter(d, "status", FilterOp.EQ, ChangeRequest.ChangeStatus.APPROVED)), actor(fixtures.nhanVienIT()));
         assertThat(r.rows()).extracting(Row::id).contains("CHG-T01").doesNotContain("CHG-T02");
+    }
+
+    @Test
+    void businessUserSeesOnlyOwnChanges() {
+        UserAccount me = fixtures.nhanVienMkt();
+        ChangeRequest mine = new ChangeRequest();
+        mine.setChangeNumber("CHG-T03");
+        mine.setTitle("Cấp quyền share");
+        mine.setRequesterUsername(me.getUsername());
+        changes.save(mine);
+        ChangeRequest other = new ChangeRequest();
+        other.setChangeNumber("CHG-T04");
+        other.setTitle("Đổi switch");
+        other.setRequesterUsername("someone_else");
+        changes.save(other);
+        DomainDef d = ChangeQueryAdapter.DEF;
+        QueryResult r = changeAdapter.execute(list(d), actor(me));
+        assertThat(r.rows()).extracting(Row::id).contains("CHG-T03").doesNotContain("CHG-T04");
     }
 
     @Test
