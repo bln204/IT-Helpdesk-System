@@ -1,6 +1,7 @@
 package com.example.ticketing.ai.query;
 
-import com.example.ticketing.auth.UserRole.Role;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorTiers;
 import com.example.ticketing.team.Team;
 import com.example.ticketing.team.TeamRepository;
 import java.util.List;
@@ -10,8 +11,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class TeamQueryAdapter extends JpaQueryAdapter<Team> {
 
-    /** TeamController#listTeams: no @PreAuthorize, requireAdminOrManager() rejects NHAN_VIEN in code. */
-    static final AccessRule ACCESS = AccessRule.of(Role.ADMIN, Role.GIAM_DOC, Role.TRUONG_PHONG);
+    /** Mọi role qua cổng role; scope() chặn actor không thuộc GS/IT (giống TeamController). */
+    static final AccessRule ACCESS = AccessRule.allRoles();
 
     static final DomainDef DEF = new DomainDef("team", "team", "nhóm xử lý ticket (vd Helpdesk L1) thuộc phòng ban",
             List.of(
@@ -33,6 +34,13 @@ public class TeamQueryAdapter extends JpaQueryAdapter<Team> {
     protected java.util.Map<String, java.util.function.Supplier<java.util.Collection<Term>>> vocabularies() {
         return java.util.Map.of("department", () -> departments.findAll().stream()
                 .map(x -> new Term(x.getName(), x.getCode())).toList());
+    }
+
+    @Override
+    protected Scope<Team> scope(ActorContext actor) {
+        return ActorTiers.seesAll(actor)
+                ? Scope.all()
+                : Scope.deny("Bạn không có quyền xem team. Chức năng này dành cho IT và ban giám sát.");
     }
 
     @Override public DomainDef definition() { return DEF; }

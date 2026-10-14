@@ -176,9 +176,12 @@ class OtherDomainAdaptersTest {
     }
 
     @Test
-    void teamAccessExcludesNhanVien() {
-        assertThat(TeamQueryAdapter.ACCESS.allows(actor(fixtures.nhanVienIT()))).isFalse();
-        assertThat(TeamQueryAdapter.ACCESS.allows(actor(fixtures.truongPhongMkt()))).isTrue();
+    void teamScopeAllowsItAndDeniesBusinessUsers() {
+        DomainDef d = TeamQueryAdapter.DEF;
+        assertThat(teamAdapter.execute(list(d), actor(fixtures.nhanVienIT())).status())
+                .isNotEqualTo(QueryResult.Status.DENIED);
+        assertThat(teamAdapter.execute(list(d), actor(fixtures.truongPhongMkt())).status())
+                .isEqualTo(QueryResult.Status.DENIED);
     }
 
     @Test

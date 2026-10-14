@@ -44,20 +44,27 @@ class AccessRuleParityTest {
         return roles;
     }
 
+    private static void policyScoped(Class<?> controller, String name, AccessRule access) {
+        // Quyền đọc do policy trong authorization/ quyết định (UI qua controller, AI qua scope()):
+        // không còn @PreAuthorize theo role, cổng role của adapter mở cho mọi role.
+        assertThat(method(controller, name).getAnnotation(PreAuthorize.class)).isNull();
+        assertThat(access.roles()).isEqualTo(EnumSet.allOf(Role.class));
+    }
+
     @Test
     void assetMatchesController() {
-        assertThat(AssetQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(AssetController.class, "getAllAssets"));
+        policyScoped(AssetController.class, "getAllAssets", AssetQueryAdapter.ACCESS);
     }
 
     @Test
     void changeMatchesController() {
-        assertThat(ChangeQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(ChangeRequestController.class, "getAllChanges"));
+        policyScoped(ChangeRequestController.class, "getAllChanges", ChangeQueryAdapter.ACCESS);
     }
 
     @Test
     void problemAndKnownErrorMatchController() {
-        assertThat(ProblemQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(ProblemController.class, "getAllProblems"));
-        assertThat(KnownErrorQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(ProblemController.class, "getKnownErrors"));
+        policyScoped(ProblemController.class, "getAllProblems", ProblemQueryAdapter.ACCESS);
+        policyScoped(ProblemController.class, "getKnownErrors", KnownErrorQueryAdapter.ACCESS);
     }
 
     @Test
@@ -76,10 +83,9 @@ class AccessRuleParityTest {
 
     @Test
     void teamIsCheckedInCode() {
-        // TeamController#listTeams -> requireAdminOrManager(): NHAN_VIEN gets 403. If someone adds
-        // @PreAuthorize here, switch this test to rolesOf(...).
+        // TeamController#listTeams -> requireTeamReader(): chỉ GS/IT; adapter chặn ở scope() theo cùng quy tắc.
         assertThat(method(TeamController.class, "listTeams").getAnnotation(PreAuthorize.class)).isNull();
-        assertThat(TeamQueryAdapter.ACCESS.roles()).isEqualTo(EnumSet.of(Role.ADMIN, Role.GIAM_DOC, Role.TRUONG_PHONG));
+        assertThat(TeamQueryAdapter.ACCESS.roles()).isEqualTo(EnumSet.allOf(Role.class));
     }
 
     @Test
@@ -91,7 +97,7 @@ class AccessRuleParityTest {
     @Test
     void newDomainsMatchControllers() {
         assertThat(IncidentQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(IncidentController.class, "getAllIncidents"));
-        assertThat(ServiceRequestQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(ServiceRequestController.class, "getAllRequests"));
+        policyScoped(ServiceRequestController.class, "getAllRequests", ServiceRequestQueryAdapter.ACCESS);
         assertThat(SlaPolicyQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(SlaPolicyController.class, "getAllPolicies"));
         assertThat(EscalationRuleQueryAdapter.ACCESS.roles()).isEqualTo(rolesOf(EscalationController.class, "getAllRules"));
     }
