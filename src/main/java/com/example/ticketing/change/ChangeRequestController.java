@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
 
 /**
  * REST Controller cho Change Management.
@@ -66,11 +67,11 @@ public class ChangeRequestController {
     @GetMapping("/my")
     public ResponseEntity<Page<ChangeRequestDto>> getMyChanges(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/changes/my");
         Pageable pageable = Pageable.ofSize(size).withPage(page);
-        // In real app, get from SecurityContext
-        Page<ChangeRequest> changes = changeService.getMyChanges("current_user", pageable);
+        Page<ChangeRequest> changes = changeService.getMyChanges(authentication.getName(), pageable);
         return ResponseEntity.ok(changes.map(ChangeRequestDto::fromEntity));
     }
 

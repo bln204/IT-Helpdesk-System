@@ -10,6 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.auth.UserAccountRepository;
 
 /**
  * REST Controller cho Service Request Management.
@@ -22,9 +27,30 @@ public class ServiceRequestController {
     private static final Logger log = LoggerFactory.getLogger(ServiceRequestController.class);
 
     private final ServiceRequestService serviceRequestService;
+    private final UserAccountRepository userAccountRepository;
 
-    public ServiceRequestController(ServiceRequestService serviceRequestService) {
+    public ServiceRequestController(ServiceRequestService serviceRequestService,
+                                    UserAccountRepository userAccountRepository) {
         this.serviceRequestService = serviceRequestService;
+        this.userAccountRepository = userAccountRepository;
+    }
+
+    private UserAccount currentUser(Authentication authentication) {
+        return userAccountRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
+    }
+
+    private ServiceRequest createForCurrentUser(ServiceRequestRequest request, Authentication authentication) {
+        UserAccount me = currentUser(authentication);
+        ServiceRequest serviceRequest = new ServiceRequest();
+        serviceRequest.setTitle(request.getTitle());
+        serviceRequest.setDescription(request.getDescription());
+        serviceRequest.setServiceId(request.getServiceId());
+        serviceRequest.setPriority(request.getPriority());
+        serviceRequest.setFormData(request.getFormData());
+        String departmentCode = me.getDepartment() != null ? me.getDepartment().getCode() : null;
+        return serviceRequestService.createRequest(
+                serviceRequest, me.getUsername(), me.getDisplayName(), me.getEmail(), departmentCode);
     }
 
     // ==================== Service Catalog ====================
@@ -88,11 +114,11 @@ public class ServiceRequestController {
     @GetMapping("/my")
     public ResponseEntity<Page<ServiceRequestDto>> getMyRequests(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/service-requests/my");
-        // In real app, get from SecurityContext
         Pageable pageable = Pageable.ofSize(size).withPage(page);
-        Page<ServiceRequest> requests = serviceRequestService.getMyRequests("current_user", pageable);
+        Page<ServiceRequest> requests = serviceRequestService.getMyRequests(authentication.getName(), pageable);
         return ResponseEntity.ok(requests.map(ServiceRequestDto::fromEntity));
     }
 
@@ -112,26 +138,11 @@ public class ServiceRequestController {
      * POST /api/service-requests
      */
     @PostMapping
-    public ResponseEntity<ServiceRequestDto> createRequest(@RequestBody ServiceRequestRequest request) {
+    public ResponseEntity<ServiceRequestDto> createRequest(@RequestBody ServiceRequestRequest request,
+                                                           Authentication authentication) {
         log.info("POST /api/service-requests - Creating: {}", request.getTitle());
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setTitle(request.getTitle());
-        serviceRequest.setDescription(request.getDescription());
-        serviceRequest.setServiceId(request.getServiceId());
-        serviceRequest.setPriority(request.getPriority());
-        serviceRequest.setFormData(request.getFormData());
-
-        ServiceRequest created = serviceRequestService.createRequest(
-                serviceRequest,
-                request.getRequesterUsername(),
-                request.getRequesterName(),
-                request.getRequesterEmail(),
-                request.getRequesterDepartment()
-        );
-
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ServiceRequestDto.fromEntity(created));
+                .body(ServiceRequestDto.fromEntity(createForCurrentUser(request, authentication)));
     }
 
     /**
@@ -267,16 +278,13 @@ public class ServiceRequestController {
     @PostMapping("/{id}/comments")
     public ResponseEntity<ServiceRequestCommentDto> addComment(
             @PathVariable Long id,
-            @RequestBody CommentRequest request) {
+            @RequestBody CommentRequest request,
+            Authentication authentication) {
         log.info("POST /api/service-requests/{}/comments", id);
 
+        UserAccount me = currentUser(authentication);
         ServiceRequestComment comment = serviceRequestService.addComment(
-                id,
-                request.getBody(),
-                request.getAuthorName(),
-                request.getAuthorUsername(),
-                request.isInternal()
-        );
+                id, request.getBody(), me.getDisplayName(), me.getUsername(), request.isInternal());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ServiceRequestCommentDto.fromEntity(comment));
@@ -308,6 +316,21 @@ public class ServiceRequestController {
                 .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(String.valueOf(ex.getStatusCode().value()), ex.getReason()));
+    }
+
+    @ExceptionHandler({
+            org.springframework.security.authorization.AuthorizationDeniedException.class,
+            org.springframework.security.access.AccessDeniedException.class
+    })
+    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này."));
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
@@ -321,31 +344,11 @@ public class ServiceRequestController {
      * POST /api/service-requests/my
      */
     @PostMapping("/my")
-    public ResponseEntity<ServiceRequestDto> createRequestForCurrentUser(
-            @RequestBody ServiceRequestRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username,
-            @RequestHeader(value = "X-User-Name", required = false) String userName,
-            @RequestHeader(value = "X-User-Email", required = false) String email,
-            @RequestHeader(value = "X-User-Department", required = false) String department) {
-        log.info("POST /api/service-requests/my - by: {}", username);
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setTitle(request.getTitle());
-        serviceRequest.setDescription(request.getDescription());
-        serviceRequest.setServiceId(request.getServiceId());
-        serviceRequest.setPriority(request.getPriority());
-        serviceRequest.setFormData(request.getFormData());
-
-        ServiceRequest created = serviceRequestService.createRequest(
-                serviceRequest,
-                username,
-                userName,
-                email,
-                department
-        );
-
+    public ResponseEntity<ServiceRequestDto> createRequestForCurrentUser(@RequestBody ServiceRequestRequest request,
+                                                                         Authentication authentication) {
+        log.info("POST /api/service-requests/my - by: {}", authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ServiceRequestDto.fromEntity(created));
+                .body(ServiceRequestDto.fromEntity(createForCurrentUser(request, authentication)));
     }
 
     /**
@@ -356,10 +359,10 @@ public class ServiceRequestController {
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> takeOwnership(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/take-ownership - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/take-ownership - by: {}", id, authentication.getName());
 
-        ServiceRequest updated = serviceRequestService.takeOwnership(id, username);
+        ServiceRequest updated = serviceRequestService.takeOwnership(id, authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -373,10 +376,10 @@ public class ServiceRequestController {
     public ResponseEntity<ServiceRequestDto> completeRequest(
             @PathVariable Long id,
             @RequestBody CompletionRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/complete - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/complete - by: {}", id, authentication.getName());
 
-        ServiceRequest updated = serviceRequestService.completeRequest(id, request.getResolution(), username);
+        ServiceRequest updated = serviceRequestService.completeRequest(id, request.getResolution(), authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -388,10 +391,10 @@ public class ServiceRequestController {
     @PatchMapping("/{id}/confirm")
     public ResponseEntity<ServiceRequestDto> confirmCompletion(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/confirm - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/confirm - by: {}", id, authentication.getName());
 
-        ServiceRequest updated = serviceRequestService.confirmCompletion(id, username);
+        ServiceRequest updated = serviceRequestService.confirmCompletion(id, authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -404,10 +407,10 @@ public class ServiceRequestController {
     public ResponseEntity<ServiceRequestDto> reopenRequest(
             @PathVariable Long id,
             @RequestBody ReopenRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/reopen - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/reopen - by: {}", id, authentication.getName());
 
-        ServiceRequest updated = serviceRequestService.reopenRequest(id, request.getReason(), username);
+        ServiceRequest updated = serviceRequestService.reopenRequest(id, request.getReason(), authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
