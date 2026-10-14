@@ -64,9 +64,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             
             // Load user from database for real-time checks
+            UserAccount user = null;
             if (username != null) {
-                UserAccount user = userAccountRepository.findByUsername(username).orElse(null);
-                
+                user = userAccountRepository.findByUsername(username).orElse(null);
+
+                if (user == null) {
+                    logger.warn("Rejected token - user no longer exists: {}", username);
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Unauthorized\",\"message\":\"Account no longer exists\"}");
+                    return;
+                }
+
                 // Check if user's all tokens have been revoked (e.g., user was deactivated)
                 if (user != null && jwtBlacklistService.isUserRevoked(username)) {
                     logger.warn("Rejected token - user has been revoked: {}", username);
@@ -109,29 +119,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
             
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                // Extract roles from JWT claims
-                @SuppressWarnings("unchecked")
-                java.util.List<String> roles = claims.get("roles", java.util.List.class);
-                
-                if (roles == null) {
-                    roles = java.util.List.of();
-                }
-                
-                // Convert roles to GrantedAuthority
-                // Note: roles in JWT already have ROLE_ prefix from getAuthorities()
-                @SuppressWarnings("unchecked")
-                java.util.List<org.springframework.security.core.GrantedAuthority> authorities = (java.util.List<org.springframework.security.core.GrantedAuthority>)(java.util.List<?>)roles.stream()
-                    .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                    .toList();
-                
-                logger.debug("JWT auth for {} with roles: {}", username, authorities);
-                
-                // Create authentication using JWT authorities (not from database)
+            if (user != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                // Role đọc từ DB để đổi/hạ role có hiệu lực ngay, không chờ token hết hạn.
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     username,
                     null,
-                    authorities
+                    user.getAuthorities()
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
