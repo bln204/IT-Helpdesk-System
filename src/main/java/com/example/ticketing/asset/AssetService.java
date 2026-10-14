@@ -2,13 +2,16 @@ package com.example.ticketing.asset;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -249,6 +252,28 @@ public class AssetService {
      * Lấy tất cả assets.
      */
     @Transactional(readOnly = true)
+    public Page<Asset> listAssets(Specification<Asset> scope,
+                                  Asset.AssetType type,
+                                  Asset.HealthStatus health,
+                                  String search,
+                                  Pageable pageable) {
+        List<Specification<Asset>> parts = new ArrayList<>();
+        parts.add(scope);
+        if (type != null) {
+            parts.add((root, q, cb) -> cb.equal(root.get("assetType"), type));
+        }
+        if (health != null) {
+            parts.add((root, q, cb) -> cb.equal(root.get("healthStatus"), health));
+        }
+        if (search != null && !search.isBlank()) {
+            String like = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            parts.add((root, q, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("name")), like),
+                    cb.like(cb.lower(root.get("assetNumber")), like)));
+        }
+        return assetRepository.findAll(Specification.allOf(parts), pageable);
+    }
+
     public Page<Asset> getAllAssets(Pageable pageable) {
         return assetRepository.findAllByOrderByCreatedAtDesc(pageable);
     }
