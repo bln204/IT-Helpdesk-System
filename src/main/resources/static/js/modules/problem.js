@@ -459,15 +459,10 @@ const ProblemManagement = (() => {
         const container = document.getElementById('problem-form');
         if (!container) return;
 
-        // PHASE 6.6.3 - role gate for Known Error actions.
-        // The backend @PreAuthorize is the security boundary; this is UX only.
-        const allowedRoles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG'];
-        const userRoles = (window.Auth && typeof window.Auth.getRoles === 'function')
-            ? window.Auth.getRoles()
-            : (window.Auth && typeof window.Auth.getCurrentUser === 'function'
-                ? [window.Auth.getCurrentUser()?.role].filter(Boolean)
-                : []);
-        const canManageKe = userRoles.some(r => allowedRoles.includes(r));
+        // Known Error chỉ Trưởng phòng IT ghi (ProblemAuthorization); backend là ranh giới bảo mật, đây chỉ là UX.
+        const keUser = window.Auth && typeof window.Auth.getCurrentUser === 'function'
+            ? window.Auth.getCurrentUser() : null;
+        const canManageKe = keUser?.role === 'TRUONG_PHONG' && keUser?.departmentCode === 'IT';
         const isClosed = problem.status === 'CLOSED';
         const hasKe = !!problem.knownErrorId;
         const keStatusClass = problem.knownErrorStatus

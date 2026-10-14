@@ -653,7 +653,7 @@ export const selectUser = async (user) => {
 export const canManageTargetUser = (user) => {
   if (!user) return false;
   if (isAdmin()) return true;
-  if (isGiamDoc()) return user.role !== 'ADMIN';
+  // GIAM_DOC chỉ xem user (spec phase1-rbac-hardening §4.8).
   if (isTruongPhong()) {
     if (user.role !== 'NHAN_VIEN') return false;
     return user.departmentId === getCurrentUser()?.departmentId;
@@ -684,12 +684,6 @@ export const applyUserDetailControls = () => {
     if (selectedUser.username !== getCurrentUser()?.username) {
       canResetPassword = true;
     }
-  } else if (isGiamDoc()) {
-    if (selectedUser.role !== 'ADMIN') {
-      canEdit = true;
-      canResetPassword = true;
-      canDelete = true;
-    }
   } else if (isTruongPhong()) {
     if (isApprovedUser && canManage) {
       canEdit = true;
@@ -719,8 +713,6 @@ export const applyUserDetailControls = () => {
     let roles = [];
     if (isAdmin()) {
       roles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
-    } else if (isGiamDoc()) {
-      roles = ['GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
     } else {
       roles = ['NHAN_VIEN'];
     }
@@ -990,8 +982,6 @@ export const applyAdminRoleOptions = () => {
   let roles = [];
   if (isAdmin()) {
     roles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
-  } else if (isGiamDoc()) {
-    roles = ['GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'];
   } else {
     roles = ['NHAN_VIEN'];
   }

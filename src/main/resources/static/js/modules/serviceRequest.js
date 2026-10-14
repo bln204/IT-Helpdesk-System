@@ -214,7 +214,8 @@ const ServiceRequest = (() => {
                 <h4 class="sr-category-title">${category}</h4>
                 <div class="sr-catalog-grid">
                     ${services.map(service => `
-                        <div class="sr-catalog-item" data-id="${service.id}">
+                        <div class="sr-catalog-item" data-id="${service.id}">
+
                             <div class="sr-item-info">
                                 <h5>${escapeHtml(service.name)}</h5>
                                 <p>${escapeHtml(service.description || '').substring(0, 80)}${service.description?.length > 80 ? '...' : ''}</p>
@@ -310,14 +311,15 @@ const ServiceRequest = (() => {
         };
 
         const currentUser = window.Auth?.getCurrentUser?.();
-        const isITStaff = currentUser && ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN'].includes(currentUser.role);
+        // Khớp ServiceRequestAuthorization: xử lý = TRUONG_PHONG/NHAN_VIEN phòng IT; xác nhận/mở lại = người yêu cầu.
+        const isITStaff = currentUser && ['TRUONG_PHONG', 'NHAN_VIEN'].includes(currentUser.role) && currentUser.departmentCode === 'IT';
         const isAssignedTo = request.assignedTo === currentUser?.username;
         const isRequester = request.requesterUsername === currentUser?.username;
 
-        const canTake = !request.assignedTo && ['SUBMITTED', 'PENDING_APPROVAL', 'APPROVED'].includes(request.status);
+        const canTake = isITStaff && !request.assignedTo && ['SUBMITTED', 'PENDING_APPROVAL', 'APPROVED'].includes(request.status);
         const canComplete = isITStaff && ['IN_PROGRESS', 'APPROVED'].includes(request.status);
-        const canConfirm = !isITStaff && request.status === 'COMPLETED';
-        const canReopen = !isITStaff && ['COMPLETED', 'CLOSED'].includes(request.status);
+        const canConfirm = isRequester && request.status === 'COMPLETED';
+        const canReopen = isRequester && ['COMPLETED', 'CLOSED'].includes(request.status);
 
         const container = document.getElementById('sr-detail-content');
         if (!container) return;
