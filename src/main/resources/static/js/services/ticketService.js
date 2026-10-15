@@ -545,7 +545,7 @@ export const selectTicket = async (ticket) => {
   
   const createdAt = full.createdAt ? new Date(full.createdAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
   const updatedAt = full.updatedAt ? new Date(full.updatedAt).toLocaleString('vi-VN') : 'Không rõ thời gian';
-  const assignee = full.assigneeName ? formatName(full.assigneeName) : 'Chưa phân công';
+  const assignee = full.assigneeName ? getDisplayName(full.assigneeName) : 'Chưa phân công';
   const deptInfo = full.departmentName ? `${full.departmentName} (${full.departmentCode})` : '';
   
   // SLA Info HTML
@@ -574,7 +574,7 @@ export const selectTicket = async (ticket) => {
         </div>
         <div class="ticket-detail-field">
           <span>Người yêu cầu</span>
-          <strong>${escapeHtml(formatName(full.requesterName))}</strong>
+          <strong>${escapeHtml(getDisplayName(full.requesterName))}</strong>
         </div>
         <div class="ticket-detail-field">
           <span>Mã phiếu</span>
@@ -614,6 +614,18 @@ export const selectTicket = async (ticket) => {
     select.value = match ? value : options[0]?.value || '';
   };
   
+  // Only offer current status + transitions the backend accepts (e.g. CLOSED only after RESOLVED)
+  if (statusSelect) {
+    let nextStatuses = [];
+    try {
+      nextStatuses = await request(`/api/tickets/${full.id}/valid-transitions`);
+    } catch (err) {
+      console.warn('[selectTicket] valid-transitions failed:', err);
+    }
+    statusSelect.innerHTML = [full.status, ...nextStatuses.filter((s) => s !== full.status)]
+      .map((s) => `<option value="${s}">${escapeHtml(formatStatus(s))}</option>`)
+      .join('');
+  }
   setSelectValue(statusSelect, full.status);
   setSelectValue(prioritySelect, full.priority);
   
@@ -658,7 +670,7 @@ export const loadComments = async (ticketId) => {
     const item = document.createElement('div');
     item.className = 'list-item';
     const visibilityBadge = comment.visibility === 'INTERNAL' ? ' [Nội bộ]' : '';
-    item.textContent = `${comment.actorName || 'Hệ thống'}${visibilityBadge}: ${comment.body}`;
+    item.textContent = `${comment.actorName ? getDisplayName(comment.actorName) : 'Hệ thống'}${visibilityBadge}: ${comment.body}`;
     commentsList.appendChild(item);
   });
 };
@@ -883,7 +895,8 @@ export const updateStatus = async () => {
   }
   statusSelect = document.getElementById('status-select');
   const newStatus = statusSelect.value;
-  
+  if (newStatus === window.selectedTicket.status) return;
+
   try {
     await request(`/api/tickets/${window.selectedTicket.id}/status`, {
       method: 'PATCH',
@@ -903,7 +916,8 @@ export const updatePriority = async () => {
   }
   prioritySelect = document.getElementById('priority-select');
   const newPriority = prioritySelect.value;
-  
+  if (newPriority === window.selectedTicket.priority) return;
+
   try {
     await request(`/api/tickets/${window.selectedTicket.id}/priority`, {
       method: 'PATCH',
@@ -937,7 +951,8 @@ export const updateAssignee = async () => {
   };
   
   const assigneeName = normalizeAssigneeInput(assigneeInput.value);
-  
+  if (assigneeName === (window.selectedTicket.assigneeName || null)) return;
+
   try {
     await request(`/api/tickets/${window.selectedTicket.id}/assignee`, {
       method: 'PATCH',

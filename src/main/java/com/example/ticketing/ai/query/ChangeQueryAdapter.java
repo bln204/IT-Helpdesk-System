@@ -1,5 +1,8 @@
 package com.example.ticketing.ai.query;
 
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ChangeAuthorization;
 import com.example.ticketing.change.ChangeRequest;
 import com.example.ticketing.change.ChangeRequestRepository;
 import java.util.List;
@@ -28,9 +31,18 @@ public class ChangeQueryAdapter extends JpaQueryAdapter<ChangeRequest> {
             "createdAt", true);
 
     private final ChangeRequestRepository repository;
+    private final ChangeAuthorization authz;
 
-    public ChangeQueryAdapter(ChangeRequestRepository repository) {
+    public ChangeQueryAdapter(ChangeRequestRepository repository, ChangeAuthorization authz) {
         this.repository = repository;
+        this.authz = authz;
+    }
+
+    @Override
+    protected Scope<ChangeRequest> scope(ActorContext actor) {
+        return ActorTiers.seesAll(actor)
+                ? Scope.all()
+                : Scope.of(authz.readScope(actor), "Kết quả chỉ gồm change do bạn yêu cầu.");
     }
 
     @Override public DomainDef definition() { return DEF; }

@@ -14,6 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.AssetAuthorization;
 
 /**
  * REST Controller cho Asset Management.
@@ -26,48 +33,57 @@ public class AssetController {
     private static final Logger log = LoggerFactory.getLogger(AssetController.class);
 
     private final AssetService assetService;
+    private final ActorContextService actorContextService;
+    private final AssetAuthorization authz;
 
-    public AssetController(AssetService assetService) {
+    public AssetController(AssetService assetService,
+                           ActorContextService actorContextService,
+                           AssetAuthorization authz) {
         this.assetService = assetService;
+        this.actorContextService = actorContextService;
+        this.authz = authz;
+    }
+
+    private ActorContext actor(Authentication authentication) {
+        return actorContextService.fromAuthentication(authentication);
+    }
+
+    private Asset readable(Long id, ActorContext actor) {
+        Asset asset = assetService.getAssetById(id);
+        ActorTiers.require(authz.canRead(actor, asset), "Bạn không có quyền xem thiết bị này.");
+        return asset;
     }
 
     // ==================== Assets CRUD ====================
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<AssetResponse>> getAllAssets(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String health,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         Pageable pageable = Pageable.ofSize(size).withPage(page);
-        Page<Asset> assets;
-
-        if (search != null && !search.isBlank()) {
-            assets = assetService.searchAssets(search, pageable);
-        } else if (type != null && !type.isBlank()) {
-            Asset.AssetType assetType = Asset.AssetType.valueOf(type);
-            assets = assetService.getAssetsByType(assetType, pageable);
-        } else if (health != null && !health.isBlank()) {
-            Asset.HealthStatus healthStatus = Asset.HealthStatus.valueOf(health);
-            assets = assetService.getAssetsByHealth(healthStatus, pageable);
-        } else {
-            assets = assetService.getAllAssets(pageable);
-        }
+        Asset.AssetType assetType = type != null && !type.isBlank() ? Asset.AssetType.valueOf(type) : null;
+        Asset.HealthStatus healthStatus = health != null && !health.isBlank() ? Asset.HealthStatus.valueOf(health) : null;
+        Page<Asset> assets = assetService.listAssets(
+                authz.readScope(actor(authentication)), assetType, healthStatus, search, pageable);
 
         return ResponseEntity.ok(assets.map(AssetResponse::fromEntity));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AssetResponse> getAssetById(@PathVariable Long id) {
-        Asset asset = assetService.getAssetById(id);
-        return ResponseEntity.ok(AssetResponse.fromEntity(asset));
+    public ResponseEntity<AssetResponse> getAssetById(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
+        return ResponseEntity.ok(AssetResponse.fromEntity(readable(id, actor)));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> createAsset(@RequestBody AssetRequest request) {
+    public ResponseEntity<AssetResponse> createAsset(@RequestBody AssetRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
         Asset asset = new Asset();
         asset.setAssetNumber(request.assetNumber);
         asset.setName(request.name);
@@ -121,13 +137,14 @@ public class AssetController {
         asset.setSpecifications(request.specifications);
         asset.setParentAssetId(request.parentAssetId);
 
-        Asset created = assetService.createAsset(asset, "admin");
+        Asset created = assetService.createAsset(asset, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(AssetResponse.fromEntity(created));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> updateAsset(@PathVariable Long id, @RequestBody AssetRequest request) {
+    public ResponseEntity<AssetResponse> updateAsset(@PathVariable Long id, @RequestBody AssetRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
         log.info("=== UPDATE ASSET {} ===", id);
         log.info("Request - assetNumber: {}, name: {}", request.assetNumber, request.name);
         log.info("Request - purchaseCost: {}, currentValue: {}, depreciationRate: {}", 
@@ -186,7 +203,7 @@ public class AssetController {
         updates.setSpecifications(request.specifications);
         updates.setParentAssetId(request.parentAssetId);
 
-        Asset updated = assetService.updateAsset(id, updates, "admin");
+        Asset updated = assetService.updateAsset(id, updates, actor.username());
         log.info("=== UPDATED ASSET {} ===", id);
         log.info("Result - name: {}, purchaseCost: {}, currentValue: {}", 
                  updated.getName(), updated.getPurchaseCost(), updated.getCurrentValue());
@@ -203,67 +220,77 @@ public class AssetController {
     // ==================== Assignment ====================
 
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> assignAsset(@PathVariable Long id, @RequestBody AssignRequest request) {
-        Asset updated = assetService.assignAsset(id, request.assignedTo, request.assignedToName, request.department, "admin");
+    public ResponseEntity<AssetResponse> assignAsset(@PathVariable Long id, @RequestBody AssignRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
+        Asset updated = assetService.assignAsset(id, request.assignedTo, request.assignedToName, request.department, actor.username());
         return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
     @PatchMapping("/{id}/unassign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> unassignAsset(@PathVariable Long id) {
-        Asset updated = assetService.unassignAsset(id, "admin");
+    public ResponseEntity<AssetResponse> unassignAsset(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
+        Asset updated = assetService.unassignAsset(id, actor.username());
         return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
     // ==================== Health Status ====================
 
     @PatchMapping("/{id}/health")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> updateHealthStatus(@PathVariable Long id, @RequestBody HealthUpdateRequest request) {
+    public ResponseEntity<AssetResponse> updateHealthStatus(@PathVariable Long id, @RequestBody HealthUpdateRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
         Asset.HealthStatus healthStatus = Asset.HealthStatus.valueOf(request.healthStatus);
-        Asset updated = assetService.updateHealthStatus(id, healthStatus, request.notes, "admin");
+        Asset updated = assetService.updateHealthStatus(id, healthStatus, request.notes, actor.username());
         return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
     // ==================== Maintenance ====================
 
     @GetMapping("/{id}/maintenance")
-    public ResponseEntity<List<MaintenanceResponse>> getMaintenanceRecords(@PathVariable Long id) {
+    public ResponseEntity<List<MaintenanceResponse>> getMaintenanceRecords(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
         List<AssetMaintenanceRecord> records = assetService.getMaintenanceRecords(id);
         return ResponseEntity.ok(records.stream().map(MaintenanceResponse::fromEntity).collect(Collectors.toList()));
     }
 
     @PostMapping("/{id}/maintenance")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<MaintenanceResponse> addMaintenanceRecord(@PathVariable Long id, @RequestBody MaintenanceRequest request) {
-        AssetMaintenanceRecord record = assetService.addMaintenanceRecord(id, request.maintenanceType, request.description, request.performedBy, request.outcome);
+    public ResponseEntity<MaintenanceResponse> addMaintenanceRecord(@PathVariable Long id, @RequestBody MaintenanceRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
+        AssetMaintenanceRecord record = assetService.addMaintenanceRecord(id, request.maintenanceType, request.description, actor.username(), request.outcome);
         return ResponseEntity.status(HttpStatus.CREATED).body(MaintenanceResponse.fromEntity(record));
     }
 
     @PostMapping("/{id}/schedule-maintenance")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<AssetResponse> scheduleMaintenance(@PathVariable Long id, @RequestBody ScheduleMaintenanceRequest request) {
-        Asset updated = assetService.scheduleMaintenance(id, request.nextMaintenanceDate, "admin");
+    public ResponseEntity<AssetResponse> scheduleMaintenance(@PathVariable Long id, @RequestBody ScheduleMaintenanceRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
+        Asset updated = assetService.scheduleMaintenance(id, request.nextMaintenanceDate, actor.username());
         return ResponseEntity.ok(AssetResponse.fromEntity(updated));
     }
 
     // ==================== Statistics & Alerts ====================
 
     @GetMapping("/stats")
-    public ResponseEntity<AssetStatisticsResponse> getStatistics() {
+    public ResponseEntity<AssetStatisticsResponse> getStatistics(Authentication authentication) {
+        ActorTiers.require(authz.canViewFleet(actor(authentication)), "Bạn không có quyền xem thống kê thiết bị toàn công ty.");
         AssetService.AssetStatistics stats = assetService.getStatistics();
         return ResponseEntity.ok(AssetStatisticsResponse.from(stats));
     }
 
     @GetMapping("/expiring-warranties")
-    public ResponseEntity<List<AssetResponse>> getExpiringWarranties(@RequestParam(defaultValue = "30") int days) {
+    public ResponseEntity<List<AssetResponse>> getExpiringWarranties(@RequestParam(defaultValue = "30") int days, Authentication authentication) {
+        ActorTiers.require(authz.canViewFleet(actor(authentication)), "Bạn không có quyền xem thống kê thiết bị toàn công ty.");
         List<Asset> assets = assetService.getExpiringWarranties(days);
         return ResponseEntity.ok(assets.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
     }
 
     @GetMapping("/maintenance-schedule")
-    public ResponseEntity<List<AssetResponse>> getMaintenanceSchedule(@RequestParam(defaultValue = "30") int days) {
+    public ResponseEntity<List<AssetResponse>> getMaintenanceSchedule(@RequestParam(defaultValue = "30") int days, Authentication authentication) {
+        ActorTiers.require(authz.canViewFleet(actor(authentication)), "Bạn không có quyền xem thống kê thiết bị toàn công ty.");
         List<Asset> assets = assetService.getUpcomingMaintenance(days);
         return ResponseEntity.ok(assets.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
     }
@@ -271,25 +298,37 @@ public class AssetController {
     // ==================== Linking ====================
 
     @PostMapping("/{id}/link-incident")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<LinkResponse> linkIncident(@PathVariable Long id, @RequestBody LinkRequest request) {
-        AssetIncidentLink link = assetService.linkIncident(id, request.ticketId, request.linkedBy);
+    public ResponseEntity<LinkResponse> linkIncident(@PathVariable Long id, @RequestBody LinkRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được quản lý thiết bị.");
+        AssetIncidentLink link = assetService.linkIncident(id, request.ticketId, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(LinkResponse.fromEntity(link));
     }
 
     @GetMapping("/{id}/incidents")
-    public ResponseEntity<List<LinkResponse>> getLinkedIncidents(@PathVariable Long id) {
+    public ResponseEntity<List<LinkResponse>> getLinkedIncidents(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
         List<AssetIncidentLink> links = assetService.getLinkedIncidents(id);
         return ResponseEntity.ok(links.stream().map(LinkResponse::fromEntity).collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}/children")
-    public ResponseEntity<List<AssetResponse>> getChildAssets(@PathVariable Long id) {
+    public ResponseEntity<List<AssetResponse>> getChildAssets(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
         List<Asset> children = assetService.getChildAssets(id);
-        return ResponseEntity.ok(children.stream().map(AssetResponse::fromEntity).collect(Collectors.toList()));
+        return ResponseEntity.ok(children.stream().filter(child -> authz.canRead(actor, child))
+                .map(AssetResponse::fromEntity).collect(Collectors.toList()));
     }
 
     // ==================== Exception Handlers ====================
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(String.valueOf(ex.getStatusCode().value()), ex.getReason()));
+    }
 
     @ExceptionHandler(AssetService.AssetNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

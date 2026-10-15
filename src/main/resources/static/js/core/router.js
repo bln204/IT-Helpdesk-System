@@ -141,6 +141,13 @@ export const routeGuard = () => {
     return;
   }
   
+  // A view whose nav link is hidden for this role (updateNavVisibility) is not reachable by URL either.
+  const navLink = document.querySelector(`.nav-card a[href="#/${viewName}"]`);
+  if (navLink && navLink.classList.contains('hidden')) {
+    showView('tickets');
+    return;
+  }
+
   // Role-based route guards
   if (viewName === 'reports' && !isStaff()) {
     showView('tickets');

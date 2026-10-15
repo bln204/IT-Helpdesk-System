@@ -36,6 +36,7 @@ import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole;
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
 import com.example.ticketing.authorization.TicketAuthorization;
 
 import jakarta.validation.Valid;
@@ -49,6 +50,9 @@ public class TicketController {
     private final UserAccountRepository userAccountRepository;
     private final ActorContextService actorContextService;
     private final TicketAuthorization ticketAuthorization;
+    // Stateless; dùng trực tiếp để không đổi constructor (xem ruling B7).
+    private static final com.example.ticketing.authorization.ReportingAuthorization REPORTING =
+            new com.example.ticketing.authorization.ReportingAuthorization();
 
     public TicketController(
             TicketService ticketService,
@@ -155,6 +159,7 @@ public class TicketController {
     public ResponseEntity<Set<TicketTypes.TicketStatus>> getValidTransitions(
             @PathVariable Long id,
             Authentication authentication) {
+        ticketService.getTicket(id, authentication.getName()); // gate canReadTicket
         UserAccount user = getCurrentUser(authentication);
         Set<TicketTypes.TicketStatus> validStatuses = ticketService.getValidNextStatuses(id);
 
@@ -599,7 +604,7 @@ public class TicketController {
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        requireStaff(authentication);
+        requireDepartmentStats(authentication);
         UserAccount user = getCurrentUser(authentication);
         Map<TicketTypes.TicketStatus, Long> counts = new HashMap<>();
         for (Ticket ticket : ticketService.listTickets(
@@ -627,12 +632,10 @@ public class TicketController {
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        UserAccount user = getCurrentUser(authentication);
-        String requesterUsername = user.getRole() == UserRole.Role.NHAN_VIEN
-                ? authentication.getName()
-                : null;
+        // Phạm vi theo ReportingAuthorization: GS/IT toàn công ty, TP nghiệp vụ phòng mình, NV nghiệp vụ ticket của mình.
+        var actor = actorContextService.fromAuthentication(authentication);
         LocalDateTime[] range = resolveReportRange(from, to);
-        return ticketService.buildDashboardSummary(requesterUsername, range[0], range[1]);
+        return ticketService.buildDashboardSummary(REPORTING.ticketStatsScope(actor), range[0], range[1]);
     }
 
     @GetMapping("/reports/assignee-workload")
@@ -745,11 +748,16 @@ public class TicketController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
     }
 
+    // Cùng quy tắc với ReportingAuthorization (spec §4.6); gọi ActorTiers trực tiếp để không đổi constructor.
     private void requireStaff(Authentication authentication) {
-        UserAccount user = getCurrentUser(authentication);
-        if (user.getRole() == UserRole.Role.NHAN_VIEN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This action requires staff privileges.");
-        }
+        ActorTiers.require(ActorTiers.seesAll(actorContextService.fromAuthentication(authentication)),
+                "Bạn không có quyền xem báo cáo toàn công ty.");
+    }
+
+    private void requireDepartmentStats(Authentication authentication) {
+        var actor = actorContextService.fromAuthentication(authentication);
+        ActorTiers.require(ActorTiers.seesAll(actor) || ActorTiers.isBusinessLead(actor),
+                "Bạn không có quyền xem báo cáo này.");
     }
 
     // PHASE 2.1: controller-level authorization gates. These do NOT duplicate the

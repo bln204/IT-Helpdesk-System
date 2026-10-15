@@ -19,7 +19,8 @@ import org.springframework.http.HttpStatus;
 
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
-import com.example.ticketing.auth.UserRole;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
 
 /**
  * REST Controller cho Team operations.
@@ -30,10 +31,13 @@ public class TeamController {
 
     private final TeamService teamService;
     private final UserAccountRepository userAccountRepository;
+    private final ActorContextService actorContextService;
 
-    public TeamController(TeamService teamService, UserAccountRepository userAccountRepository) {
+    public TeamController(TeamService teamService, UserAccountRepository userAccountRepository,
+                          ActorContextService actorContextService) {
         this.teamService = teamService;
         this.userAccountRepository = userAccountRepository;
+        this.actorContextService = actorContextService;
     }
 
     // ============================================================
@@ -47,7 +51,7 @@ public class TeamController {
     public ResponseEntity<List<Team.TeamResponse>> listTeams(
             @RequestParam(required = false) Long departmentId,
             Authentication authentication) {
-        requireAdminOrManager(authentication);
+        requireTeamReader(authentication);
         List<Team> teams;
         if (departmentId != null) {
             teams = teamService.getTeamsByDepartmentId(departmentId);
@@ -63,7 +67,8 @@ public class TeamController {
      * Lấy team theo ID.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Team.TeamResponse> getTeam(@PathVariable Long id) {
+    public ResponseEntity<Team.TeamResponse> getTeam(@PathVariable Long id, Authentication authentication) {
+        requireTeamReader(authentication);
         Team team = teamService.getTeamById(id);
         return ResponseEntity.ok(new Team.TeamResponse(team));
     }
@@ -129,6 +134,7 @@ public class TeamController {
     public ResponseEntity<List<TeamMember.TeamMemberResponse>> getTeamMembers(
             @PathVariable Long teamId,
             Authentication authentication) {
+        requireTeamReader(authentication);
         List<TeamMember> members = teamService.getTeamMembers(teamId);
         return ResponseEntity.ok(members.stream()
                 .map(TeamMember.TeamMemberResponse::new)
@@ -202,7 +208,7 @@ public class TeamController {
     public ResponseEntity<List<TeamService.TeamMemberWorkload>> getTeamWorkload(
             @PathVariable Long teamId,
             Authentication authentication) {
-        requireStaff(authentication);
+        requireTeamReader(authentication);
         List<TeamService.TeamMemberWorkload> workload = teamService.getTeamWorkload(teamId);
         return ResponseEntity.ok(workload);
     }
@@ -218,6 +224,7 @@ public class TeamController {
     public ResponseEntity<List<TeamMember.TeamMemberResponse>> getUserTeams(
             @PathVariable Long userId,
             Authentication authentication) {
+        requireTeamReader(authentication);
         List<TeamMember> teams = teamService.getUserTeams(userId);
         return ResponseEntity.ok(teams.stream()
                 .map(TeamMember.TeamMemberResponse::new)
@@ -248,7 +255,7 @@ public class TeamController {
     public ResponseEntity<UserInfo> getNextAgent(
             @PathVariable Long teamId,
             Authentication authentication) {
-        requireStaff(authentication);
+        requireItLead(authentication);
         return teamService.getNextAgentForAssignment(teamId)
                 .map(user -> ResponseEntity.ok(new UserInfo(
                         user.getId(),
@@ -272,18 +279,14 @@ public class TeamController {
         }
     }
 
-    private void requireAdminOrManager(Authentication authentication) {
-        UserAccount user = getCurrentUser(authentication);
-        if (user.getRole() == UserRole.Role.NHAN_VIEN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff access required.");
-        }
+    private void requireTeamReader(Authentication authentication) {
+        ActorTiers.require(ActorTiers.seesAll(actorContextService.fromAuthentication(authentication)),
+                "Chỉ IT và ban giám sát được xem thông tin team.");
     }
 
-    private void requireStaff(Authentication authentication) {
-        UserAccount user = getCurrentUser(authentication);
-        if (user.getRole() == UserRole.Role.NHAN_VIEN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff access required.");
-        }
+    private void requireItLead(Authentication authentication) {
+        ActorTiers.require(ActorTiers.isItLead(actorContextService.fromAuthentication(authentication)),
+                "Chỉ Trưởng phòng IT được dùng chức năng phân công tự động.");
     }
 
     // Helper DTO for user info

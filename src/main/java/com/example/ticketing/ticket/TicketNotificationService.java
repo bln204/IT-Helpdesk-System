@@ -68,8 +68,9 @@ public class TicketNotificationService {
                 ticket.getId(),
                 ticket.getTicketNumber(),
                 ticket.getTitle(),
-                assignedBy
+                nameOf(assignedBy)
             );
+            notification.setActorUsername(assignedBy);
             notificationRepository.save(notification);
             log.info("Sent assignment notification to {}", assigneeUsername);
 
@@ -139,8 +140,9 @@ public class TicketNotificationService {
                 ticket.getId(),
                 ticket.getTicketNumber(),
                 ticket.getTitle(),
-                resolvedBy
+                nameOf(resolvedBy)
             );
+            notification.setActorUsername(resolvedBy);
             notificationRepository.save(notification);
             log.info("Sent resolved notification to requester: {}", ticket.getRequesterUsername());
         }
@@ -321,6 +323,14 @@ public class TicketNotificationService {
             "SLA " + slaType + " đã bị vi phạm cho ticket này. Priority: " + ticket.getPriority());
     }
     
+    /** Họ tên hiển thị trong nội dung thông báo; actorUsername vẫn lưu username. */
+    private String nameOf(String username) {
+        if (username == null) return null;
+        return userAccountRepository.findByUsername(username)
+            .map(u -> u.getDisplayName() != null && !u.getDisplayName().isBlank() ? u.getDisplayName() : username)
+            .orElse(username);
+    }
+
     // ============ Private Helper Methods ============
     
     /**

@@ -17,6 +17,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 
+import com.example.ticketing.security.RateLimiterService;
+
 /**
  * Controller for user approval management.
  * - ADMIN: full access (approve, reject, view all pending)
@@ -31,14 +33,20 @@ public class UserApprovalController {
     private final UserAdminService userAdminService;
     private final UserAccountRepository userAccountRepository;
     private final NotificationService notificationService;
+    private final RateLimiterService rateLimiterService;
+    private final UserAuditService userAuditService;
 
     public UserApprovalController(
             UserAdminService userAdminService,
             UserAccountRepository userAccountRepository,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            RateLimiterService rateLimiterService,
+            UserAuditService userAuditService) {
         this.userAdminService = userAdminService;
         this.userAccountRepository = userAccountRepository;
         this.notificationService = notificationService;
+        this.rateLimiterService = rateLimiterService;
+        this.userAuditService = userAuditService;
     }
 
     /**
@@ -377,6 +385,35 @@ public class UserApprovalController {
         public long getCount() {
             return count;
         }
+    }
+
+    /**
+     * Danh sách tài khoản đang bị khoá đăng nhập (username viết thường → số giây còn lại).
+     * ADMIN only — GET /api/admin/users/login-locks
+     */
+    @GetMapping("/login-locks")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.Map<String, Long>> loginLocks() {
+        return ResponseEntity.ok(rateLimiterService.lockedUsernames());
+    }
+
+    /**
+     * Mở khoá đăng nhập bị khoá do nhập sai nhiều lần.
+     * ADMIN only — POST /api/admin/users/{id}/unlock-login
+     */
+    @PostMapping("/{id}/unlock-login")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.Map<String, String>> unlockLogin(
+            @PathVariable Long id,
+            Authentication authentication) {
+        UserAccount actor = getCurrentUser(authentication);
+        UserAccount target = userAccountRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Không tìm thấy tài khoản."));
+        rateLimiterService.clearFailedAttempts(RateLimiterService.userKey(target.getUsername()));
+        userAuditService.log(UserAuditAction.LOGIN_UNLOCKED, actor.getUsername(), actor.getRole().name(),
+                target.getUsername());
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã mở khoá đăng nhập.", "username", target.getUsername()));
     }
 
     private UserAccount getCurrentUser(Authentication authentication) {

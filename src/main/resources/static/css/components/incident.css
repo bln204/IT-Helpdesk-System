@@ -552,3 +552,25 @@
     gap: 10px;
   }
 }
+
+/* One scroll container per modal: the modal content already scrolls (modals.css). */
+.incident-detail-body {
+  overflow: visible;
+  max-height: none;
+  padding-right: 0;
+}
+
+.incident-detail-content .timeline-item {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.incident-detail-content .timeline-header {
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.incident-form-row .custom-select {
+  display: block;
+  width: 100%;
+}

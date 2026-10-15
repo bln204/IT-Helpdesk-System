@@ -1,6 +1,9 @@
 package com.example.ticketing.ai.query;
 
 import com.example.ticketing.asset.Asset;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.AssetAuthorization;
 import com.example.ticketing.asset.AssetRepository;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AssetQueryAdapter extends JpaQueryAdapter<Asset> {
 
-    /** Mirrors AssetController#getAllAssets. */
+    /** Mọi role; phạm vi dòng do AssetAuthorization.readScope quyết định. */
     static final AccessRule ACCESS = AccessRule.allRoles();
 
     static final DomainDef DEF = new DomainDef("asset", "thiết bị",
@@ -31,9 +34,18 @@ public class AssetQueryAdapter extends JpaQueryAdapter<Asset> {
             "assetNumber", false);
 
     private final AssetRepository repository;
+    private final AssetAuthorization authz;
 
-    public AssetQueryAdapter(AssetRepository repository) {
+    public AssetQueryAdapter(AssetRepository repository, AssetAuthorization authz) {
         this.repository = repository;
+        this.authz = authz;
+    }
+
+    @Override
+    protected Scope<Asset> scope(ActorContext actor) {
+        return ActorTiers.seesAll(actor)
+                ? Scope.all()
+                : Scope.of(authz.readScope(actor), "Kết quả chỉ gồm thiết bị bạn đang sử dụng hoặc của phòng ban bạn.");
     }
 
     @Override public DomainDef definition() { return DEF; }

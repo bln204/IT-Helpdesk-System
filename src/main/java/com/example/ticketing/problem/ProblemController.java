@@ -14,6 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ProblemAuthorization;
 
 /**
  * REST Controller cho Problem Management.
@@ -26,15 +33,24 @@ public class ProblemController {
     private static final Logger log = LoggerFactory.getLogger(ProblemController.class);
 
     private final ProblemService problemService;
+    private final ActorContextService actorContextService;
+    private final ProblemAuthorization authz;
 
-    public ProblemController(ProblemService problemService) {
+    public ProblemController(ProblemService problemService,
+                             ActorContextService actorContextService,
+                             ProblemAuthorization authz) {
         this.problemService = problemService;
+        this.actorContextService = actorContextService;
+        this.authz = authz;
+    }
+
+    private ActorContext actor(Authentication authentication) {
+        return actorContextService.fromAuthentication(authentication);
     }
 
     // ==================== Problems ====================
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<ProblemDto>> getAllProblems(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
@@ -75,8 +91,9 @@ public class ProblemController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ProblemDto> createProblem(@RequestBody ProblemRequest request) {
+    public ResponseEntity<ProblemDto> createProblem(@RequestBody ProblemRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
         Problem problem = new Problem();
         problem.setTitle(request.getTitle());
         problem.setDescription(request.getDescription());
@@ -87,13 +104,14 @@ public class ProblemController {
         problem.setRootCauseCategory(request.getRootCauseCategory());
         problem.setWorkaround(request.getWorkaround());
 
-        Problem created = problemService.createProblem(problem, "admin");
+        Problem created = problemService.createProblem(problem, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(ProblemDto.fromEntity(created));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ProblemDto> updateProblem(@PathVariable Long id, @RequestBody ProblemRequest request) {
+    public ResponseEntity<ProblemDto> updateProblem(@PathVariable Long id, @RequestBody ProblemRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
         Problem updates = new Problem();
         updates.setTitle(request.getTitle());
         updates.setDescription(request.getDescription());
@@ -105,7 +123,7 @@ public class ProblemController {
         updates.setWorkaround(request.getWorkaround());
         updates.setResolution(request.getResolution());
 
-        Problem updated = problemService.updateProblem(id, updates, "admin");
+        Problem updated = problemService.updateProblem(id, updates, actor.username());
         return ResponseEntity.ok(ProblemDto.fromEntity(updated));
     }
 
@@ -119,32 +137,37 @@ public class ProblemController {
     // ==================== Status Management ====================
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ProblemDto> updateStatus(@PathVariable Long id, @RequestBody StatusUpdateRequest request) {
-        Problem updated = problemService.updateStatus(id, Problem.ProblemStatus.valueOf(request.getStatus()), "admin");
+    public ResponseEntity<ProblemDto> updateStatus(@PathVariable Long id, @RequestBody StatusUpdateRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
+        Problem updated = problemService.updateStatus(id, Problem.ProblemStatus.valueOf(request.getStatus()), actor.username());
         return ResponseEntity.ok(ProblemDto.fromEntity(updated));
     }
 
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ProblemDto> assignProblem(@PathVariable Long id, @RequestBody AssignRequest request) {
-        Problem updated = problemService.assignProblem(id, request.getAssignee(), "admin");
+    public ResponseEntity<ProblemDto> assignProblem(@PathVariable Long id, @RequestBody AssignRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
+        Problem updated = problemService.assignProblem(id, request.getAssignee(), actor.username());
         return ResponseEntity.ok(ProblemDto.fromEntity(updated));
     }
 
     // ==================== Incident Linking ====================
 
     @PostMapping("/{id}/incidents")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentLinkDto> linkIncident(@PathVariable Long id,
-            @RequestBody IncidentLinkRequest request) {
-        ProblemIncidentLink link = problemService.linkIncident(id, request.getIncidentId(), "admin");
+            @RequestBody IncidentLinkRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
+        ProblemIncidentLink link = problemService.linkIncident(id, request.getIncidentId(), actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(IncidentLinkDto.fromEntity(link));
     }
 
     @DeleteMapping("/{id}/incidents/{incidentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<Void> unlinkIncident(@PathVariable Long id, @PathVariable Long incidentId) {
+    public ResponseEntity<Void> unlinkIncident(@PathVariable Long id, @PathVariable Long incidentId, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
         problemService.unlinkIncident(id, incidentId);
         return ResponseEntity.noContent().build();
     }
@@ -158,7 +181,6 @@ public class ProblemController {
     // ==================== Known Errors ====================
 
     @GetMapping("/known-errors")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<KnownErrorDto>> getKnownErrors(@RequestParam(required = false) String status) {
         List<KnownError> errors;
         if (status != null && !status.isBlank()) {
@@ -170,7 +192,6 @@ public class ProblemController {
     }
 
     @GetMapping("/known-errors/search")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<KnownErrorDto>> searchKnownErrors(@RequestParam String q, HttpServletRequest request) {
         try {
             String rawQueryString = request.getQueryString();
@@ -199,15 +220,15 @@ public class ProblemController {
     }
 
     @GetMapping("/known-errors/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<KnownErrorDto> getKnownErrorById(@PathVariable Long id) {
         KnownError error = problemService.getKnownErrorById(id);
         return ResponseEntity.ok(KnownErrorDto.fromEntity(error));
     }
 
     @PostMapping("/known-errors")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
-    public ResponseEntity<KnownErrorDto> createKnownError(@RequestBody KnownErrorRequest request) {
+    public ResponseEntity<KnownErrorDto> createKnownError(@RequestBody KnownErrorRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         KnownError error = new KnownError();
         error.setTitle(request.getTitle());
         error.setDescription(request.getDescription());
@@ -217,14 +238,16 @@ public class ProblemController {
         error.setFixSteps(request.getFixSteps());
         error.setStatus(KnownError.KnownErrorStatus.ACTIVE);
 
-        KnownError created = problemService.createKnownError(error, "admin");
+        KnownError created = problemService.createKnownError(error, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(KnownErrorDto.fromEntity(created));
     }
 
     @PutMapping("/known-errors/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<KnownErrorDto> updateKnownError(@PathVariable Long id,
-            @RequestBody KnownErrorRequest request) {
+            @RequestBody KnownErrorRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         KnownError updates = new KnownError();
         updates.setTitle(request.getTitle());
         updates.setDescription(request.getDescription());
@@ -234,41 +257,45 @@ public class ProblemController {
         updates.setFixSteps(request.getFixSteps());
         updates.setStatus(request.getStatus());
 
-        KnownError updated = problemService.updateKnownError(id, updates, "admin");
+        KnownError updated = problemService.updateKnownError(id, updates, actor.username());
         return ResponseEntity.ok(KnownErrorDto.fromEntity(updated));
     }
 
     @DeleteMapping("/known-errors/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
-    public ResponseEntity<Void> deleteKnownError(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteKnownError(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         problemService.deleteKnownError(id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/known-errors/{id}/workaround")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
-    public ResponseEntity<KnownErrorDto> addWorkaround(@PathVariable Long id, @RequestBody WorkaroundRequest request) {
-        KnownError updated = problemService.addWorkaround(id, request.getWorkaround(), request.getAuthor(), "admin");
+    public ResponseEntity<KnownErrorDto> addWorkaround(@PathVariable Long id, @RequestBody WorkaroundRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
+        KnownError updated = problemService.addWorkaround(id, request.getWorkaround(), actor.username(), actor.username());
         return ResponseEntity.ok(KnownErrorDto.fromEntity(updated));
     }
 
     // ==================== Create Problem from Incident ====================
 
     @PostMapping("/from-incident/{incidentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ProblemDto> createProblemFromIncident(
             @PathVariable Long incidentId,
-            @RequestBody(required = false) ProblemFromIncidentRequest request) {
+            @RequestBody(required = false) ProblemFromIncidentRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteProblem(actor), "Chỉ nhân viên IT được tạo hoặc xử lý problem.");
         Problem problem = problemService.createProblemFromIncident(incidentId,
                 request != null ? request.getTitle() : null,
                 request != null ? request.getDescription() : null,
-                "admin");
+                actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(ProblemDto.fromEntity(problem));
     }
 
     // ==================== Problem <-> Known Error (PHASE 6.6.3)
     // ====================
-    // Authorization: ADMIN, GIAM_DOC, TRUONG_PHONG only (NHAN_VIEN excluded).
+    // Authorization: ProblemAuthorization.canWriteKnownError (Trưởng phòng IT).
     // These endpoints replace the broken "create detached KE then leave
     // Problem.knownErrorId = NULL" pattern documented in PHASE 6.6.2.2.
 
@@ -281,10 +308,12 @@ public class ProblemController {
      * POST /api/problems/{id}/known-error
      */
     @PostMapping("/{id}/known-error")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<KnownErrorDto> createKnownErrorForProblem(
             @PathVariable Long id,
-            @RequestBody CreateKnownErrorForProblemRequest request) {
+            @RequestBody CreateKnownErrorForProblemRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         log.info("POST /api/problems/{}/known-error - create and link", id);
         if (request == null || request.getTitle() == null || request.getTitle().isBlank()) {
             throw new IllegalArgumentException("title is required");
@@ -301,7 +330,7 @@ public class ProblemController {
         payload.setImpactDescription(request.getImpactDescription());
         payload.setAffectedSystems(request.getAffectedSystems());
 
-        KnownError created = problemService.createKnownErrorForProblem(id, payload, "admin");
+        KnownError created = problemService.createKnownErrorForProblem(id, payload, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(KnownErrorDto.fromEntity(created));
     }
 
@@ -313,15 +342,17 @@ public class ProblemController {
      * POST /api/problems/{id}/known-error/link
      */
     @PostMapping("/{id}/known-error/link")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public ResponseEntity<KnownErrorDto> linkKnownErrorToProblem(
             @PathVariable Long id,
-            @RequestBody LinkKnownErrorRequest request) {
+            @RequestBody LinkKnownErrorRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         log.info("POST /api/problems/{}/known-error/link - knownErrorId={}", id, request.getKnownErrorId());
         if (request == null || request.getKnownErrorId() == null) {
             throw new IllegalArgumentException("knownErrorId is required");
         }
-        KnownError ke = problemService.linkExistingKnownError(id, request.getKnownErrorId(), "admin");
+        KnownError ke = problemService.linkExistingKnownError(id, request.getKnownErrorId(), actor.username());
         return ResponseEntity.ok(KnownErrorDto.fromEntity(ke));
     }
 
@@ -332,10 +363,11 @@ public class ProblemController {
      * DELETE /api/problems/{id}/known-error
      */
     @DeleteMapping("/{id}/known-error")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
-    public ResponseEntity<Void> unlinkKnownErrorFromProblem(@PathVariable Long id) {
+    public ResponseEntity<Void> unlinkKnownErrorFromProblem(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteKnownError(actor), "Chỉ Trưởng phòng IT được quản lý known error.");
         log.info("DELETE /api/problems/{}/known-error", id);
-        problemService.unlinkKnownError(id, "admin");
+        problemService.unlinkKnownError(id, actor.username());
         return ResponseEntity.noContent().build();
     }
 
@@ -347,7 +379,6 @@ public class ProblemController {
      * GET /api/problems/known-error/{knownErrorId}/problems
      */
     @GetMapping("/known-error/{knownErrorId}/problems")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<ProblemDto>> getProblemsForKnownError(@PathVariable Long knownErrorId) {
         log.info("GET /api/problems/known-error/{}/problems", knownErrorId);
         List<Problem> problems = problemService.getProblemsForKnownError(knownErrorId);
@@ -359,20 +390,22 @@ public class ProblemController {
     // ==================== Notes ====================
 
     @GetMapping("/{id}/notes")
-    public ResponseEntity<List<NoteDto>> getNotes(@PathVariable Long id) {
+    public ResponseEntity<List<NoteDto>> getNotes(@PathVariable Long id, Authentication authentication) {
+        ActorTiers.require(authz.canReadNotes(actor(authentication)), "Ghi chú nội bộ chỉ dành cho IT và ban giám sát.");
         List<ProblemWorkaroundNote> notes = problemService.getNotes(id);
         return ResponseEntity.ok(notes.stream().map(NoteDto::fromEntity).toList());
     }
 
     @PostMapping("/{id}/notes")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<NoteDto> addNote(@PathVariable Long id, @RequestBody NoteRequest request) {
+    public ResponseEntity<NoteDto> addNote(@PathVariable Long id, @RequestBody NoteRequest request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWriteNotes(actor), "Chỉ nhân viên IT được thêm ghi chú nội bộ.");
         ProblemWorkaroundNote.NoteType noteType = ProblemWorkaroundNote.NoteType.WORKAROUND;
         if (request.getNoteType() != null) {
             noteType = ProblemWorkaroundNote.NoteType.valueOf(request.getNoteType());
         }
         ProblemWorkaroundNote note = problemService.addNote(id, request.getBody(), request.getAuthorName(),
-                request.getAuthorUsername(), noteType, request.getEffectivenessRating());
+                actor.username(), noteType, request.getEffectivenessRating());
         return ResponseEntity.status(HttpStatus.CREATED).body(NoteDto.fromEntity(note));
     }
 
@@ -423,12 +456,18 @@ public class ProblemController {
                 .body(new ErrorResponse("ACCESS_DENIED", "Forbidden"));
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(String.valueOf(ex.getStatusCode().value()), ex.getReason()));
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
         log.error("Internal server error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi nội bộ: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     // ==================== DTOs ====================

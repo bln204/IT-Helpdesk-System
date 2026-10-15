@@ -14,6 +14,8 @@ let userDisplay, tokenStatus;
 
 export const setCurrentUser = (user) => {
   currentUser = user;
+  // Department-based controls (IT operator/lead) depend on the profile, not just the JWT.
+  updateNavVisibility();
 };
 
 export const getCurrentUser = () => currentUser;
@@ -96,6 +98,10 @@ export const isNhanVien = () => hasRole('ROLE_NHAN_VIEN');
 export const isTruongPhongIT = () => hasRole('ROLE_TRUONG_PHONG') && currentUser?.departmentCode === 'IT';
 export const isInITDepartment = () => currentUser?.departmentCode === 'IT';
 export const isITStaff = () => isNhanVien() && currentUser?.departmentCode === 'IT';
+// Mirror backend ActorTiers.isItOperator / isItLead / seesAll.
+export const isItOperator = () => (isTruongPhong() || isNhanVien()) && isInITDepartment();
+export const isItLead = () => isTruongPhongIT();
+export const seesAll = () => isAdmin() || isGiamDoc() || isItOperator();
 
 export const getCurrentUsername = () => {
   return currentUser?.username || null;
@@ -189,25 +195,15 @@ const formatName = (value) => {
     .join(' ');
 };
 
+// data-role / data-requires tokens: ROLE_* from the JWT, plus IT (IT operator) and IT_LEAD.
+const matchesRoleList = (required) => required.split(',').map((role) => role.trim()).filter(Boolean)
+  .some((role) => role === 'IT' ? isItOperator() : role === 'IT_LEAD' ? isItLead() : hasRole(role));
+
 export const updateNavVisibility = () => {
-  const navLinks = Array.from(document.querySelectorAll('.nav-card a'));
-  navLinks.forEach((link) => {
-    const required = link.dataset.role;
-    if (!required) return;
-    const roles = required.split(',').map((role) => role.trim()).filter(Boolean);
-    const allowed = roles.some((role) => hasRole(role));
-    link.classList.toggle('hidden', !allowed);
+  document.querySelectorAll('.nav-card a[data-role], .tab-btn[data-role], [data-requires]').forEach((el) => {
+    el.classList.toggle('hidden', !matchesRoleList(el.dataset.role || el.dataset.requires));
   });
-  
-  // Show/hide tab buttons based on role
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    const required = btn.dataset.role;
-    if (!required) return;
-    const roles = required.split(',').map((role) => role.trim()).filter(Boolean);
-    const allowed = roles.some((role) => hasRole(role));
-    btn.classList.toggle('hidden', !allowed);
-  });
-  
+
   // Show/hide assignee field based on role
   const assigneeCreate = document.getElementById('assignee-create');
   if (assigneeCreate) {
@@ -639,6 +635,9 @@ const Auth = {
   isTruongPhongIT,
   isInITDepartment,
   isITStaff,
+  isItOperator,
+  isItLead,
+  seesAll,
   canManageUsers,
   
   // Navigation & UI

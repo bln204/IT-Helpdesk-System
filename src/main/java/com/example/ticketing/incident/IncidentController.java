@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.example.ticketing.ticket.Ticket;
 import com.example.ticketing.ticket.TicketTypes.TicketPriority;
@@ -92,11 +94,13 @@ public class IncidentController {
      */
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<IncidentDto> createIncident(@RequestBody IncidentRequest request) {
+    public ResponseEntity<IncidentDto> createIncident(@RequestBody IncidentRequest request,
+                                                      Authentication authentication) {
         log.info("POST /api/incidents - Creating: {}", request.getTitle());
 
         Incident incident = mapRequestToEntity(request);
-        Incident created = incidentService.createIncident(incident, request.getReportedByUsername());
+        // Người báo cáo luôn là user đã đăng nhập, không lấy từ body.
+        Incident created = incidentService.createIncident(incident, authentication.getName());
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(IncidentDto.fromEntity(created));
@@ -110,11 +114,12 @@ public class IncidentController {
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<IncidentDto> createIncidentForCurrentUser(
             @RequestBody IncidentRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
+            Authentication authentication) {
+        String username = authentication.getName();
         log.info("POST /api/incidents/my - by: {}", username);
 
         Incident incident = mapRequestToEntity(request);
-        // End user không cần reportedByUsername, lấy từ header
+        // Người báo cáo luôn là user đã đăng nhập
         Incident created = incidentService.createIncident(incident, username);
 
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -437,7 +442,22 @@ public class IncidentController {
     public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
         log.error("NullPointerException: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(String.valueOf(ex.getStatusCode().value()), ex.getReason()));
+    }
+
+    @ExceptionHandler({
+            org.springframework.security.authorization.AuthorizationDeniedException.class,
+            org.springframework.security.access.AccessDeniedException.class
+    })
+    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này."));
     }
 
     @ExceptionHandler(Exception.class)
@@ -445,7 +465,7 @@ public class IncidentController {
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
         log.error("General error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     // ==================== DTOs ====================

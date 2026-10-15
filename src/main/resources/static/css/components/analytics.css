@@ -517,3 +517,12 @@
     padding: 0;
   }
 }
+
+/* Bars grow inside a track that excludes the date label, so 100% never overflows the axis. */
+.bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-height: 0;
+}

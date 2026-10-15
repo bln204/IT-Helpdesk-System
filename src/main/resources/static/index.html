@@ -21,6 +21,9 @@
   <link rel="stylesheet" href="css/components/analytics.css">
   <link rel="stylesheet" href="css/pages/reports.css">
   <link rel="stylesheet" href="css/components/ai-assistant.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+  <!-- Must stay last: normalizes inputs/selects/dates across all module stylesheets -->
+  <link rel="stylesheet" href="css/components/controls.css">
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
@@ -60,15 +63,15 @@
         </div>
       </div>
       <nav class="nav-links">
-        <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Bảng điều khiển</a>
+        <a href="#/dashboard" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,IT">Bảng điều khiển</a>
         <a href="#/tickets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Phiếu hỗ trợ</a>
         <a href="#/reports" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Báo cáo</a>
-        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Sự cố lớn</a>
-        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Vấn đề</a>
-        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN,ROLE_IT_STAFF">Thay đổi</a>
-        <a href="#/assets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF">Thiết bị</a>
+        <a href="#/incidents" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Sự cố lớn</a>
+        <a href="#/problems" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Vấn đề</a>
+        <a href="#/changes" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,IT">Thay đổi</a>
+        <a href="#/assets" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,IT">Thiết bị</a>
         <a href="#/analytics" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">Phân tích</a>
-        <a href="#/service-requests" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_IT_STAFF,ROLE_USER">Yêu cầu dịch vụ</a>
+        <a href="#/service-requests" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG,ROLE_NHAN_VIEN">Yêu cầu dịch vụ</a>
         <a href="#/admin" data-role="ROLE_ADMIN,ROLE_GIAM_DOC,ROLE_TRUONG_PHONG">
           Quản lý<span id="pending-users-badge-nav" class="pending-badge hidden"></span>
         </a>
@@ -146,7 +149,10 @@
         <button id="refresh-btn" class="secondary" type="button">Làm mới</button>
         <button id="clear-filters-btn" class="ghost" type="button">Xóa bộ lọc</button>
         <label class="inline-toggle">
-          <input type="checkbox" id="auto-refresh-toggle" />
+          <span class="toggle-switch">
+            <input type="checkbox" id="auto-refresh-toggle" />
+            <span class="toggle-slider"></span>
+          </span>
           Tự động làm mới
         </label>
         <span class="muted" id="refresh-status"></span>
@@ -438,23 +444,6 @@
           </button>
         </div>
         
-        <!-- SLA Summary Table -->
-        <div id="sla-summary-section" class="sla-policy-section">
-          <table class="sla-summary-table">
-            <thead>
-              <tr>
-                <th>Độ ưu tiên</th>
-                <th>Phản hồi</th>
-                <th>Giải quyết</th>
-                <th>Ngưỡng cảnh báo</th>
-                <th>Giờ hành chính</th>
-              </tr>
-            </thead>
-            <tbody id="sla-summary-tbody">
-              <!-- Will be populated by JavaScript -->
-            </tbody>
-          </table>
-        </div>
         
         <!-- SLA Policy List -->
         <div id="sla-policy-list" class="sla-policy-section">
@@ -522,12 +511,13 @@
           <h3>Yêu cầu dịch vụ</h3>
           <p>Danh mục dịch vụ IT và yêu cầu của bạn</p>
         </div>
+        <button class="primary sr-create-btn" type="button">+ Tạo yêu cầu</button>
       </header>
       
       <!-- Tabs: Catalog / My Requests -->
       <div class="sr-tabs">
         <button class="sr-tab-btn active" data-sr-tab="catalog">Danh mục dịch vụ</button>
-        <button class="sr-tab-btn" data-sr-tab="my-requests">Yêu cầu của tôi</button>
+        <button class="sr-tab-btn" data-sr-tab="my-requests">Danh sách yêu cầu</button>
       </div>
       
       <!-- Service Catalog -->
@@ -543,8 +533,13 @@
             <select id="sr-status-filter">
               <option value="">Tất cả trạng thái</option>
               <option value="SUBMITTED">Đã gửi</option>
+              <option value="PENDING_APPROVAL">Chờ phê duyệt</option>
+              <option value="APPROVED">Đã duyệt</option>
               <option value="IN_PROGRESS">Đang xử lý</option>
               <option value="COMPLETED">Hoàn thành</option>
+              <option value="CLOSED">Đã đóng</option>
+              <option value="REJECTED">Từ chối</option>
+              <option value="CANCELLED">Đã hủy</option>
             </select>
           </div>
           <button id="refresh-sr-btn" class="secondary" type="button">Làm mới</button>
@@ -560,7 +555,7 @@
           <h3>Quản lý vấn đề</h3>
           <p>Theo dõi nguyên nhân gốc rễ của các sự cố</p>
         </div>
-        <button class="primary problem-create-btn" type="button">+ Tạo vấn đề</button>
+        <button class="primary problem-create-btn hidden" type="button" data-requires="IT">+ Tạo vấn đề</button>
       </header>
       
       <!-- Tabs -->
@@ -606,7 +601,7 @@
           <h3>Quản lý thay đổi</h3>
           <p>Lên lịch và quản lý các thay đổi hạ tầng</p>
         </div>
-        <button class="primary change-create-btn" type="button">+ Tạo thay đổi</button>
+        <button class="primary change-create-btn hidden" type="button" data-requires="IT">+ Tạo thay đổi</button>
       </header>
       
       <!-- Tabs -->
@@ -648,7 +643,7 @@
           <h3>Quản lý thiết bị</h3>
           <p>Theo dõi và quản lý phần cứng, phần mềm IT</p>
         </div>
-        <button class="primary asset-create-btn" type="button" onclick="window.AssetManagement && window.AssetManagement.openCreateModal()">+ Thêm thiết bị</button>
+        <button class="primary asset-create-btn hidden" type="button" data-requires="IT" onclick="window.AssetManagement && window.AssetManagement.openCreateModal()">+ Thêm thiết bị</button>
       </header>
       
       <!-- Statistics -->
@@ -753,7 +748,8 @@
           </button>
         </div>
         <div class="reports-list">
-          <div class="report-card" data-report-type="tickets">
+          <div class="report-card" data-report-type="tickets">
+
             <h4 class="report-name">Báo cáo số lượng phiếu hỗ trợ</h4>
             <p class="report-description">Số lượng phiếu hỗ trợ theo thời gian</p>
             <div class="report-meta">
@@ -766,7 +762,8 @@
               <button class="btn btn-sm ghost export-report-btn" data-type="tickets" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="sla">
+          <div class="report-card" data-report-type="sla">
+
             <h4 class="report-name">Tuân thủ SLA</h4>
             <p class="report-description">Theo dõi tỷ lệ tuân thủ SLA</p>
             <div class="report-meta">
@@ -779,7 +776,8 @@
               <button class="btn btn-sm ghost export-report-btn" data-type="sla" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="assets">
+          <div class="report-card" data-report-type="assets">
+
             <h4 class="report-name">Tổng quan tình trạng thiết bị</h4>
             <p class="report-description">Tóm tắt tình trạng thiết bị</p>
             <div class="report-meta">
@@ -792,7 +790,8 @@
               <button class="btn btn-sm ghost export-report-btn" data-type="assets" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="agent">
+          <div class="report-card" data-report-type="agent">
+
             <h4 class="report-name">Hiệu suất nhân viên</h4>
             <p class="report-description">Theo dõi thời gian phản hồi và giải quyết</p>
             <div class="report-meta">
@@ -805,7 +804,8 @@
               <button class="btn btn-sm ghost export-report-btn" data-type="agent" data-format="excel">Excel</button>
             </div>
           </div>
-          <div class="report-card" data-report-type="changes">
+          <div class="report-card" data-report-type="changes">
+
             <h4 class="report-name">Tỷ lệ thay đổi thành công</h4>
             <p class="report-description">Theo dõi kết quả triển khai thay đổi</p>
             <div class="report-meta">
@@ -960,7 +960,8 @@
             <label>
               Đính kèm (tùy chọn)
               <div class="file-upload-wrapper">
-                <input type="file" id="attachment-input" accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.pdf" multiple />
+                <input type="file" class="file-input-hidden" id="attachment-input" accept=".jpg,.jpeg,.png,.gif,.webp,.txt,.pdf" multiple />
+                <span class="file-pick-btn" aria-hidden="true">📎 Chọn tệp</span>
                 <div id="selected-files" class="selected-files-list"></div>
                 <p class="file-hint">Hỗ trợ: JPG, PNG, GIF, WEBP, TXT, PDF (tối đa 10MB)</p>
               </div>
@@ -1109,6 +1110,7 @@
         <div class="button-row full-width">
           <button id="user-save-profile" type="button">Lưu thay đổi</button>
           <button id="user-delete" class="ghost" type="button">Xóa người dùng</button>
+          <button id="user-unlock-login" class="ghost hidden" type="button">Mở khoá đăng nhập</button>
         </div>
         <div>
           <h4>Nhật ký người dùng</h4>
@@ -1270,11 +1272,14 @@
           </label>
         </div>
         
-        <div class="sla-form-row three-col">
+        <div class="sla-form-row">
           <label>
             Ngưỡng cảnh báo (%)
             <input type="number" id="sla-policy-warning-threshold" min="0" max="100" value="75" />
           </label>
+        </div>
+
+        <div class="sla-form-row three-col">
           <label class="toggle-row">
             <span class="toggle-label">Chỉ tính giờ hành chính</span>
             <label class="toggle-switch">
@@ -1289,9 +1294,6 @@
               <span class="toggle-slider"></span>
             </label>
           </label>
-        </div>
-        
-        <div class="sla-form-row">
           <label class="toggle-row">
             <span class="toggle-label">Đang kích hoạt</span>
             <label class="toggle-switch">
@@ -1329,7 +1331,7 @@
         
         <label>
           Mô tả
-          <textarea id="escalation-rule-description" rows="2" maxlength="500" placeholder="Mô tảchi tiết..."></textarea>
+          <textarea id="escalation-rule-description" rows="2" maxlength="500" placeholder="Mô tả chi tiết..."></textarea>
         </label>
         
         <div class="escalation-form-row">
@@ -1432,10 +1434,10 @@
             Độ ưu tiên
             <div class="custom-select">
               <select id="incident-priority" required>
-                <option value="CRITICAL">Critical - Nghiêm trọng</option>
+                <option value="CRITICAL">Nghiêm trọng</option>
                 <option value="HIGH" selected>Cao</option>
-                <option value="MEDIUM">Medium - Trung bình</option>
-                <option value="LOW">Low - Thấp</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="LOW">Thấp</option>
               </select>
             </div>
           </label>
@@ -1443,10 +1445,10 @@
             Mức ảnh hưởng
             <div class="custom-select">
               <select id="incident-impact" required>
-                <option value="LOW">Low - Ảnh hưởng một vài người</option>
-                <option value="MEDIUM">Medium - Ảnh hưởng một team</option>
-                <option value="HIGH">High - Ảnh hưởng toàn bộ công ty</option>
-                <option value="CRITICAL">Critical - Nghiêm trọng</option>
+                <option value="LOW">Thấp – vài người</option>
+                <option value="MEDIUM">Trung bình – một nhóm</option>
+                <option value="HIGH">Cao – toàn công ty</option>
+                <option value="CRITICAL">Nghiêm trọng</option>
               </select>
             </div>
           </label>
@@ -1494,6 +1496,19 @@
         <button class="close-btn" id="close-incident-detail-modal" aria-label="Đóng">&times;</button>
       </header>
       <div id="incident-detail-content" class="incident-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Service Request Detail Modal -->
+  <div class="modal hidden" id="sr-detail-modal" aria-hidden="true">
+    <div class="modal-content incident-modal-content">
+      <header class="panel-header">
+        <div>
+          <h3>Chi tiết yêu cầu dịch vụ</h3>
+        </div>
+        <button class="close-btn" id="close-sr-detail-modal" aria-label="Đóng">&times;</button>
+      </header>
+      <div id="sr-detail-content" class="incident-detail-content"></div>
     </div>
   </div>
 
@@ -1583,6 +1598,9 @@
     </div>
   </div>
 
+  <!-- Native date inputs follow the browser UI locale (mm/dd/yyyy on English Edge); flatpickr shows dd/mm/yyyy. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/vn.min.js" defer></script>
   <script type="module" src="js/app.js?v=2026093015"></script>
 </body>
 </html>

@@ -766,6 +766,9 @@ public class TicketService {
             if (!actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())) {
                 throw new TicketRuleViolationException("You can only modify your own tickets.");
             }
+            if (newStatus == currentStatus) {
+                return ticket; // không đổi -> không làm gì
+            }
 
             // NHAN_VIEN chỉ có thể:
             // - CLOSE ticket đã RESOLVED
@@ -797,6 +800,9 @@ public class TicketService {
         if (!ticketAuthorization.canProcessTickets(actor)) {
             throw new TicketRuleViolationException(
                     "You don't have permission to modify ticket status.");
+        }
+        if (newStatus == currentStatus) {
+            return ticket; // không đổi -> không làm gì
         }
 
         // IT Staff and IT Manager: validate transition
@@ -1252,6 +1258,9 @@ public class TicketService {
 
         Ticket ticket = getTicket(id);
         TicketTypes.TicketPriority currentPriority = ticket.getPriority();
+        if (newPriority == currentPriority) {
+            return ticket; // không đổi -> không recalc SLA, không ghi audit
+        }
 
         // Cập nhật SLA nếu priority thay đổi
         ticket.setPriority(newPriority);
@@ -1744,15 +1753,10 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public TicketDtos.DashboardSummary buildDashboardSummary(
-            String requesterUsername,
+            org.springframework.data.jpa.domain.Specification<Ticket> scope,
             LocalDateTime from,
             LocalDateTime to) {
-        List<Ticket> tickets = ticketRepository.findAll();
-        if (requesterUsername != null) {
-            tickets = tickets.stream()
-                    .filter(ticket -> requesterUsername.equalsIgnoreCase(ticket.getRequesterUsername()))
-                    .toList();
-        }
+        List<Ticket> tickets = ticketRepository.findAll(scope);
         LocalDateTime overdueThreshold = LocalDateTime.now().minusDays(7);
         long openCount = tickets.stream()
                 .filter(ticket -> ticket.getStatus() != TicketTypes.TicketStatus.CLOSED)

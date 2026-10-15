@@ -6,11 +6,19 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ChangeAuthorization;
 
 /**
  * REST Controller cho Change Management.
@@ -23,9 +31,25 @@ public class ChangeRequestController {
     private static final Logger log = LoggerFactory.getLogger(ChangeRequestController.class);
 
     private final ChangeRequestService changeService;
+    private final ActorContextService actorContextService;
+    private final ChangeAuthorization authz;
 
-    public ChangeRequestController(ChangeRequestService changeService) {
+    public ChangeRequestController(ChangeRequestService changeService,
+                                   ActorContextService actorContextService,
+                                   ChangeAuthorization authz) {
         this.changeService = changeService;
+        this.actorContextService = actorContextService;
+        this.authz = authz;
+    }
+
+    private ActorContext actor(Authentication authentication) {
+        return actorContextService.fromAuthentication(authentication);
+    }
+
+    private ChangeRequest readable(Long id, ActorContext actor) {
+        ChangeRequest change = changeService.getChangeById(id);
+        ActorTiers.require(authz.canRead(actor, change), "Bạn không có quyền xem change này.");
+        return change;
     }
 
     // ==================== Change Requests ====================
@@ -35,26 +59,20 @@ public class ChangeRequestController {
      * GET /api/changes
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<ChangeRequestDto>> getAllChanges(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String risk,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/changes - status: {}, search: {}", status, search);
 
-        Pageable pageable = Pageable.ofSize(size).withPage(page);
-        Page<ChangeRequest> changes;
-
-        if (search != null && !search.isBlank()) {
-            changes = changeService.searchChanges(search, pageable);
-        } else if (status != null && !status.isBlank()) {
-            ChangeRequest.ChangeStatus changeStatus = ChangeRequest.ChangeStatus.valueOf(status);
-            changes = changeService.getChangesByStatus(changeStatus, pageable);
-        } else {
-            changes = changeService.getAllChanges(pageable);
-        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        ChangeRequest.ChangeStatus changeStatus =
+                status != null && !status.isBlank() ? ChangeRequest.ChangeStatus.valueOf(status) : null;
+        Page<ChangeRequest> changes = changeService.listChanges(
+                authz.readScope(actor(authentication)), changeStatus, search, pageable);
 
         return ResponseEntity.ok(changes.map(ChangeRequestDto::fromEntity));
     }
@@ -66,11 +84,11 @@ public class ChangeRequestController {
     @GetMapping("/my")
     public ResponseEntity<Page<ChangeRequestDto>> getMyChanges(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/changes/my");
         Pageable pageable = Pageable.ofSize(size).withPage(page);
-        // In real app, get from SecurityContext
-        Page<ChangeRequest> changes = changeService.getMyChanges("current_user", pageable);
+        Page<ChangeRequest> changes = changeService.getMyChanges(authentication.getName(), pageable);
         return ResponseEntity.ok(changes.map(ChangeRequestDto::fromEntity));
     }
 
@@ -79,7 +97,8 @@ public class ChangeRequestController {
      * GET /api/changes/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<ChangeRequestDto> getChangeById(@PathVariable Long id) {
+    public ResponseEntity<ChangeRequestDto> getChangeById(@PathVariable Long id, Authentication authentication) {
+        readable(id, actor(authentication));
         log.info("GET /api/changes/{}", id);
         ChangeRequest change = changeService.getChangeById(id);
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(change));
@@ -90,8 +109,9 @@ public class ChangeRequestController {
      * POST /api/changes
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ChangeRequestDto> createChange(@RequestBody ChangeRequestDto request) {
+    public ResponseEntity<ChangeRequestDto> createChange(@RequestBody ChangeRequestDto request, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes - Creating: {}", request.getTitle());
 
         ChangeRequest change = new ChangeRequest();
@@ -118,7 +138,7 @@ public class ChangeRequestController {
         change.setRequesterEmail(request.getRequesterEmail());
         change.setRequesterDepartment(request.getRequesterDepartment());
 
-        ChangeRequest created = changeService.createChangeRequest(change, "admin");
+        ChangeRequest created = changeService.createChangeRequest(change, actor.username());
         return ResponseEntity.status(HttpStatus.CREATED).body(ChangeRequestDto.fromEntity(created));
     }
 
@@ -127,10 +147,12 @@ public class ChangeRequestController {
      * PUT /api/changes/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> updateChange(
             @PathVariable Long id,
-            @RequestBody ChangeRequestDto request) {
+            @RequestBody ChangeRequestDto request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("PUT /api/changes/{}", id);
 
         ChangeRequest updates = new ChangeRequest();
@@ -154,7 +176,7 @@ public class ChangeRequestController {
         updates.setUrgency(request.getUrgencyEnum());
         updates.setChangeOwner(request.getChangeOwner());
 
-        ChangeRequest updated = changeService.updateChangeRequest(id, updates, "admin");
+        ChangeRequest updated = changeService.updateChangeRequest(id, updates, actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -177,10 +199,11 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/submit
      */
     @PostMapping("/{id}/submit")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ChangeRequestDto> submitForReview(@PathVariable Long id) {
+    public ResponseEntity<ChangeRequestDto> submitForReview(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/submit", id);
-        ChangeRequest updated = changeService.submitForReview(id, "admin");
+        ChangeRequest updated = changeService.submitForReview(id, actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -189,12 +212,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/approve
      */
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> approveChange(
             @PathVariable Long id,
-            @RequestBody ApprovalRequest request) {
+            @RequestBody ApprovalRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canApprove(actor), "Chỉ Trưởng phòng IT được duyệt change.");
         log.info("POST /api/changes/{}/approve", id);
-        ChangeRequest updated = changeService.approveChange(id, request.getApprover(), request.getNotes(), "admin");
+        ChangeRequest updated = changeService.approveChange(id, actor.username(), request.getNotes(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -203,12 +228,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/reject
      */
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> rejectChange(
             @PathVariable Long id,
-            @RequestBody ApprovalRequest request) {
+            @RequestBody ApprovalRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canApprove(actor), "Chỉ Trưởng phòng IT được duyệt change.");
         log.info("POST /api/changes/{}/reject", id);
-        ChangeRequest updated = changeService.rejectChange(id, request.getApprover(), request.getNotes(), "admin");
+        ChangeRequest updated = changeService.rejectChange(id, actor.username(), request.getNotes(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -217,10 +244,11 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/start
      */
     @PostMapping("/{id}/start")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<ChangeRequestDto> startImplementation(@PathVariable Long id) {
+    public ResponseEntity<ChangeRequestDto> startImplementation(@PathVariable Long id, Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/start", id);
-        ChangeRequest updated = changeService.startImplementation(id, "admin");
+        ChangeRequest updated = changeService.startImplementation(id, actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -229,12 +257,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/complete
      */
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> completeChange(
             @PathVariable Long id,
-            @RequestBody CompletionRequest request) {
+            @RequestBody CompletionRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/complete", id);
-        ChangeRequest updated = changeService.completeChange(id, request.getNotes(), "admin");
+        ChangeRequest updated = changeService.completeChange(id, request.getNotes(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -243,12 +273,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/cancel
      */
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> cancelChange(
             @PathVariable Long id,
-            @RequestBody CancelRequest request) {
+            @RequestBody CancelRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/cancel", id);
-        ChangeRequest updated = changeService.cancelChange(id, request.getReason(), "admin");
+        ChangeRequest updated = changeService.cancelChange(id, request.getReason(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -259,7 +291,8 @@ public class ChangeRequestController {
      * GET /api/changes/{id}/timeline
      */
     @GetMapping("/{id}/timeline")
-    public ResponseEntity<List<ChangeTimelineDto>> getTimeline(@PathVariable Long id) {
+    public ResponseEntity<List<ChangeTimelineDto>> getTimeline(@PathVariable Long id, Authentication authentication) {
+        readable(id, actor(authentication));
         log.info("GET /api/changes/{}/timeline", id);
         List<ChangeTimeline> timeline = changeService.getTimeline(id);
         return ResponseEntity.ok(timeline.stream()
@@ -274,10 +307,11 @@ public class ChangeRequestController {
      * GET /api/changes/cab/calendar
      */
     @GetMapping("/cab/calendar")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<List<ChangeRequestDto>> getCabCalendar(
             @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
+            @RequestParam(required = false) String endDate,
+            Authentication authentication) {
+        ActorTiers.require(authz.canViewCab(actor(authentication)), "Bạn không có quyền xem lịch CAB.");
         log.info("GET /api/changes/cab/calendar");
         List<ChangeRequest> changes = changeService.getScheduledChanges();
         return ResponseEntity.ok(changes.stream()
@@ -290,8 +324,8 @@ public class ChangeRequestController {
      * GET /api/changes/cab/dashboard
      */
     @GetMapping("/cab/dashboard")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
-    public ResponseEntity<CabDashboardResponse> getCabDashboard() {
+    public ResponseEntity<CabDashboardResponse> getCabDashboard(Authentication authentication) {
+        ActorTiers.require(authz.canViewCab(actor(authentication)), "Bạn không có quyền xem lịch CAB.");
         log.info("GET /api/changes/cab/dashboard");
         List<ChangeRequest> pending = changeService.getPendingCABReview();
         long totalPending = pending.size();
@@ -308,12 +342,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/link-incident
      */
     @PostMapping("/{id}/link-incident")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> linkIncident(
             @PathVariable Long id,
-            @RequestBody LinkTicketRequest request) {
+            @RequestBody LinkTicketRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/link-incident - incident: {}", id, request.getTicketId());
-        ChangeRequest updated = changeService.linkIncident(id, request.getTicketId(), "admin");
+        ChangeRequest updated = changeService.linkIncident(id, request.getTicketId(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 
@@ -322,12 +358,14 @@ public class ChangeRequestController {
      * POST /api/changes/{id}/link-problem
      */
     @PostMapping("/{id}/link-problem")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ChangeRequestDto> linkProblem(
             @PathVariable Long id,
-            @RequestBody LinkTicketRequest request) {
+            @RequestBody LinkTicketRequest request,
+            Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canWrite(actor), "Chỉ nhân viên IT được tạo hoặc xử lý change.");
         log.info("POST /api/changes/{}/link-problem - problem: {}", id, request.getTicketId());
-        ChangeRequest updated = changeService.linkProblem(id, request.getTicketId(), "admin");
+        ChangeRequest updated = changeService.linkProblem(id, request.getTicketId(), actor.username());
         return ResponseEntity.ok(ChangeRequestDto.fromEntity(updated));
     }
 

@@ -40,18 +40,19 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     /**
      * Find all users pending approval (approved = false)
      */
-    @Query("SELECT u FROM UserAccount u WHERE u.approved = false ORDER BY u.id ASC")
+    @Query("SELECT u FROM UserAccount u WHERE u.approved = false AND u.rejectionReason IS NULL ORDER BY u.id ASC")
     List<UserAccount> findPendingApproval();
     
     /**
      * Find all users pending approval with pagination
      */
+    @Query("SELECT u FROM UserAccount u WHERE u.approved = false AND u.rejectionReason IS NULL")
     Page<UserAccount> findByApprovedFalse(Pageable pageable);
     
     /**
      * Find users pending approval by department
      */
-    @Query("SELECT u FROM UserAccount u WHERE u.approved = false AND u.department.id = :deptId ORDER BY u.id ASC")
+    @Query("SELECT u FROM UserAccount u WHERE u.approved = false AND u.rejectionReason IS NULL AND u.department.id = :deptId ORDER BY u.id ASC")
     List<UserAccount> findPendingApprovalByDepartment(@Param("deptId") Long departmentId);
     
     /**
@@ -69,7 +70,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long>,
     /**
      * Count users pending approval
      */
-    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.approved = false")
+    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.approved = false AND u.rejectionReason IS NULL")
     long countPendingApproval();
     
     /**

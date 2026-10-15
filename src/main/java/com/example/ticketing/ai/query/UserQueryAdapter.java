@@ -51,8 +51,17 @@ public class UserQueryAdapter extends JpaQueryAdapter<UserAccount> {
 
     @Override
     protected Scope<UserAccount> scope(ActorContext actor) {
-        if (actor.role() != Role.NHAN_VIEN) return Scope.all();
+        if (actor.role() == Role.ADMIN || actor.role() == Role.GIAM_DOC) return Scope.all();
         String itCode = itDepartmentResolver.getItDepartmentCode();
+        if (actor.role() == Role.TRUONG_PHONG) {
+            // Khớp UserAdminController: user cùng phòng (listUsers) + kỹ thuật viên IT (/engineers).
+            String deptCode = actor.departmentCode();
+            return Scope.of((root, q, cb) -> {
+                var dept = root.join("department", JoinType.LEFT);
+                var itStaff = cb.and(cb.equal(dept.get("code"), itCode), cb.isTrue(root.get("enabled")));
+                return deptCode == null ? itStaff : cb.or(cb.equal(dept.get("code"), deptCode), itStaff);
+            }, "Kết quả chỉ gồm nhân viên phòng bạn và kỹ thuật viên IT.");
+        }
         return Scope.of((root, q, cb) -> cb.and(
                 cb.equal(root.join("department", JoinType.LEFT).get("code"), itCode),
                 cb.isTrue(root.get("enabled"))),

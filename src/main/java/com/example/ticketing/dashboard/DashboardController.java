@@ -1,11 +1,13 @@
 package com.example.ticketing.dashboard;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.example.ticketing.auth.UserAccount;
 import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ReportingAuthorization;
 import com.example.ticketing.department.DepartmentRepository;
 import com.example.ticketing.department.ItDepartmentResolver;
 import com.example.ticketing.ticket.Ticket;
@@ -46,6 +52,28 @@ public class DashboardController {
     @Autowired
     private ItDepartmentResolver itDepartmentResolver;
 
+    @Autowired
+    private ActorContextService actorContextService;
+
+    @Autowired
+    private ReportingAuthorization reporting;
+
+    private static final List<TicketTypes.TicketStatus> CLOSED_STATUSES = List.of(
+            TicketTypes.TicketStatus.CLOSED, TicketTypes.TicketStatus.RESOLVED, TicketTypes.TicketStatus.CANCELLED);
+
+    private ActorContext actor(Authentication authentication) {
+        return actorContextService.fromAuthentication(authentication);
+    }
+
+    private void requireCompany(Authentication authentication) {
+        ActorTiers.require(reporting.canSeeCompanyStats(actor(authentication)),
+                "Bạn không có quyền xem số liệu toàn công ty.");
+    }
+
+    private long scopedCount(ActorContext actor, Specification<Ticket> extra) {
+        return ticketRepository.count(reporting.ticketStatsScope(actor).and(extra));
+    }
+
     
     /**
      * Lấy dashboard overview cho IT staff.
@@ -53,6 +81,14 @@ public class DashboardController {
      */
     @GetMapping("/overview")
     public ResponseEntity<DashboardOverview> getOverview(Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        if (!reporting.canSeeCompanyStats(actor)) {
+            DashboardOverview scoped = new DashboardOverview();
+            scoped.setOpenTickets((int) scopedCount(actor, (r, q, cb) -> cb.not(r.get("status").in(CLOSED_STATUSES))));
+            scoped.setUnassignedTickets((int) scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.NEW)));
+            // shortcut: SLA breach chưa tính theo phạm vi cho người dùng nghiệp vụ (để 0); nâng cấp khi dashboard nghiệp vụ cần SLA.
+            return ResponseEntity.ok(scoped);
+        }
         String username = authentication.getName();
         UserAccount user = userAccountRepository.findByUsername(username)
             .orElseThrow(() -> new RuntimeException("User not found"));
@@ -86,6 +122,7 @@ public class DashboardController {
     public ResponseEntity<List<Ticket>> getMyTickets(
             Authentication authentication,
             @RequestParam(defaultValue = "10") int limit) {
+        requireCompany(authentication);
         String username = authentication.getName();
         UserAccount user = userAccountRepository.findByUsername(username)
             .orElseThrow(() -> new RuntimeException("User not found"));
@@ -105,7 +142,9 @@ public class DashboardController {
      */
     @GetMapping("/unassigned-tickets")
     public ResponseEntity<List<Ticket>> getUnassignedTickets(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            Authentication authentication) {
+        requireCompany(authentication);
         List<Ticket> tickets = ticketRepository.findUnassignedOpenTickets(
             PageRequest.of(0, limit)
         ).getContent();
@@ -118,7 +157,9 @@ public class DashboardController {
      */
     @GetMapping("/urgent-tickets")
     public ResponseEntity<List<Ticket>> getUrgentTickets(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            Authentication authentication) {
+        requireCompany(authentication);
         List<Ticket> tickets = ticketRepository.findUrgentTickets(
             PageRequest.of(0, limit)
         ).getContent();
@@ -131,7 +172,9 @@ public class DashboardController {
      */
     @GetMapping("/team-workload/{teamId}")
     public ResponseEntity<List<TeamService.TeamMemberWorkload>> getTeamWorkload(
-            @PathVariable Long teamId) {
+            @PathVariable Long teamId,
+            Authentication authentication) {
+        requireCompany(authentication);
         List<TeamService.TeamMemberWorkload> workload = teamService.getTeamWorkload(teamId);
         return ResponseEntity.ok(workload);
     }
@@ -141,7 +184,8 @@ public class DashboardController {
      * GET /api/dashboard/it-workload
      */
     @GetMapping("/it-workload")
-    public ResponseEntity<List<ITStaffWorkload>> getITWorkload() {
+    public ResponseEntity<List<ITStaffWorkload>> getITWorkload(Authentication authentication) {
+        requireCompany(authentication);
         // Tìm IT Department
         var itDept = departmentRepository.findByCode(itDepartmentResolver.getItDepartmentCode()).orElse(null);
         if (itDept == null) {
@@ -171,7 +215,8 @@ public class DashboardController {
      * GET /api/dashboard/sla-summary
      */
     @GetMapping("/sla-summary")
-    public ResponseEntity<SlaSummary> getSlaSummary() {
+    public ResponseEntity<SlaSummary> getSlaSummary(Authentication authentication) {
+        requireCompany(authentication);
         SlaSummary summary = new SlaSummary();
         
         long openTickets = ticketRepository.countOpenTickets();
@@ -198,7 +243,19 @@ public class DashboardController {
      * GET /api/dashboard/tickets-by-status
      */
     @GetMapping("/tickets-by-status")
-    public ResponseEntity<Map<String, Long>> getTicketsByStatus() {
+    public ResponseEntity<Map<String, Long>> getTicketsByStatus(Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        if (!reporting.canSeeCompanyStats(actor)) {
+            Map<String, Long> m = new LinkedHashMap<>();
+            m.put("new", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.NEW)));
+            m.put("assigned", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.ASSIGNED)));
+            m.put("inProgress", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.IN_PROGRESS)));
+            m.put("waitingForUser", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.WAITING_FOR_USER)));
+            m.put("escalated", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.ESCALATED)));
+            m.put("resolved", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.RESOLVED)));
+            m.put("closed", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("status"), TicketTypes.TicketStatus.CLOSED)));
+            return ResponseEntity.ok(m);
+        }
         Map<String, Long> counts = Map.of(
             "new", ticketRepository.countByStatus(TicketTypes.TicketStatus.NEW),
             "assigned", ticketRepository.countByStatus(TicketTypes.TicketStatus.ASSIGNED),
@@ -216,7 +273,16 @@ public class DashboardController {
      * GET /api/dashboard/tickets-by-priority
      */
     @GetMapping("/tickets-by-priority")
-    public ResponseEntity<Map<String, Long>> getTicketsByPriority() {
+    public ResponseEntity<Map<String, Long>> getTicketsByPriority(Authentication authentication) {
+        ActorContext actor = actor(authentication);
+        if (!reporting.canSeeCompanyStats(actor)) {
+            Map<String, Long> m = new LinkedHashMap<>();
+            m.put("critical", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("priority"), TicketTypes.TicketPriority.CRITICAL)));
+            m.put("high", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("priority"), TicketTypes.TicketPriority.HIGH)));
+            m.put("medium", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("priority"), TicketTypes.TicketPriority.MEDIUM)));
+            m.put("low", scopedCount(actor, (r, q, cb) -> cb.equal(r.get("priority"), TicketTypes.TicketPriority.LOW)));
+            return ResponseEntity.ok(m);
+        }
         Map<String, Long> counts = Map.of(
             "critical", ticketRepository.countByPriority(TicketTypes.TicketPriority.CRITICAL),
             "high", ticketRepository.countByPriority(TicketTypes.TicketPriority.HIGH),
@@ -232,7 +298,9 @@ public class DashboardController {
      */
     @GetMapping("/recent-activity")
     public ResponseEntity<List<ActivityItem>> getRecentActivity(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit,
+            Authentication authentication) {
+        requireCompany(authentication);
         List<Ticket> recentTickets = ticketRepository.findRecentTickets(
             PageRequest.of(0, limit)
         ).getContent();

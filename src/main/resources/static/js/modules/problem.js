@@ -4,6 +4,8 @@
 
 const ProblemManagement = (() => {
     'use strict';
+    // Họ tên từ danh bạ (userService.getDisplayName); fallback về giá trị gốc khi chưa nạp.
+    const nameOf = (u) => (u && window.displayNameOf ? window.displayNameOf(u) : u) || '';
 
     const API_BASE = '/api/problems';
 
@@ -313,6 +315,7 @@ const ProblemManagement = (() => {
             // PHASE 6.6.3: button visible for any non-closed Problem, role-gated separately.
             const isClosed = problem.status === 'CLOSED';
             const hasKe = !!problem.knownErrorId;
+            const canManageKe = !!window.Auth?.isItLead?.();
             return `
                 <div class="problem-card">
                     <div class="problem-card-header">
@@ -329,7 +332,7 @@ const ProblemManagement = (() => {
                     <div class="problem-footer">
                         <span class="problem-status ${status.class}">${status.label}</span>
                         <div class="problem-card-actions">
-                            ${!isClosed ? `
+                            ${(!isClosed && canManageKe) ? `
                                 <button class="ghost btn-sm problem-add-to-known-error-btn" data-id="${problem.id}" title="Liên kết lỗi đã biết">
                                     ${hasKe ? '📚 Đổi lỗi đã biết' : '📚 Lỗi đã biết'}
                                 </button>
@@ -431,22 +434,8 @@ const ProblemManagement = (() => {
             const deleteBtn = document.getElementById('known-error-delete-btn');
             if (deleteBtn) {
                 deleteBtn.dataset.id = id;
-                // Check permissions
-                const hasAdmin = window.Auth?.hasRole?.('ADMIN') || false;
-                const hasTruongPhong = window.Auth?.hasRole?.('TRUONG_PHONG') || false;
-                
-                // Fetch full user profile to get department
-                import('../core/api.js').then(({ request }) => {
-                    request('/api/users/me').then(user => {
-                        const deptCode = user?.departmentCode;
-                        // Admin hoặc Trưởng phòng IT được phép xóa
-                        const canDelete = hasAdmin || hasTruongPhong;
-                        console.log('Delete button check:', { hasAdmin, hasTruongPhong, deptCode, canDelete });
-                        deleteBtn.style.display = canDelete ? 'inline-flex' : 'none';
-                    }).catch(() => {
-                        deleteBtn.style.display = 'none';
-                    });
-                });
+                // Chỉ Trưởng phòng IT được xóa known error (ProblemAuthorization.canWriteKnownError).
+                deleteBtn.style.display = window.Auth?.isItLead?.() ? 'inline-flex' : 'none';
             }
             document.getElementById('known-error-modal').classList.remove('hidden');
             document.body.classList.add('modal-open');
@@ -459,15 +448,9 @@ const ProblemManagement = (() => {
         const container = document.getElementById('problem-form');
         if (!container) return;
 
-        // PHASE 6.6.3 - role gate for Known Error actions.
-        // The backend @PreAuthorize is the security boundary; this is UX only.
-        const allowedRoles = ['ADMIN', 'GIAM_DOC', 'TRUONG_PHONG'];
-        const userRoles = (window.Auth && typeof window.Auth.getRoles === 'function')
-            ? window.Auth.getRoles()
-            : (window.Auth && typeof window.Auth.getCurrentUser === 'function'
-                ? [window.Auth.getCurrentUser()?.role].filter(Boolean)
-                : []);
-        const canManageKe = userRoles.some(r => allowedRoles.includes(r));
+        // Known Error chỉ Trưởng phòng IT ghi (ProblemAuthorization); backend là ranh giới bảo mật, đây chỉ là UX.
+        const canManageKe = !!window.Auth?.isItLead?.();
+        const canWriteProblem = !!window.Auth?.isItOperator?.();
         const isClosed = problem.status === 'CLOSED';
         const hasKe = !!problem.knownErrorId;
         const keStatusClass = problem.knownErrorStatus
@@ -481,7 +464,7 @@ const ProblemManagement = (() => {
                     <span class="problem-status ${problem.status?.toLowerCase()}">${problem.statusLabel || problem.status}</span>
                 </div>
                 <div class="problem-detail-actions">
-                    <select id="problem-status-select" class="custom-select">
+                    <select id="problem-status-select" class="custom-select" ${canWriteProblem ? '' : 'disabled'}>
                         <option value="NEW">Mới</option>
                         <option value="INVESTIGATING">Đang điều tra</option>
                         <option value="IDENTIFIED">Đã xác định</option>
@@ -541,7 +524,7 @@ const ProblemManagement = (() => {
                     </div>
                     <div class="detail-item">
                         <label>Người phụ trách</label>
-                        <span>${problem.assignedTo || 'Chưa gán'}</span>
+                        <span>${escapeHtml(nameOf(problem.assignedTo) || 'Chưa gán')}</span>
                     </div>
                 </div>
             </div>
@@ -655,13 +638,13 @@ const ProblemManagement = (() => {
                     </div>
                     <div class="detail-item">
                         <label>Người quản lý</label>
-                        <span>${error.managedBy || 'Chưa có'}</span>
+                        <span>${escapeHtml(nameOf(error.managedBy) || 'Chưa có')}</span>
                     </div>
                 </div>
             </div>
 
             <!-- Add Workaround Form -->
-            <div class="known-error-workaround-section">
+            <div class="known-error-workaround-section ${window.Auth?.isItLead?.() ? '' : 'hidden'}">
                 <h5>➕ Thêm cách khắc phục tạm thời</h5>
                 <form id="known-error-workaround-form">
                     <input type="hidden" id="known-error-workaround-id" value="${error.id}" />

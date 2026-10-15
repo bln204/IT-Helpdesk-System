@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.ticketing.ai.EmbeddingService;
 import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.auth.UserAccountRepository;
 import com.example.ticketing.auth.UserRole.Role;
 import com.example.ticketing.authorization.ActorContext;
 import com.example.ticketing.change.ChangeRequest;
@@ -47,6 +48,7 @@ class OtherDomainAdaptersTest {
     @Autowired private DepartmentQueryAdapter departmentAdapter;
     @Autowired private TeamQueryAdapter teamAdapter;
     @Autowired private UserQueryAdapter userAdapter;
+    @Autowired private UserAccountRepository userAccounts;
 
     private ActorContext actor(UserAccount u) {
         return ActorContext.of(u, itDepartmentResolver.isITDepartment(u.getDepartment()));
@@ -65,8 +67,26 @@ class OtherDomainAdaptersTest {
         changes.save(draft);
         DomainDef d = ChangeQueryAdapter.DEF;
         QueryResult r = changeAdapter.execute(list(d,
-                filter(d, "status", FilterOp.EQ, ChangeRequest.ChangeStatus.APPROVED)), actor(fixtures.nhanVienMkt()));
+                filter(d, "status", FilterOp.EQ, ChangeRequest.ChangeStatus.APPROVED)), actor(fixtures.nhanVienIT()));
         assertThat(r.rows()).extracting(Row::id).contains("CHG-T01").doesNotContain("CHG-T02");
+    }
+
+    @Test
+    void businessUserSeesOnlyOwnChanges() {
+        UserAccount me = fixtures.nhanVienMkt();
+        ChangeRequest mine = new ChangeRequest();
+        mine.setChangeNumber("CHG-T03");
+        mine.setTitle("Cấp quyền share");
+        mine.setRequesterUsername(me.getUsername());
+        changes.save(mine);
+        ChangeRequest other = new ChangeRequest();
+        other.setChangeNumber("CHG-T04");
+        other.setTitle("Đổi switch");
+        other.setRequesterUsername("someone_else");
+        changes.save(other);
+        DomainDef d = ChangeQueryAdapter.DEF;
+        QueryResult r = changeAdapter.execute(list(d), actor(me));
+        assertThat(r.rows()).extracting(Row::id).contains("CHG-T03").doesNotContain("CHG-T04");
     }
 
     @Test
@@ -158,9 +178,27 @@ class OtherDomainAdaptersTest {
     }
 
     @Test
-    void teamAccessExcludesNhanVien() {
-        assertThat(TeamQueryAdapter.ACCESS.allows(actor(fixtures.nhanVienIT()))).isFalse();
-        assertThat(TeamQueryAdapter.ACCESS.allows(actor(fixtures.truongPhongMkt()))).isTrue();
+    void teamScopeAllowsItAndDeniesBusinessUsers() {
+        DomainDef d = TeamQueryAdapter.DEF;
+        assertThat(teamAdapter.execute(list(d), actor(fixtures.nhanVienIT())).status())
+                .isNotEqualTo(QueryResult.Status.DENIED);
+        assertThat(teamAdapter.execute(list(d), actor(fixtures.truongPhongMkt())).status())
+                .isEqualTo(QueryResult.Status.DENIED);
+    }
+
+    @Test
+    void businessLeadSeesOwnDepartmentAndItStaffOnly() {
+        UserAccount lead = fixtures.truongPhongMkt();
+        fixtures.nhanVienMkt();
+        fixtures.nhanVienIT();
+        UserAccount outsider = new UserAccount();
+        outsider.setUsername("no_dept_user");
+        outsider.setPasswordHash("x");
+        outsider.setRole(Role.NHAN_VIEN);
+        outsider.setEnabled(true);
+        userAccounts.save(outsider);
+        QueryResult r = userAdapter.execute(list(UserQueryAdapter.DEF), actor(lead));
+        assertThat(r.rows()).extracting(Row::id).contains("nv_mkt", "nv_it").doesNotContain("no_dept_user");
     }
 
     @Test
@@ -174,13 +212,13 @@ class OtherDomainAdaptersTest {
     }
 
     @Test
-    void truongPhongSeesAllUsersByRole() {
+    void truongPhongFiltersByRoleWithinScope() {
         fixtures.nhanVienIT();
         fixtures.truongPhongMkt();
         DomainDef d = UserQueryAdapter.DEF;
         QueryResult r = userAdapter.execute(list(d, filter(d, "role", FilterOp.EQ, Role.TRUONG_PHONG)),
                 actor(fixtures.truongPhongMkt()));
         assertThat(r.rows()).extracting(Row::id).contains("tp_mkt").doesNotContain("nv_it");
-        assertThat(r.scopeNote()).isNull();
+        assertThat(r.scopeNote()).contains("phòng bạn");
     }
 }

@@ -5,11 +5,22 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.example.ticketing.auth.UserAccount;
+import com.example.ticketing.auth.UserAccountRepository;
+import com.example.ticketing.authorization.ActorContext;
+import com.example.ticketing.authorization.ActorContextService;
+import com.example.ticketing.authorization.ActorTiers;
+import com.example.ticketing.authorization.ServiceRequestAuthorization;
 
 /**
  * REST Controller cho Service Request Management.
@@ -22,9 +33,46 @@ public class ServiceRequestController {
     private static final Logger log = LoggerFactory.getLogger(ServiceRequestController.class);
 
     private final ServiceRequestService serviceRequestService;
+    private final UserAccountRepository userAccountRepository;
+    private final ActorContextService actorContextService;
+    private final ServiceRequestAuthorization authz;
 
-    public ServiceRequestController(ServiceRequestService serviceRequestService) {
+    public ServiceRequestController(ServiceRequestService serviceRequestService,
+                                    UserAccountRepository userAccountRepository,
+                                    ActorContextService actorContextService,
+                                    ServiceRequestAuthorization authz) {
         this.serviceRequestService = serviceRequestService;
+        this.userAccountRepository = userAccountRepository;
+        this.actorContextService = actorContextService;
+        this.authz = authz;
+    }
+
+    private ActorContext actor(Authentication authentication) {
+        return actorContextService.fromAuthentication(authentication);
+    }
+
+    private ServiceRequest readable(Long id, ActorContext actor) {
+        ServiceRequest sr = serviceRequestService.getRequestById(id);
+        ActorTiers.require(authz.canRead(actor, sr), "Bạn không có quyền xem yêu cầu dịch vụ này.");
+        return sr;
+    }
+
+    private UserAccount currentUser(Authentication authentication) {
+        return userAccountRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found."));
+    }
+
+    private ServiceRequest createForCurrentUser(ServiceRequestRequest request, Authentication authentication) {
+        UserAccount me = currentUser(authentication);
+        ServiceRequest serviceRequest = new ServiceRequest();
+        serviceRequest.setTitle(request.getTitle());
+        serviceRequest.setDescription(request.getDescription());
+        serviceRequest.setServiceId(request.getServiceId());
+        serviceRequest.setPriority(request.getPriority());
+        serviceRequest.setFormData(request.getFormData());
+        String departmentCode = me.getDepartment() != null ? me.getDepartment().getCode() : null;
+        return serviceRequestService.createRequest(
+                serviceRequest, me.getUsername(), me.getDisplayName(), me.getEmail(), departmentCode);
     }
 
     // ==================== Service Catalog ====================
@@ -58,25 +106,19 @@ public class ServiceRequestController {
      * GET /api/service-requests
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<Page<ServiceRequestDto>> getAllRequests(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/service-requests - status: {}, search: {}", status, search);
 
-        Pageable pageable = Pageable.ofSize(size).withPage(page);
-        Page<ServiceRequest> requests;
-
-        if (search != null && !search.isBlank()) {
-            requests = serviceRequestService.searchRequests(search, pageable);
-        } else if (status != null && !status.isBlank()) {
-            ServiceRequest.ServiceStatus serviceStatus = ServiceRequest.ServiceStatus.valueOf(status);
-            requests = serviceRequestService.getRequestsByStatus(serviceStatus, pageable);
-        } else {
-            requests = serviceRequestService.getAllRequests(pageable);
-        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        ServiceRequest.ServiceStatus serviceStatus =
+                status != null && !status.isBlank() ? ServiceRequest.ServiceStatus.valueOf(status) : null;
+        Page<ServiceRequest> requests = serviceRequestService.listRequests(
+                authz.readScope(actor(authentication)), serviceStatus, search, pageable);
 
         return ResponseEntity.ok(requests.map(ServiceRequestDto::fromEntity));
     }
@@ -88,11 +130,11 @@ public class ServiceRequestController {
     @GetMapping("/my")
     public ResponseEntity<Page<ServiceRequestDto>> getMyRequests(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         log.info("GET /api/service-requests/my");
-        // In real app, get from SecurityContext
         Pageable pageable = Pageable.ofSize(size).withPage(page);
-        Page<ServiceRequest> requests = serviceRequestService.getMyRequests("current_user", pageable);
+        Page<ServiceRequest> requests = serviceRequestService.getMyRequests(authentication.getName(), pageable);
         return ResponseEntity.ok(requests.map(ServiceRequestDto::fromEntity));
     }
 
@@ -101,10 +143,9 @@ public class ServiceRequestController {
      * GET /api/service-requests/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<ServiceRequestDto> getRequestById(@PathVariable Long id) {
+    public ResponseEntity<ServiceRequestDto> getRequestById(@PathVariable Long id, Authentication authentication) {
         log.info("GET /api/service-requests/{}", id);
-        ServiceRequest request = serviceRequestService.getRequestById(id);
-        return ResponseEntity.ok(ServiceRequestDto.fromEntity(request));
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(readable(id, actor(authentication))));
     }
 
     /**
@@ -112,26 +153,11 @@ public class ServiceRequestController {
      * POST /api/service-requests
      */
     @PostMapping
-    public ResponseEntity<ServiceRequestDto> createRequest(@RequestBody ServiceRequestRequest request) {
+    public ResponseEntity<ServiceRequestDto> createRequest(@RequestBody ServiceRequestRequest request,
+                                                           Authentication authentication) {
         log.info("POST /api/service-requests - Creating: {}", request.getTitle());
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setTitle(request.getTitle());
-        serviceRequest.setDescription(request.getDescription());
-        serviceRequest.setServiceId(request.getServiceId());
-        serviceRequest.setPriority(request.getPriority());
-        serviceRequest.setFormData(request.getFormData());
-
-        ServiceRequest created = serviceRequestService.createRequest(
-                serviceRequest,
-                request.getRequesterUsername(),
-                request.getRequesterName(),
-                request.getRequesterEmail(),
-                request.getRequesterDepartment()
-        );
-
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ServiceRequestDto.fromEntity(created));
+                .body(ServiceRequestDto.fromEntity(createForCurrentUser(request, authentication)));
     }
 
     /**
@@ -139,18 +165,26 @@ public class ServiceRequestController {
      * PUT /api/service-requests/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> updateRequest(
             @PathVariable Long id,
-            @RequestBody ServiceRequestRequest request) {
+            @RequestBody ServiceRequestRequest request,
+            Authentication authentication) {
         log.info("PUT /api/service-requests/{}", id);
+        ActorContext actor = actor(authentication);
+        ServiceRequest existing = serviceRequestService.getRequestById(id);
+        // Requester may still edit while nobody has picked the request up.
+        boolean requesterEditable = authz.isRequester(actor, existing)
+                && (existing.getStatus() == ServiceRequest.ServiceStatus.SUBMITTED
+                        || existing.getStatus() == ServiceRequest.ServiceStatus.PENDING_APPROVAL);
+        ActorTiers.require(authz.canProcess(actor) || requesterEditable,
+                "Chỉ nhân viên IT hoặc người yêu cầu (khi chưa xử lý) được sửa yêu cầu dịch vụ.");
 
         ServiceRequest updates = new ServiceRequest();
         updates.setTitle(request.getTitle());
         updates.setDescription(request.getDescription());
         updates.setPriority(request.getPriority());
 
-        ServiceRequest updated = serviceRequestService.updateRequest(id, updates, "admin");
+        ServiceRequest updated = serviceRequestService.updateRequest(id, updates, actor.username());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -174,16 +208,18 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/status
      */
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> updateStatus(
             @PathVariable Long id,
-            @RequestBody StatusUpdateRequest request) {
+            @RequestBody StatusUpdateRequest request,
+            Authentication authentication) {
         log.info("PATCH /api/service-requests/{}/status - status: {}", id, request.getStatus());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor), "Chỉ nhân viên IT được xử lý yêu cầu dịch vụ.");
 
         ServiceRequest updated = serviceRequestService.updateStatus(
                 id,
                 ServiceRequest.ServiceStatus.valueOf(request.getStatus()),
-                "admin"
+                actor.username()
         );
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
@@ -194,17 +230,14 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/approve
      */
     @PatchMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> approveRequest(
             @PathVariable Long id,
-            @RequestBody ApprovalRequest request) {
+            @RequestBody ApprovalRequest request,
+            Authentication authentication) {
         log.info("PATCH /api/service-requests/{}/approve", id);
-
-        ServiceRequest updated = serviceRequestService.approveRequest(
-                id,
-                request.getApprover(),
-                request.getNotes()
-        );
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canApprove(actor), "Chỉ Trưởng phòng IT được duyệt yêu cầu dịch vụ.");
+        ServiceRequest updated = serviceRequestService.approveRequest(id, actor.username(), request.getNotes());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -214,17 +247,14 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/reject
      */
     @PatchMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> rejectRequest(
             @PathVariable Long id,
-            @RequestBody ApprovalRequest request) {
+            @RequestBody ApprovalRequest request,
+            Authentication authentication) {
         log.info("PATCH /api/service-requests/{}/reject", id);
-
-        ServiceRequest updated = serviceRequestService.rejectRequest(
-                id,
-                request.getApprover(),
-                request.getNotes()
-        );
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canApprove(actor), "Chỉ Trưởng phòng IT được duyệt yêu cầu dịch vụ.");
+        ServiceRequest updated = serviceRequestService.rejectRequest(id, actor.username(), request.getNotes());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -234,13 +264,15 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/assign
      */
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> assignRequest(
             @PathVariable Long id,
-            @RequestBody AssignRequest request) {
+            @RequestBody AssignRequest request,
+            Authentication authentication) {
         log.info("PATCH /api/service-requests/{}/assign - to: {}", id, request.getAssignee());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor), "Chỉ nhân viên IT được xử lý yêu cầu dịch vụ.");
 
-        ServiceRequest updated = serviceRequestService.assignRequest(id, request.getAssignee(), "admin");
+        ServiceRequest updated = serviceRequestService.assignRequest(id, request.getAssignee(), actor.username());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -252,10 +284,14 @@ public class ServiceRequestController {
      * GET /api/service-requests/{id}/comments
      */
     @GetMapping("/{id}/comments")
-    public ResponseEntity<List<ServiceRequestCommentDto>> getComments(@PathVariable Long id) {
+    public ResponseEntity<List<ServiceRequestCommentDto>> getComments(@PathVariable Long id,
+                                                                      Authentication authentication) {
         log.info("GET /api/service-requests/{}/comments", id);
-        List<ServiceRequestComment> comments = serviceRequestService.getComments(id);
-        return ResponseEntity.ok(comments.stream()
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
+        boolean internal = authz.canSeeInternal(actor);
+        return ResponseEntity.ok(serviceRequestService.getComments(id).stream()
+                .filter(c -> internal || c.getVisibility() != ServiceRequestComment.Visibility.INTERNAL)
                 .map(ServiceRequestCommentDto::fromEntity)
                 .toList());
     }
@@ -267,16 +303,16 @@ public class ServiceRequestController {
     @PostMapping("/{id}/comments")
     public ResponseEntity<ServiceRequestCommentDto> addComment(
             @PathVariable Long id,
-            @RequestBody CommentRequest request) {
+            @RequestBody CommentRequest request,
+            Authentication authentication) {
         log.info("POST /api/service-requests/{}/comments", id);
 
+        UserAccount me = currentUser(authentication);
+        ActorContext actor = actor(authentication);
+        readable(id, actor);
+        boolean internal = request.isInternal() && authz.canSeeInternal(actor);
         ServiceRequestComment comment = serviceRequestService.addComment(
-                id,
-                request.getBody(),
-                request.getAuthorName(),
-                request.getAuthorUsername(),
-                request.isInternal()
-        );
+                id, request.getBody(), me.getDisplayName(), me.getUsername(), internal);
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ServiceRequestCommentDto.fromEntity(comment));
@@ -305,7 +341,22 @@ public class ServiceRequestController {
     public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
         log.error("NullPointerException: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(String.valueOf(ex.getStatusCode().value()), ex.getReason()));
+    }
+
+    @ExceptionHandler({
+            org.springframework.security.authorization.AuthorizationDeniedException.class,
+            org.springframework.security.access.AccessDeniedException.class
+    })
+    public ResponseEntity<ErrorResponse> handleAccessDenied(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("FORBIDDEN", "Bạn không có quyền thực hiện thao tác này."));
     }
 
     @ExceptionHandler(Exception.class)
@@ -313,39 +364,19 @@ public class ServiceRequestController {
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
         log.error("General error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     /**
-     * Tạo service request mới (cho End User - tự động lấy user info từ header).
+     * Tạo service request mới cho user đang đăng nhập.
      * POST /api/service-requests/my
      */
     @PostMapping("/my")
-    public ResponseEntity<ServiceRequestDto> createRequestForCurrentUser(
-            @RequestBody ServiceRequestRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username,
-            @RequestHeader(value = "X-User-Name", required = false) String userName,
-            @RequestHeader(value = "X-User-Email", required = false) String email,
-            @RequestHeader(value = "X-User-Department", required = false) String department) {
-        log.info("POST /api/service-requests/my - by: {}", username);
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setTitle(request.getTitle());
-        serviceRequest.setDescription(request.getDescription());
-        serviceRequest.setServiceId(request.getServiceId());
-        serviceRequest.setPriority(request.getPriority());
-        serviceRequest.setFormData(request.getFormData());
-
-        ServiceRequest created = serviceRequestService.createRequest(
-                serviceRequest,
-                username,
-                userName,
-                email,
-                department
-        );
-
+    public ResponseEntity<ServiceRequestDto> createRequestForCurrentUser(@RequestBody ServiceRequestRequest request,
+                                                                         Authentication authentication) {
+        log.info("POST /api/service-requests/my - by: {}", authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ServiceRequestDto.fromEntity(created));
+                .body(ServiceRequestDto.fromEntity(createForCurrentUser(request, authentication)));
     }
 
     /**
@@ -353,13 +384,14 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/take-ownership
      */
     @PatchMapping("/{id}/take-ownership")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> takeOwnership(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/take-ownership - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/take-ownership - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor), "Chỉ nhân viên IT được xử lý yêu cầu dịch vụ.");
 
-        ServiceRequest updated = serviceRequestService.takeOwnership(id, username);
+        ServiceRequest updated = serviceRequestService.takeOwnership(id, authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -369,14 +401,15 @@ public class ServiceRequestController {
      * PATCH /api/service-requests/{id}/complete
      */
     @PatchMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
     public ResponseEntity<ServiceRequestDto> completeRequest(
             @PathVariable Long id,
             @RequestBody CompletionRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/complete - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/complete - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor), "Chỉ nhân viên IT được xử lý yêu cầu dịch vụ.");
 
-        ServiceRequest updated = serviceRequestService.completeRequest(id, request.getResolution(), username);
+        ServiceRequest updated = serviceRequestService.completeRequest(id, request.getResolution(), authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -388,12 +421,29 @@ public class ServiceRequestController {
     @PatchMapping("/{id}/confirm")
     public ResponseEntity<ServiceRequestDto> confirmCompletion(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/confirm - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/confirm - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.isRequester(actor, serviceRequestService.getRequestById(id)),
+                "Chỉ người yêu cầu được xác nhận hoặc mở lại yêu cầu.");
 
-        ServiceRequest updated = serviceRequestService.confirmCompletion(id, username);
+        ServiceRequest updated = serviceRequestService.confirmCompletion(id, authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * Hủy request: người yêu cầu hoặc nhân viên IT.
+     * PATCH /api/service-requests/{id}/cancel
+     */
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<ServiceRequestDto> cancelRequest(@PathVariable Long id, Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/cancel - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor) || authz.isRequester(actor, serviceRequestService.getRequestById(id)),
+                "Chỉ người yêu cầu hoặc nhân viên IT được hủy yêu cầu dịch vụ.");
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(
+                serviceRequestService.cancelRequest(id, authentication.getName())));
     }
 
     /**
@@ -404,10 +454,13 @@ public class ServiceRequestController {
     public ResponseEntity<ServiceRequestDto> reopenRequest(
             @PathVariable Long id,
             @RequestBody ReopenRequest request,
-            @RequestHeader(value = "X-User-Username", required = false) String username) {
-        log.info("PATCH /api/service-requests/{}/reopen - by: {}", id, username);
+            Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/reopen - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.isRequester(actor, serviceRequestService.getRequestById(id)),
+                "Chỉ người yêu cầu được xác nhận hoặc mở lại yêu cầu.");
 
-        ServiceRequest updated = serviceRequestService.reopenRequest(id, request.getReason(), username);
+        ServiceRequest updated = serviceRequestService.reopenRequest(id, request.getReason(), authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
     }
@@ -561,9 +614,19 @@ public class ServiceRequestController {
         private Boolean billable;
         private java.time.LocalDateTime completedAt;
         private java.time.LocalDateTime createdAt;
+        private String requesterEmail;
+        private String requesterDepartment;
+        private String resolution;
+        private String approvedBy;
+        private String approvalNotes;
 
         public static ServiceRequestDto fromEntity(ServiceRequest sr) {
             ServiceRequestDto dto = new ServiceRequestDto();
+            dto.requesterEmail = sr.getRequesterEmail();
+            dto.requesterDepartment = sr.getRequesterDepartment();
+            dto.resolution = sr.getResolution();
+            dto.approvedBy = sr.getApprovedBy();
+            dto.approvalNotes = sr.getApprovalNotes();
             dto.setId(sr.getId());
             dto.setRequestNumber(sr.getRequestNumber());
             dto.setServiceId(sr.getServiceId());
@@ -585,6 +648,11 @@ public class ServiceRequestController {
             return dto;
         }
 
+        public String getRequesterEmail() { return requesterEmail; }
+        public String getRequesterDepartment() { return requesterDepartment; }
+        public String getResolution() { return resolution; }
+        public String getApprovedBy() { return approvedBy; }
+        public String getApprovalNotes() { return approvalNotes; }
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
         public String getRequestNumber() { return requestNumber; }

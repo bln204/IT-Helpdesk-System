@@ -41,6 +41,12 @@ public class SecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    @org.springframework.beans.factory.annotation.Value("${app.security.swagger-public:false}")
+    private boolean swaggerPublic;
+
     @Bean
     FilterRegistrationBean<org.springframework.web.filter.CommonsRequestLoggingFilter> requestLoggingFilter() {
         FilterRegistrationBean<org.springframework.web.filter.CommonsRequestLoggingFilter> registrationBean = new FilterRegistrationBean<>();
@@ -94,21 +100,21 @@ public class SecurityConfig {
                             log.error("AUTH ENTRY POINT: {} {} - {}", request.getMethod(), request.getRequestURI(),
                                     authException.getMessage());
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType("application/json");
-                            response.getWriter().write(
-                                    "{\"error\":\"Unauthorized\",\"message\":\"" + authException.getMessage() + "\"}");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(JSON.writeValueAsString(
+                                    java.util.Map.of("error", "Unauthorized", "message", "Unauthorized")));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             log.error("ACCESS DENIED: {} {} - {}", request.getMethod(), request.getRequestURI(),
                                     accessDeniedException.getMessage());
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"error\":\"Access denied\",\"message\":\""
-                                    + accessDeniedException.getMessage() + "\"}");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(JSON.writeValueAsString(
+                                    java.util.Map.of("error", "Access denied", "message", "Access denied")));
                         }))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/",
                                 "/index.html",
@@ -116,24 +122,20 @@ public class SecurityConfig {
                                 "/app.js",
                                 "/favicon.ico",
                                 "/api/auth/login",
-                                "/api/analytics/test",
+                                "/api/auth/ping",
                                 "/css/**",
                                 "/js/**")
-                        .permitAll()
-                        .requestMatchers(
-                                "/api/test/**")
-                        .permitAll()
-                        .requestMatchers(
-                                "/api/auth/ping")
-                        .permitAll()
-                        .requestMatchers(
+                        .permitAll();
+                    if (swaggerPublic) {
+                        auth.requestMatchers(
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
-                                "/swagger-ui/**",
-                                "/swagger-ui/index.html")
-                        .permitAll()
-                        .anyRequest().authenticated())
+                                "/swagger-ui/**")
+                            .permitAll();
+                    }
+                    auth.anyRequest().authenticated();
+                })
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

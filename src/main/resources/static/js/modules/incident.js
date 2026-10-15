@@ -3,6 +3,9 @@
  */
 const Incident = (() => {
     'use strict';
+    // Họ tên từ danh bạ (userService.getDisplayName); fallback về giá trị gốc khi chưa nạp.
+    const LEVEL_LABELS = { CRITICAL: 'Nghiêm trọng', HIGH: 'Cao', MEDIUM: 'Trung bình', LOW: 'Thấp' };
+    const nameOf = (u) => (u && window.displayNameOf ? window.displayNameOf(u) : u) || '';
 
     const API_BASE = '/api/incidents';
 
@@ -278,6 +281,10 @@ const Incident = (() => {
             'CLOSED': { label: 'Đã đóng', class: 'closed' }
         };
 
+        // Mirror backend: delete = ADMIN / Trưởng phòng IT; edit = IT operator.
+        // shortcut: a non-IT TRUONG_PHONG who created the incident may also delete, but IncidentDto has no createdBy; add it if needed.
+        const canEditIncident = !!window.Auth?.isItOperator?.();
+        const canDeleteIncident = !!(window.Auth?.isAdmin?.() || window.Auth?.isItLead?.());
         container.innerHTML = incidentsList.map(incident => {
             const status = statusLabels[incident.status] || statusLabels['INVESTIGATING'];
             const slaStatusClass = incident.slaStatus === 'BREACHED' ? 'sla-breached' : 
@@ -295,14 +302,14 @@ const Incident = (() => {
                     <p class="incident-desc">${escapeHtml(incident.description || '').substring(0, 150)}${incident.description?.length > 150 ? '...' : ''}</p>
                     <div class="incident-meta">
                         <span>📎 ${incident.linkedTicketCount || 0} tickets</span>
-                        <span>👤 ${incident.assignedToUsername || 'Chưa gán'}</span>
+                        <span>👤 ${escapeHtml(nameOf(incident.assignedToUsername) || 'Chưa gán')}</span>
                         <span>📅 ${formatDate(incident.createdAt)}</span>
-                        ${incident.priority ? `<span class="priority-${incident.priority.toLowerCase()}">⚡ ${incident.priority}</span>` : ''}
+                        ${incident.priority ? `<span class="priority-${incident.priority.toLowerCase()}">⚡ ${LEVEL_LABELS[incident.priority] || incident.priority}</span>` : ''}
                     </div>
                     <div class="incident-actions">
                         <button class="secondary btn-sm incident-view-btn" data-id="${incident.id}">Xem</button>
-                        <button class="ghost btn-sm incident-edit-btn" data-id="${incident.id}">Sửa</button>
-                        <button class="ghost btn-sm text-danger incident-delete-btn" data-id="${incident.id}">Xóa</button>
+                        ${canEditIncident ? `<button class="ghost btn-sm incident-edit-btn" data-id="${incident.id}">Sửa</button>` : ''}
+                        ${canDeleteIncident ? `<button class="ghost btn-sm text-danger incident-delete-btn" data-id="${incident.id}">Xóa</button>` : ''}
                     </div>
                 </div>
             `;
@@ -330,7 +337,7 @@ const Incident = (() => {
     function openCreateModal() {
         currentIncident = null;
         resetForm();
-        document.getElementById('incident-modal-title').textContent = 'Tạo Incident mới';
+        document.getElementById('incident-modal-title').textContent = 'Tạo sự cố lớn';
         document.getElementById('incident-submit-btn').textContent = 'Tạo Incident';
         openModal();
     }
@@ -393,7 +400,7 @@ const Incident = (() => {
         const canReopen = !isInITDept && incident.status === 'RESOLVED';
         const isOwner = isTruongPhongIT || isNhanVienIT;
         // Cho phép tạo Problem từ incident đã RESOLVED hoặc CLOSED
-        const canCreateProblem = ['RESOLVED', 'CLOSED'].includes(incident.status) && (isTruongPhongIT || isNhanVienIT || isAdminIT);
+        const canCreateProblem = ['RESOLVED', 'CLOSED'].includes(incident.status) && (isTruongPhongIT || isNhanVienIT); // ProblemAuthorization: IT operator only
 
         const container = document.getElementById('incident-detail-content');
         if (!container) return;
@@ -407,15 +414,14 @@ const Incident = (() => {
                     <span class="incident-number">${incident.incidentNumber}</span>
                     <h3>${escapeHtml(incident.title)}</h3>
                 </div>
-                <button class="ghost" onclick="Incident.closeDetail()">Đóng</button>
             </div>
             
             ${slaTimerHtml}
             
             <div class="incident-detail-status">
                 <span class="incident-status ${incident.status?.toLowerCase().replace('_', '-')}">${statusLabels[incident.status] || incident.status}</span>
-                <span>Độ ưu tiên: <strong>${incident.priority || 'N/A'}</strong></span>
-                <span>Impact: ${incident.impactLevel || 'N/A'}</span>
+                <span>Độ ưu tiên: <strong>${LEVEL_LABELS[incident.priority] || incident.priority || 'N/A'}</strong></span>
+                <span>Mức ảnh hưởng: <strong>${LEVEL_LABELS[incident.impactLevel] || incident.impactLevel || 'N/A'}</strong></span>
             </div>
             
             <div class="incident-detail-body">
@@ -575,7 +581,7 @@ const Incident = (() => {
                     ${timeline.map(t => `
                         <div class="timeline-item ${t.eventType === 'NOTE_ADDED' ? 'note' : ''}">
                             <div class="timeline-header">
-                                <span class="timeline-actor">${t.actorName || 'Hệ thống'}</span>
+                                <span class="timeline-actor">${escapeHtml(nameOf(t.actorName) || 'Hệ thống')}</span>
                                 <span class="timeline-time">${formatDate(t.createdAt)}</span>
                             </div>
                             <div class="timeline-content">${escapeHtml(t.description || t.title)}</div>
@@ -587,9 +593,9 @@ const Incident = (() => {
             <div class="incident-detail-section">
                 <h4>Thông tin</h4>
                 <div class="incident-info-grid">
-                    <div><span>Người phụ trách:</span> ${incident.assignedToUsername || 'Chưa gán'}</div>
+                    <div><span>Người phụ trách:</span> ${escapeHtml(nameOf(incident.assignedToUsername) || 'Chưa gán')}</div>
                     <div><span>Nhóm:</span> ${incident.teamName || 'N/A'}</div>
-                    <div><span>Người báo:</span> ${incident.reportedByUsername || currentUser?.username || 'N/A'}</div>
+                    <div><span>Người báo:</span> ${escapeHtml(nameOf(incident.reportedByUsername || currentUser?.username) || 'N/A')}</div>
                     <div><span>Ngày tạo:</span> ${formatDate(incident.createdAt)}</div>
                     <div><span>Đã giải quyết:</span> ${incident.resolvedAt ? formatDate(incident.resolvedAt) : 'Chưa'}</div>
                     <div><span>Đã đóng:</span> ${incident.closedAt ? formatDate(incident.closedAt) : 'Chưa'}</div>
@@ -855,7 +861,7 @@ const Incident = (() => {
             if (select) {
                 select.innerHTML = '<option value="">-- Chọn nhân viên --</option>';
                 staff.forEach(user => {
-                    select.innerHTML += `<option value="${user.username}">${user.displayName || user.username} (${user.username})</option>`;
+                    select.innerHTML += `<option value="${escapeHtml(user.username)}">${escapeHtml(user.displayName || nameOf(user.username))}</option>`;
                 });
             }
         } catch (error) {

@@ -1,13 +1,16 @@
 package com.example.ticketing.change;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -314,6 +317,29 @@ public class ChangeRequestService {
     @Transactional(readOnly = true)
     public Page<ChangeRequest> getAllChanges(Pageable pageable) {
         return changeRepository.findAllByOrderByCreatedAtDesc(pageable);
+    }
+
+    /**
+     * Danh sách theo phạm vi quyền của actor (scope từ ChangeAuthorization.readScope).
+     */
+    @Transactional(readOnly = true)
+    public Page<ChangeRequest> listChanges(Specification<ChangeRequest> scope,
+                                           ChangeRequest.ChangeStatus status,
+                                           String search,
+                                           Pageable pageable) {
+        List<Specification<ChangeRequest>> parts = new ArrayList<>();
+        parts.add(scope);
+        if (status != null) {
+            parts.add((root, q, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (search != null && !search.isBlank()) {
+            String like = "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
+            parts.add((root, q, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("title")), like),
+                    cb.like(cb.lower(root.get("description")), like),
+                    cb.like(cb.lower(root.get("changeNumber")), like)));
+        }
+        return changeRepository.findAll(Specification.allOf(parts), pageable);
     }
 
     /**

@@ -97,8 +97,10 @@ class NewDomainAdaptersTest {
         sr.setStatus(ServiceRequest.ServiceStatus.SUBMITTED);
         requests.save(sr);
         DomainDef d = ServiceRequestQueryAdapter.DEF;
+        // IT operator thấy SR của mọi người; NV nghiệp vụ chỉ thấy SR của mình (spec §4.1).
+        ActorContext itStaff = ActorContext.of("nv_it", Role.NHAN_VIEN, "IT", true);
         QueryResult r = requestAdapter.execute(list(d, filter(d, "requester", FilterOp.CONTAINS, "carlos"),
-                filter(d, "status", FilterOp.EQ, ServiceRequest.ServiceStatus.SUBMITTED)), staff);
+                filter(d, "status", FilterOp.EQ, ServiceRequest.ServiceStatus.SUBMITTED)), itStaff);
         assertThat(r.rows()).extracting(Row::id).containsExactly("SR-T1");
         assertThat(r.rows().get(0).fields()).containsEntry("dịch vụ", "Cài phần mềm").doesNotContainKey("chi phí");
     }

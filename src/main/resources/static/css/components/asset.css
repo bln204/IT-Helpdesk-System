@@ -796,7 +796,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.form-group {
+.form-tab-content .form-group {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
@@ -970,7 +970,7 @@
     display: none;
   }
   
-  .form-group,
+  .form-tab-content .form-group,
   .detail-grid {
     grid-template-columns: 1fr;
   }
@@ -1089,4 +1089,11 @@
 
 .delete-actions .btn-danger:hover {
   filter: brightness(1.1);
+}
+
+.form-field input,
+.form-field textarea,
+.form-field select {
+  width: 100%;
+  min-width: 0;
 }

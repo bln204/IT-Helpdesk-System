@@ -79,8 +79,9 @@ public class IncidentNotificationService {
                 incident.getId(),
                 incident.getIncidentNumber(),
                 incident.getTitle(),
-                assignedBy
+                nameOf(assignedBy)
             );
+            notification.setActorUsername(assignedBy);
             notificationRepository.save(notification);
             log.info("Sent assignment notification to {} for incident {}", assigneeUsername, incident.getIncidentNumber());
         }
@@ -118,8 +119,9 @@ public class IncidentNotificationService {
                 incident.getId(),
                 incident.getIncidentNumber(),
                 incident.getTitle(),
-                reassignedBy
+                nameOf(reassignedBy)
             );
+            notification.setActorUsername(reassignedBy);
             notificationRepository.save(notification);
             log.info("Sent reassignment notification to {} for incident {}", newAssignee, incident.getIncidentNumber());
         }
@@ -181,8 +183,9 @@ public class IncidentNotificationService {
                 incident.getId(),
                 incident.getIncidentNumber(),
                 incident.getTitle(),
-                resolvedBy
+                nameOf(resolvedBy)
             );
+            notification.setActorUsername(resolvedBy);
             notificationRepository.save(notification);
             log.info("Sent resolved notification to creator: {}", incident.getCreatedBy());
         }
@@ -190,7 +193,7 @@ public class IncidentNotificationService {
         // Notify IT Managers
         notifyITManagers(incident, NotificationType.TICKET_RESOLVED,
             "Incident #" + incident.getIncidentNumber() + " đã được giải quyết",
-            "Đã được giải quyết bởi " + resolvedBy);
+            "Đã được giải quyết bởi " + nameOf(resolvedBy));
     }
     
     /**
@@ -306,6 +309,14 @@ public class IncidentNotificationService {
         log.error("SLA BREACH notification sent for incident: {}", incident.getIncidentNumber());
     }
     
+    /** Họ tên hiển thị trong nội dung thông báo; actorUsername vẫn lưu username. */
+    private String nameOf(String username) {
+        if (username == null) return null;
+        return userAccountRepository.findByUsername(username)
+            .map(u -> u.getDisplayName() != null && !u.getDisplayName().isBlank() ? u.getDisplayName() : username)
+            .orElse(username);
+    }
+
     // ============ Private Helper Methods ============
     
     /**

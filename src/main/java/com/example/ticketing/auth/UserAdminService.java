@@ -50,7 +50,6 @@ public class UserAdminService {
     /**
      * Tạo user mới với department.
      * - ADMIN tạo: tự động duyệt (approved = true, enabled = true)
-     * - GIAM_DOC tạo: tự động duyệt (approved = true, enabled = true)
      * - TRUONG_PHONG tạo: cần duyệt (approved = false, enabled = false)
      * - NHAN_VIEN: không được tạo
      */
@@ -70,6 +69,12 @@ public class UserAdminService {
         // Check if user already exists
         if (userAccountRepository.findByUsername(username).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists.");
+        }
+        if ("GIAM_DOC".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Giám đốc không có quyền tạo tài khoản người dùng.");
+        }
+        if ("TRUONG_PHONG".equals(actorRole) && role != UserRole.Role.NHAN_VIEN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Trưởng phòng chỉ được tạo tài khoản Nhân viên.");
         }
         
         rejectAvatarChange(avatarUrl);
@@ -102,8 +107,8 @@ public class UserAdminService {
         
         // ============ NEW: Approval Logic ============
         
-        // ADMIN và GIAM_DOC tạo: tự động duyệt
-        if ("ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole)) {
+        // ADMIN tạo: tự động duyệt
+        if ("ADMIN".equals(actorRole)) {
             user.setApproved(true);
             user.setApprovedAt(LocalDateTime.now());
             user.setApprovedBy(actorUsername);
@@ -152,8 +157,18 @@ public class UserAdminService {
         return userAccountRepository.save(user);
     }
 
+    /** TRUONG_PHONG chỉ thấy user cùng phòng (spec phase1-rbac-hardening §4.8). */
     @Transactional(readOnly = true)
-    public Page<UserAccount> listUsers(Pageable pageable, String search) {
+    public Page<UserAccount> listUsers(Pageable pageable, String search, String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)) {
+            String like = search == null || search.isBlank() ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+            return userAccountRepository.findAll((root, q, cb) -> {
+                var sameDept = actorDepartmentId == null
+                        ? cb.disjunction()
+                        : cb.equal(root.get("department").get("id"), actorDepartmentId);
+                return like == null ? sameDept : cb.and(sameDept, cb.like(cb.lower(root.get("username")), like));
+            }, pageable);
+        }
         if (search != null && !search.isBlank()) {
             return userAccountRepository.findByUsernameContainingIgnoreCase(search.trim(), pageable);
         }
@@ -228,20 +243,39 @@ public class UserAdminService {
     /**
      * Lấy audit log.
      * - ADMIN/GIAM_DOC: xem tất cả audit log
-     * - TRUONG_PHONG: xem tất cả audit log (nhưng chỉ quản lý users trong phòng ban)
+     * - TRUONG_PHONG: chỉ audit log của user cùng phòng
      */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit(String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)) {
+            java.util.Set<String> sameDept = departmentUsernames(actorDepartmentId);
+            return userAuditService.listAll().stream()
+                    .filter(a -> a.getTargetUsername() != null && sameDept.contains(a.getTargetUsername().toLowerCase(java.util.Locale.ROOT)))
+                    .toList();
+        }
         return userAuditService.listAll();
+    }
+
+    private java.util.Set<String> departmentUsernames(Long departmentId) {
+        if (departmentId == null) {
+            return java.util.Set.of();
+        }
+        return listUsersByDepartment(departmentId).stream()
+                .map(u -> u.getUsername().toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**
      * Lấy audit log theo target username.
      * - ADMIN/GIAM_DOC: xem audit log của bất kỳ user nào
-     * - TRUONG_PHONG: xem audit log của bất kỳ user nào (nhưng chỉ quản lý users trong phòng ban)
+     * - TRUONG_PHONG: chỉ audit log của user cùng phòng
      */
     @Transactional(readOnly = true)
     public List<UserAudit> listAudit(String targetUsername, String actorRole, Long actorDepartmentId) {
+        if ("TRUONG_PHONG".equals(actorRole)
+                && !departmentUsernames(actorDepartmentId).contains(targetUsername.toLowerCase(java.util.Locale.ROOT))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Trưởng phòng chỉ xem được audit của tài khoản cùng phòng.");
+        }
         return userAuditService.listForTarget(targetUsername);
     }
 
@@ -332,41 +366,27 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
-        // #region agent debug log
-        org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserAdminService.class);
-        log.info("[DEBUG] rejectUser called - id={}, reason='{}', actorUsername={}, actorRole={}", 
-            id, reason, actorUsername, actorRole);
-        // #endregion
-
         // Only ADMIN can reject
         if (!"ADMIN".equals(actorRole)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Chỉ Admin mới có quyền từ chối tài khoản.");
         }
 
-        // #region agent debug log
-        log.info("[DEBUG] rejectUser - actorRole check passed: {}", actorRole);
-        // #endregion
-
         if (reason == null || reason.isBlank()) {
-            // #region agent debug log
-            log.info("[DEBUG] rejectUser - reason validation failed: reason='{}'", reason);
-            // #endregion
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Lý do từ chối không được để trống.");
         }
 
         UserAccount user = getUser(id);
 
-        // #region agent debug log
-        log.info("[DEBUG] rejectUser - user found: id={}, username={}, approved={}", 
-            user.getId(), user.getUsername(), user.isApproved());
-        // #endregion
-
         // Check if already approved
         if (user.isApproved()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Không thể từ chối tài khoản đã được phê duyệt.");
+        }
+        if (user.getRejectionReason() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Tài khoản này đã bị từ chối trước đó.");
         }
 
         user.setApproved(false);
@@ -392,7 +412,6 @@ public class UserAdminService {
     /**
      * Cập nhật enabled status.
      * - ADMIN: có thể enable/disable tất cả
-     * - GIAM_DOC: có thể enable/disable tất cả (trừ ADMIN)
      * - TRUONG_PHONG: không được trực tiếp thay đổi, cần gửi yêu cầu
      */
     public UserAccount updateEnabled(
@@ -407,7 +426,6 @@ public class UserAdminService {
         // Check permissions
         boolean canModify = switch (actorRole) {
             case "ADMIN" -> true;
-            case "GIAM_DOC" -> user.getRole() != UserRole.Role.ADMIN;
             case "TRUONG_PHONG" -> {
                 // TRUONG_PHONG không được trực tiếp thay đổi enabled status
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -450,9 +468,8 @@ public class UserAdminService {
 
     /**
      * Cập nhật role.
-     * - ADMIN: có thể đổi tất cả
-     * - GIAM_DOC: có thể đổi tất cả (trừ ADMIN)
-     * - TRUONG_PHONG: không được đổi role
+     * - Chỉ ADMIN được đổi role (USER_MANAGEMENT_PLAN 1.1)
+     * - Không tự đổi role của chính mình, không gán ADMIN
      */
     public UserAccount updateRole(
         Long id,
@@ -460,41 +477,44 @@ public class UserAdminService {
         String actorUsername,
         String actorRole
     ) {
-        UserAccount user = getUser(id);
-
-        // Permission check
-        if ("TRUONG_PHONG".equals(actorRole) || "NHAN_VIEN".equals(actorRole)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN and GIAM_DOC can change roles.");
+        if (!"ADMIN".equals(actorRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ ADMIN được thay đổi vai trò.");
         }
 
-        // Cannot change ADMIN role
+        UserAccount user = getUser(id);
+
+        if (user.getUsername().equals(actorUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể tự thay đổi vai trò của chính mình.");
+        }
         if (user.getRole() == UserRole.Role.ADMIN) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot change ADMIN role.");
         }
-        
-        // Cannot change role of unapproved users to ADMIN or GIAM_DOC
-        if (!user.isApproved() && (role == UserRole.Role.ADMIN || role == UserRole.Role.GIAM_DOC)) {
+        if (role == UserRole.Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể gán vai trò ADMIN qua chức năng này.");
+        }
+        if (!user.isApproved() && role == UserRole.Role.GIAM_DOC) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Không thể phân quyền ADMIN hoặc GIAM_DOC cho tài khoản chưa được phê duyệt.");
+                "Không thể phân quyền GIAM_DOC cho tài khoản chưa được phê duyệt.");
         }
 
+        UserRole.Role oldRole = user.getRole();
         user.setRole(role);
         userAuditService.log(
             UserAuditAction.ROLE_CHANGED,
             actorUsername,
             actorRole,
             user.getUsername(),
-            user.getRole().name(),
+            oldRole.name(),
             role.name()
         );
-        
+
         return userAccountRepository.save(user);
     }
 
     /**
      * Cập nhật profile.
      * - User có thể tự sửa profile của mình (sau khi được duyệt)
-     * - ADMIN/GIAM_DOC có thể sửa profile của user khác (KHÔNG ÁP DỤNG cho tài khoản bị từ chối)
+     * - ADMIN có thể sửa profile của user khác (KHÔNG ÁP DỤNG cho tài khoản bị từ chối)
      * 
      * Lưu ý: Tài khoản bị từ chối (approved=false, rejectionReason!=null) chỉ có thể bị XOÁ,
      * không thể chỉnh sửa bất kỳ thông tin nào.
@@ -517,14 +537,11 @@ public class UserAdminService {
         // Permission check:
         // - Self: always allowed (if approved)
         // - ADMIN: always allowed
-        // - GIAM_DOC: allowed
         // - TRUONG_PHONG: allowed only if user is in same department
         boolean canEdit = false;
         if (isSelf) {
             canEdit = true;
         } else if ("ADMIN".equals(actorRole)) {
-            canEdit = true;
-        } else if ("GIAM_DOC".equals(actorRole)) {
             canEdit = true;
         } else if ("TRUONG_PHONG".equals(actorRole)) {
             // TRUONG_PHONG can edit any user in their department (except other ADMIN/GIAM_DOC/TRUONG_PHONG)
@@ -618,8 +635,6 @@ public class UserAdminService {
         if (isSelf) {
             canEdit = true;
         } else if ("ADMIN".equals(actorRole)) {
-            canEdit = true;
-        } else if ("GIAM_DOC".equals(actorRole)) {
             canEdit = true;
         } else if ("TRUONG_PHONG".equals(actorRole)) {
             if (user.getRole() != UserRole.Role.ADMIN && 
@@ -721,7 +736,7 @@ public class UserAdminService {
 
     /**
      * Reset password.
-     * - ADMIN/GIAM_DOC: reset password tất cả users
+     * - ADMIN: reset password tất cả users
      * - TRUONG_PHONG: reset password NHAN_VIEN trong phòng ban của mình
      */
     public UserAccount resetPassword(
@@ -736,8 +751,8 @@ public class UserAdminService {
         // Permission check based on role
         boolean canReset = false;
         
-        if ("ADMIN".equals(actorRole) || "GIAM_DOC".equals(actorRole)) {
-            // ADMIN and GIAM_DOC can reset any user's password
+        if ("ADMIN".equals(actorRole)) {
+            // ADMIN can reset any user's password
             canReset = true;
         } else if ("TRUONG_PHONG".equals(actorRole)) {
             // TRUONG_PHONG can only reset password for NHAN_VIEN in their department
@@ -782,7 +797,6 @@ public class UserAdminService {
      * Xóa user.
      * - Không thể xóa chính mình
      * - ADMIN: xóa được tất cả (trừ admin khác)
-     * - GIAM_DOC: xóa được NHAN_VIEN, TRUONG_PHONG (không phải cùng department)
      * - TRUONG_PHONG: xóa được NHAN_VIEN trong phòng mình
      */
     public void deleteUser(
@@ -807,7 +821,6 @@ public class UserAdminService {
         // TRUONG_PHONG can only request deletion (handled in frontend)
         boolean canDelete = switch (actorRole) {
             case "ADMIN" -> true;
-            case "GIAM_DOC" -> user.getRole() != UserRole.Role.ADMIN;
             default -> false;
         };
 

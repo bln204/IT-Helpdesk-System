@@ -37,21 +37,35 @@
   display: none;
 }
 
+/* Sidebar must stack above the main content, otherwise the dropdown slides under it */
+.nav-card {
+  z-index: 50;
+}
+
+/* Desktop: open beside the sidebar instead of being squeezed (and clipped) inside it */
 .notification-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 340px;
-  max-height: 420px;
+  top: -8px;
+  left: calc(100% + 32px);
+  width: 380px;
+  max-height: min(560px, calc(100vh - 160px));
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
   z-index: 1000;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+@media (max-width: 1024px) {
+  .notification-dropdown {
+    top: calc(100% + 8px);
+    left: 0;
+    width: 100%;
+    max-height: 70vh;
+  }
 }
 
 .notification-dropdown.hidden {
@@ -80,7 +94,17 @@
 .notification-list {
   flex: 1;
   overflow-y: auto;
-  max-height: 340px;
+}
+
+.notification-ticket-number {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface, rgba(0, 0, 0, 0.05));
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .notification-empty {
@@ -102,21 +126,19 @@
 }
 
 .notification-item.unread {
-  background: rgba(255, 122, 89, 0.08);
-  box-shadow: inset 3px 0 0 0 var(--accent, #ff7a59), 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: inset 3px 0 0 0 var(--accent, #ff7a59);
 }
 
-body.dark .notification-item.unread {
-  background: rgba(255, 122, 89, 0.15);
-  box-shadow: inset 3px 0 0 0 var(--accent, #ff7a59), 0 1px 3px rgba(0,0,0,0.3);
-}
-
-.notification-item.read {
+.notification-item.clicked {
   opacity: 0.75;
 }
 
-.notification-item.read:hover {
+.notification-item.clicked:hover {
   opacity: 1;
+}
+
+.notification-item.clicked .notification-item-title {
+  font-weight: 500;
 }
 
 .notification-item:last-child {
@@ -146,7 +168,7 @@ body.dark .notification-item.unread {
   justify-content: space-between;
   align-items: center;
   margin-top: 4px;
-  padding-left: 34px;
+  padding-left: 0;
 }
 
 .notification-unread-dot {

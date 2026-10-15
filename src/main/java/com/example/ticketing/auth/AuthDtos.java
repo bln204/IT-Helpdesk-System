@@ -149,11 +149,11 @@ public final class AuthDtos {
      */
     public static class ForcePasswordChangeRequest {
         @NotBlank
-        @Size(min = 7, max = 128)
+        @Size(min = 8, max = 128)
         private String newPassword;
         
         @NotBlank
-        @Size(min = 7, max = 128)
+        @Size(min = 8, max = 128)
         private String confirmPassword;
         
         public String getNewPassword() {

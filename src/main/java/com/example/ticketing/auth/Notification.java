@@ -128,6 +128,10 @@ public class Notification {
         TICKET_SLA_WARNING, // SLA sắp hết hạn
         TICKET_SLA_BREACHED, // SLA đã bị breached
 
+        // Service requests
+        SERVICE_REQUEST_CREATED, // Yêu cầu dịch vụ mới -> Admin + IT
+        SERVICE_REQUEST_UPDATED, // Duyệt/từ chối/giao/hoàn thành/hủy -> người liên quan
+
         // Generic
         INFO
     }

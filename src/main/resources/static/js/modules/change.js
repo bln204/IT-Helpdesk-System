@@ -9,6 +9,8 @@
  */
 const ChangeManagement = (() => {
     'use strict';
+    // Họ tên từ danh bạ (userService.getDisplayName); fallback về giá trị gốc khi chưa nạp.
+    const nameOf = (u) => (u && window.displayNameOf ? window.displayNameOf(u) : u) || '';
 
     const API_BASE = '/api/changes';
 
@@ -172,7 +174,7 @@ const ChangeManagement = (() => {
                         </span>
                         <span class="meta-item">
                             <span class="meta-icon">👤</span>
-                            ${change.requesterName || change.requesterUsername || 'Không rõ'}
+                            ${escapeHtml(nameOf(change.requesterUsername) || change.requesterName || 'Không rõ')}
                         </span>
                     </div>
                     
@@ -317,7 +319,7 @@ const ChangeManagement = (() => {
                             <dt>Đã lên lịch</dt>
                             <dd>${change.scheduledStartDate ? formatDate(change.scheduledStartDate) : 'Chưa đặt'}</dd>
                             <dt>Người yêu cầu</dt>
-                            <dd>${change.requesterName || 'Không rõ'}</dd>
+                            <dd>${escapeHtml(nameOf(change.requesterUsername) || change.requesterName || 'Không rõ')}</dd>
                             <dt>Người phụ trách</dt>
                             <dd>${change.changeOwner || 'Chưa phân công'}</dd>
                         </dl>
@@ -358,7 +360,7 @@ const ChangeManagement = (() => {
                 <div class="timeline-dot"></div>
                 <div class="timeline-content">
                     <span class="timeline-event">${eventLabels[event.eventType] || event.eventType}</span>
-                    <span class="timeline-actor">${event.actorName || 'Hệ thống'}</span>
+                    <span class="timeline-actor">${escapeHtml(nameOf(event.actorName) || 'Hệ thống')}</span>
                     <span class="timeline-time">${formatDate(event.createdAt)}</span>
                     ${event.notes ? `<p class="timeline-notes">${escapeHtml(event.notes)}</p>` : ''}
                 </div>
@@ -388,7 +390,10 @@ const ChangeManagement = (() => {
                 break;
         }
         
-        return actions.map(a => 
+        // Mirror ChangeAuthorization: approve/reject = Trưởng phòng IT, the rest = IT operator.
+        const allowed = actions.filter(a => ['approve', 'reject'].includes(a.action)
+            ? window.Auth?.isItLead?.() : window.Auth?.isItOperator?.());
+        return allowed.map(a => 
             `<button class="change-action-btn ${a.class}" data-action="${a.action}">${a.label}</button>`
         ).join('');
     }
@@ -451,7 +456,7 @@ const ChangeManagement = (() => {
                     <label class="form-field full-width">
                         <span>Tiêu đề *</span>
                         <input type="text" id="change-title" maxlength="300" required 
-                               placeholder="e.g., Upgrade database server firmware" />
+                               placeholder="VD: Nâng cấp firmware máy chủ CSDL" />
                     </label>
 
                     <label class="form-field full-width">

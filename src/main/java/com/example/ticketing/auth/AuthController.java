@@ -62,14 +62,18 @@ public class AuthController {
         HttpServletRequest httpRequest
     ) {
         String clientIp = getClientIp(httpRequest);
-        String rateLimitKey = clientIp; // Rate limit by IP
+        String ipKey = RateLimiterService.ipKey(clientIp);
+        String userKey = RateLimiterService.userKey(request.getUsername());
         
         log.info("Login attempt for user: {} from IP: {}", request.getUsername(), clientIp);
         
         // Check if IP is locked out
-        if (rateLimiterService.isLockedOut(rateLimitKey)) {
-            long remainingSeconds = rateLimiterService.getRemainingLockoutSeconds(rateLimitKey);
-            log.warn("Login blocked for IP {} - locked out for {} more seconds", clientIp, remainingSeconds);
+        if (rateLimiterService.isLockedOut(ipKey) || rateLimiterService.isLockedOut(userKey)) {
+            long remainingSeconds = Math.max(
+                    rateLimiterService.getRemainingLockoutSeconds(ipKey),
+                    rateLimiterService.getRemainingLockoutSeconds(userKey));
+            log.warn("Login blocked for user {} / IP {} - locked out for {} more seconds",
+                    request.getUsername(), clientIp, remainingSeconds);
             throw new TooManyRequestsException(remainingSeconds);
         }
         
@@ -80,7 +84,8 @@ public class AuthController {
             log.info("Authentication successful for user: {}", request.getUsername());
 
             // Clear failed attempts on success
-            rateLimiterService.clearFailedAttempts(rateLimitKey);
+            rateLimiterService.clearFailedAttempts(ipKey);
+            rateLimiterService.clearFailedAttempts(userKey);
             
             UserAccount account = (UserAccount) authentication.getPrincipal();
 
@@ -143,12 +148,14 @@ public class AuthController {
             log.warn("Login failed for user {} from IP {}: Bad credentials", request.getUsername(), clientIp);
             
             // Record failed attempt
-            boolean nowLocked = rateLimiterService.recordFailedAttempt(rateLimitKey);
-            
-            int remainingAttempts = rateLimiterService.getRemainingAttempts(rateLimitKey);
-            
-            if (nowLocked) {
-                log.warn("IP {} has been locked out due to too many failed attempts", clientIp);
+            boolean ipLocked = rateLimiterService.recordFailedAttempt(ipKey);
+            boolean userLocked = rateLimiterService.recordFailedAttempt(userKey);
+            int remainingAttempts = Math.min(
+                    rateLimiterService.getRemainingAttempts(ipKey),
+                    rateLimiterService.getRemainingAttempts(userKey));
+
+            if (ipLocked || userLocked) {
+                log.warn("Locked out after too many failed attempts: user {} / IP {}", request.getUsername(), clientIp);
                 throw new TooManyRequestsException(900); // 15 minutes
             }
             
@@ -164,17 +171,23 @@ public class AuthController {
     /**
      * Extract client IP address, considering proxy headers.
      */
+    /**
+     * IP cho rate limit: phần tử CUỐI X-Forwarded-For (do proxy Koyeb thêm, client không giả được),
+     * không có/dị dạng thì remoteAddr. Không dùng X-Real-IP.
+     */
+    static String clientIp(String xForwardedFor, String remoteAddr) {
+        if (xForwardedFor != null) {
+            String[] parts = xForwardedFor.split(",", -1);
+            String last = parts[parts.length - 1].trim();
+            if (!last.isEmpty()) {
+                return last;
+            }
+        }
+        return remoteAddr;
+    }
+
     private String getClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            // Take the first IP (original client)
-            return xForwardedFor.split(",")[0].trim();
-        }
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isBlank()) {
-            return xRealIp.trim();
-        }
-        return request.getRemoteAddr();
+        return clientIp(request.getHeader("X-Forwarded-For"), request.getRemoteAddr());
     }
     
     @PostMapping("/logout")

@@ -7,6 +7,7 @@ public enum UserAuditAction {
     // Authentication actions
     LOGIN,
     LOGOUT,
+    LOGIN_UNLOCKED,
     PASSWORD_CHANGED,
     PASSWORD_RESET,
     TOKEN_REVOKED,
