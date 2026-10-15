@@ -632,6 +632,21 @@ export const attachEventHandlers = () => {
     });
   }
   
+  const userUnlockLogin = document.getElementById('user-unlock-login');
+  if (userUnlockLogin) {
+    userUnlockLogin.addEventListener('click', async () => {
+      if (!window.selectedUser) return;
+      try {
+        await request(`/api/admin/users/${window.selectedUser.id}/unlock-login`, { method: 'POST' });
+        addNotification('success', 'Mở khoá đăng nhập', `Tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" đã được mở khoá đăng nhập.`);
+        userUnlockLogin.classList.add('hidden');
+        await loadAdminUsers();
+      } catch (error) {
+        alert('Lỗi: ' + error.message);
+      }
+    });
+  }
+
   if (userDelete) {
     userDelete.addEventListener('click', async () => {
       if (!window.selectedUser) {
@@ -641,7 +656,7 @@ export const attachEventHandlers = () => {
       const { isAdmin, isTruongPhong } = await import('../core/auth.js');
       
       if (isAdmin()) {
-        const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${window.selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
+        const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
         if (!confirm(confirmMsg)) {
           return;
         }
@@ -654,7 +669,7 @@ export const attachEventHandlers = () => {
           return;
         }
       } else if (isTruongPhong()) {
-        const confirmMsg = `Bạn có chắc muốn yêu cầu xóa tài khoản "${window.selectedUser.username}"?\n\nSau khi gửi yêu cầu, Admin sẽ xem xét và duyệt xóa.`;
+        const confirmMsg = `Bạn có chắc muốn yêu cầu xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}"?\n\nSau khi gửi yêu cầu, Admin sẽ xem xét và duyệt xóa.`;
         if (!confirm(confirmMsg)) return;
         try {
           await request(`/api/admin/users/${window.selectedUser.id}/request-delete`, { method: 'POST' });

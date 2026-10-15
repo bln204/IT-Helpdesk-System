@@ -97,7 +97,7 @@ body.dark {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -259,4 +259,11 @@ body.dark .pending-section h4 {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

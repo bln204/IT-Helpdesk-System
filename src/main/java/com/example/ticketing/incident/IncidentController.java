@@ -442,7 +442,7 @@ public class IncidentController {
     public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
         log.error("NullPointerException: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -465,7 +465,7 @@ public class IncidentController {
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
         log.error("General error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     // ==================== DTOs ====================

@@ -13,3 +13,14 @@
   --border: rgba(30, 27, 22, 0.1);
   --surface: #f9fafc;
 }
+
+/* Aliases used by module stylesheets (change/asset/reports) that were never defined.
+   Declared on body.dark too so they resolve against the dark --ink/--teal. */
+:root,
+body.dark {
+  --text: var(--ink);
+  --primary: var(--teal);
+  --success: #10b981;
+  --danger: #f43f5e;
+  --font-mono: 'IBM Plex Mono', monospace;
+}

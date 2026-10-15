@@ -1,16 +1,40 @@
 /**
  * Service Request Module - Quản lý Service Requests & Catalog
+ *
+ * Quyền trên UI khớp ServiceRequestAuthorization (backend vẫn là ranh giới bảo mật):
+ * - Mọi người: tạo, xem yêu cầu trong phạm vi được đọc, sửa/hủy yêu cầu của mình khi chưa xử lý,
+ *   xác nhận/mở lại khi IT đã hoàn thành.
+ * - IT (Trưởng phòng/Nhân viên phòng IT): nhận, phân công, sửa, hoàn thành, hủy.
+ * - Trưởng phòng IT: duyệt/từ chối yêu cầu chờ phê duyệt.
+ * - ADMIN: xóa.
  */
 const ServiceRequest = (() => {
     'use strict';
+    // Họ tên từ danh bạ (userService.getDisplayName); fallback về giá trị gốc khi chưa nạp.
+    const nameOf = (u) => (u && window.displayNameOf ? window.displayNameOf(u) : u) || '';
 
     const API_BASE = '/api/service-requests';
     const CATALOG_API = '/api/service-requests/catalog';
+
+    const STATUS_LABELS = {
+        'SUBMITTED': { label: 'Đã gửi', class: 'submitted' },
+        'PENDING_APPROVAL': { label: 'Chờ phê duyệt', class: 'pending' },
+        'APPROVED': { label: 'Đã duyệt', class: 'approved' },
+        'IN_PROGRESS': { label: 'Đang xử lý', class: 'in-progress' },
+        'COMPLETED': { label: 'Hoàn thành', class: 'completed' },
+        'CLOSED': { label: 'Đã đóng', class: 'closed' },
+        'REJECTED': { label: 'Từ chối', class: 'rejected' },
+        'CANCELLED': { label: 'Đã hủy', class: 'cancelled' }
+    };
+    const OPEN_STATUSES = ['SUBMITTED', 'PENDING_APPROVAL', 'APPROVED', 'IN_PROGRESS'];
 
     // State
     let catalog = [];
     let requests = [];
     let isSubmitting = false;
+    let editingId = null;
+    let searchTimer = null;
+    let listenersAttached = false;
 
     // ==================== Initialization ====================
 
@@ -21,7 +45,11 @@ const ServiceRequest = (() => {
         }
 
         window.Auth.onAuthReady(() => {
-            setupEventListeners();
+            // init() runs on every visit to the page; listeners must be attached only once.
+            if (!listenersAttached) {
+                listenersAttached = true;
+                setupEventListeners();
+            }
             loadCatalog();
             loadRequests();
         });
@@ -43,6 +71,12 @@ const ServiceRequest = (() => {
                 const id = parseInt(e.target.closest('.sr-catalog-item').dataset.id);
                 selectService(id);
             }
+            if (e.target.closest('#close-sr-modal') || e.target.id === 'sr-modal' || e.target.closest('#cancel-sr-btn')) {
+                closeModal();
+            }
+            if (e.target.closest('#close-sr-detail-modal') || e.target.id === 'sr-detail-modal') {
+                closeDetail();
+            }
         });
 
         document.addEventListener('submit', (e) => {
@@ -52,46 +86,49 @@ const ServiceRequest = (() => {
             }
         });
 
-        document.addEventListener('click', (e) => {
-            if (e.target.closest('#close-sr-modal') || e.target.id === 'sr-modal') {
-                closeModal();
-            }
-            if (e.target.closest('#cancel-sr-btn')) {
-                closeModal();
-            }
+        document.getElementById('sr-status-filter')?.addEventListener('change', () => loadRequests());
+        document.getElementById('sr-search')?.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => loadRequests(), 300);
         });
     }
 
     // ==================== API Calls ====================
 
+    /** fetch wrapper: throws the backend's message (e.g. 403/409 reason) so the toast is meaningful. */
+    async function api(url, method = 'GET', body) {
+        const response = await fetch(url, {
+            method,
+            headers: window.Auth.getAuthHeaders(),
+            ...(body !== undefined && { body: JSON.stringify(body) })
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || 'Thao tác thất bại');
+        }
+        return response.status === 204 ? null : response.json();
+    }
+
     async function loadCatalog() {
         try {
-            const response = await fetch(CATALOG_API, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Không thể tải danh mục dịch vụ');
-            catalog = await response.json();
+            catalog = await api(CATALOG_API);
             renderCatalog();
         } catch (error) {
             console.error('Error loading catalog:', error);
         }
     }
 
-    async function loadRequests(params = {}) {
+    async function loadRequests() {
         try {
-            // Try to load user's own requests first
-            let url = `${API_BASE}/my`;
-            const queryParams = new URLSearchParams();
-            
-            if (params.status) queryParams.append('status', params.status);
-            if (params.page) queryParams.append('page', params.page);
-            queryParams.append('size', '20');
-            
-            if (queryParams.toString()) {
-                url += '?' + queryParams.toString();
-            }
+            // GET /api/service-requests is scoped server-side: IT/ban giám sát thấy tất cả,
+            // trưởng phòng nghiệp vụ thấy phòng mình, nhân viên thấy yêu cầu của mình.
+            const queryParams = new URLSearchParams({ size: '50' });
+            const status = document.getElementById('sr-status-filter')?.value;
+            const search = document.getElementById('sr-search')?.value?.trim();
+            if (status) queryParams.append('status', status);
+            if (search) queryParams.append('search', search);
 
-            const response = await fetch(url, { headers: window.Auth.getAuthHeaders() });
-            if (!response.ok) throw new Error('Không thể tải danh sách yêu cầu');
-            const data = await response.json();
+            const data = await api(`${API_BASE}?${queryParams}`);
             requests = data.content || [];
             renderRequestsList(requests);
         } catch (error) {
@@ -99,100 +136,26 @@ const ServiceRequest = (() => {
         }
     }
 
-    async function getRequestById(id) {
-        const response = await fetch(`${API_BASE}/${id}`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Không thể tải yêu cầu');
-        return await response.json();
-    }
+    // ==================== Permissions ====================
 
-    async function createRequest(data) {
-        const response = await fetch(`${API_BASE}/my`, {
-            method: 'POST',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify(data)
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Không thể tạo yêu cầu');
-        }
-        return await response.json();
-    }
-
-    async function takeOwnership(id) {
-        const response = await fetch(`${API_BASE}/${id}/take-ownership`, {
-            method: 'PATCH',
-            headers: window.Auth.getAuthHeaders()
-        });
-        if (!response.ok) throw new Error('Không thể nhận xử lý');
-        return await response.json();
-    }
-
-    async function completeRequest(id, resolution) {
-        const response = await fetch(`${API_BASE}/${id}/complete`, {
-            method: 'PATCH',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify({ resolution })
-        });
-        if (!response.ok) throw new Error('Không thể hoàn thành yêu cầu');
-        return await response.json();
-    }
-
-    async function confirmCompletion(id) {
-        const response = await fetch(`${API_BASE}/${id}/confirm`, {
-            method: 'PATCH',
-            headers: window.Auth.getAuthHeaders()
-        });
-        if (!response.ok) throw new Error('Không thể xác nhận hoàn thành');
-        return await response.json();
-    }
-
-    async function reopenRequest(id, reason) {
-        const response = await fetch(`${API_BASE}/${id}/reopen`, {
-            method: 'PATCH',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify({ reason })
-        });
-        if (!response.ok) throw new Error('Không thể mở lại yêu cầu');
-        return await response.json();
-    }
-
-    async function getComments(requestId) {
-        const response = await fetch(`${API_BASE}/${requestId}/comments`, { headers: window.Auth.getAuthHeaders() });
-        if (!response.ok) throw new Error('Không thể tải bình luận');
-        return await response.json();
-    }
-
-    async function addComment(requestId, body, isInternal) {
-        const response = await fetch(`${API_BASE}/${requestId}/comments`, {
-            method: 'POST',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify({ body, internal: isInternal })
-        });
-        if (!response.ok) throw new Error('Không thể thêm bình luận');
-        return await response.json();
-    }
-
-    async function submitRequest(data) {
-        const response = await fetch(API_BASE, {
-            method: 'POST',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify(data)
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Không thể gửi yêu cầu');
-        }
-        return await response.json();
-    }
-
-    async function updateStatus(id, status) {
-        const response = await fetch(`${API_BASE}/${id}/status`, {
-            method: 'PATCH',
-            headers: window.Auth.getAuthHeaders(),
-            body: JSON.stringify({ status })
-        });
-        if (!response.ok) throw new Error('Không thể cập nhật trạng thái');
-        return await response.json();
+    function permissions(request) {
+        const me = window.Auth?.getCurrentUser?.();
+        const isIt = !!window.Auth?.isItOperator?.();
+        const isItLead = !!window.Auth?.isItLead?.();
+        const isRequester = !!me && request.requesterUsername?.toLowerCase() === me.username?.toLowerCase();
+        const s = request.status;
+        return {
+            canEdit: (isIt && OPEN_STATUSES.includes(s)) || (isRequester && ['SUBMITTED', 'PENDING_APPROVAL'].includes(s)),
+            canApprove: isItLead && s === 'PENDING_APPROVAL',
+            canTake: isIt && !request.assignedTo && ['SUBMITTED', 'APPROVED'].includes(s),
+            canAssign: isIt && ['SUBMITTED', 'APPROVED', 'IN_PROGRESS'].includes(s),
+            canComplete: isIt && s === 'IN_PROGRESS',
+            canCancel: (isIt || isRequester) && OPEN_STATUSES.includes(s),
+            canConfirm: isRequester && s === 'COMPLETED',
+            canReopen: isRequester && ['COMPLETED', 'CLOSED'].includes(s),
+            canDelete: !!window.Auth?.isAdmin?.(),
+            canInternal: !!window.Auth?.seesAll?.()
+        };
     }
 
     // ==================== Rendering ====================
@@ -211,7 +174,7 @@ const ServiceRequest = (() => {
 
         container.innerHTML = Object.entries(grouped).map(([category, services]) => `
             <div class="sr-category-section">
-                <h4 class="sr-category-title">${category}</h4>
+                <h4 class="sr-category-title">${escapeHtml(category)}</h4>
                 <div class="sr-catalog-grid">
                     ${services.map(service => `
                         <div class="sr-catalog-item" data-id="${service.id}">
@@ -221,6 +184,7 @@ const ServiceRequest = (() => {
                                 <p>${escapeHtml(service.description || '').substring(0, 80)}${service.description?.length > 80 ? '...' : ''}</p>
                                 <span class="sr-item-sla">
                                     SLA: ${formatSla(service.responseSlaMinutes)} - ${formatSla(service.resolutionSlaMinutes)}
+                                    ${service.requiresApproval ? ' · Cần phê duyệt' : ''}
                                 </span>
                             </div>
                         </div>
@@ -239,28 +203,19 @@ const ServiceRequest = (() => {
             return;
         }
 
-        const statusLabels = {
-            'SUBMITTED': { label: 'Đã gửi', class: 'submitted' },
-            'PENDING_APPROVAL': { label: 'Chờ phê duyệt', class: 'pending' },
-            'APPROVED': { label: 'Đã duyệt', class: 'approved' },
-            'IN_PROGRESS': { label: 'Đang xử lý', class: 'in-progress' },
-            'COMPLETED': { label: 'Hoàn thành', class: 'completed' },
-            'REJECTED': { label: 'Từ chối', class: 'rejected' },
-            'CANCELLED': { label: 'Hủy', class: 'cancelled' }
-        };
-
         container.innerHTML = requestsList.map(sr => {
-            const status = statusLabels[sr.status] || statusLabels['SUBMITTED'];
+            const status = STATUS_LABELS[sr.status] || { label: sr.status, class: '' };
             return `
                 <div class="sr-card">
                     <div class="sr-card-header">
-                        <span class="sr-number">${sr.requestNumber}</span>
+                        <span class="sr-number">${escapeHtml(sr.requestNumber)}</span>
                         <span class="sr-status ${status.class}">${status.label}</span>
                     </div>
                     <h4 class="sr-title">${escapeHtml(sr.title)}</h4>
                     <p class="sr-service">${escapeHtml(sr.serviceName || 'Yêu cầu chung')}</p>
                     <div class="sr-meta">
-                        <span>${sr.requesterName || sr.requesterUsername || 'Không rõ'}</span>
+                        <span>${escapeHtml(nameOf(sr.requesterUsername) || sr.requesterName || 'Không rõ')}</span>
+                        <span>${sr.assignedTo ? 'Phụ trách: ' + escapeHtml(nameOf(sr.assignedTo)) : 'Chưa gán'}</span>
                         <span>${formatDate(sr.createdAt)}</span>
                     </div>
                     <div class="sr-actions">
@@ -271,73 +226,78 @@ const ServiceRequest = (() => {
         }).join('');
     }
 
-    // ==================== Modal ====================
+    // ==================== Detail ====================
 
-    function selectService(serviceId) {
-        const service = catalog.find(s => s.id === serviceId);
-        if (!service) return;
-
-        currentService = service;
-        document.getElementById('sr-service-name').textContent = service.name;
-        document.getElementById('sr-service-id').value = service.id;
-        document.getElementById('sr-form-title').value = service.name;
-        document.getElementById('sr-form-description').value = service.description || '';
-        openModal();
-    }
-
-    let currentService = null;
     let currentRequest = null;
 
-    async function viewRequest(id) {
+    let departmentNames = {};
+
+    async function loadDepartmentNames() {
+        if (Object.keys(departmentNames).length) return;
         try {
-            currentRequest = await getRequestById(id);
-            const comments = await getComments(id);
-            showRequestDetail(currentRequest, comments);
+            const depts = await api('/api/departments');
+            departmentNames = Object.fromEntries((depts || []).map(d => [d.code, d.name]));
         } catch (error) {
-            Toast.show('Không thể tải thông tin yêu cầu', 'error');
+            // non-fatal: fall back to the code
         }
     }
 
+    async function viewRequest(id) {
+        try {
+            await loadDepartmentNames();
+            currentRequest = await api(`${API_BASE}/${id}`);
+            const comments = await api(`${API_BASE}/${id}/comments`);
+            showRequestDetail(currentRequest, comments);
+        } catch (error) {
+            Toast.show(error.message || 'Không thể tải thông tin yêu cầu', 'error');
+        }
+    }
+
+    function actionModal(id, kind, title, body, confirmLabel, confirmClass, handler) {
+        return `
+            <div id="sr-${kind}-modal-${id}" class="incident-action-modal hidden">
+                <div class="modal-content">
+                    <h4>${title}</h4>
+                    ${body}
+                    <div class="modal-actions">
+                        <button class="secondary" onclick="ServiceRequest.toggleActionModal('${kind}', ${id}, false)">Hủy</button>
+                        <button class="${confirmClass}" onclick="ServiceRequest.${handler}(${id})">${confirmLabel}</button>
+                    </div>
+                </div>
+            </div>`;
+    }
+
     function showRequestDetail(request, comments = []) {
-        const statusLabels = {
-            'SUBMITTED': 'Đã gửi',
-            'PENDING_APPROVAL': 'Chờ phê duyệt',
-            'APPROVED': 'Đã duyệt',
-            'IN_PROGRESS': 'Đang xử lý',
-            'COMPLETED': 'Hoàn thành',
-            'CLOSED': 'Đã đóng',
-            'REJECTED': 'Từ chối',
-            'CANCELLED': 'Hủy bỏ'
-        };
-
-        const currentUser = window.Auth?.getCurrentUser?.();
-        // Khớp ServiceRequestAuthorization: xử lý = TRUONG_PHONG/NHAN_VIEN phòng IT; xác nhận/mở lại = người yêu cầu.
-        const isITStaff = currentUser && ['TRUONG_PHONG', 'NHAN_VIEN'].includes(currentUser.role) && currentUser.departmentCode === 'IT';
-        const isAssignedTo = request.assignedTo === currentUser?.username;
-        const isRequester = request.requesterUsername === currentUser?.username;
-
-        const canTake = isITStaff && !request.assignedTo && ['SUBMITTED', 'PENDING_APPROVAL', 'APPROVED'].includes(request.status);
-        const canComplete = isITStaff && ['IN_PROGRESS', 'APPROVED'].includes(request.status);
-        const canConfirm = isRequester && request.status === 'COMPLETED';
-        const canReopen = isRequester && ['COMPLETED', 'CLOSED'].includes(request.status);
+        const p = permissions(request);
+        const status = STATUS_LABELS[request.status] || { label: request.status, class: '' };
+        const id = request.id;
 
         const container = document.getElementById('sr-detail-content');
         if (!container) return;
 
+        const btn = (show, cls, label, onclick) => show
+            ? `<button class="${cls}" onclick="ServiceRequest.${onclick}">${label}</button>` : '';
+
         container.innerHTML = `
             <div class="sr-detail-header">
                 <div>
-                    <span class="sr-number">${request.requestNumber}</span>
+                    <span class="sr-number">${escapeHtml(request.requestNumber)}</span>
                     <h3>${escapeHtml(request.title)}</h3>
                 </div>
-                <button class="ghost" onclick="ServiceRequest.closeDetail()">Đóng</button>
             </div>
 
             <div class="sr-detail-status">
-                <span class="sr-status ${request.status?.toLowerCase()}">${statusLabels[request.status] || request.status}</span>
-                ${request.serviceName ? `<span>Dịch vụ: ${request.serviceName}</span>` : ''}
-                <span>Người phụ trách: ${request.assignedTo || 'Chưa gán'}</span>
+                <span class="sr-status ${status.class}">${status.label}</span>
+                ${request.serviceName ? `<span><span class="muted">Dịch vụ:</span> ${escapeHtml(request.serviceName)}</span>` : ''}
+                <span><span class="muted">Người phụ trách:</span> ${escapeHtml(nameOf(request.assignedTo) || 'Chưa gán')}</span>
             </div>
+
+            ${request.approvalNotes ? `
+            <div class="sr-resolution-box">
+                <h4>${request.status === 'REJECTED' ? 'Lý do từ chối' : 'Ghi chú phê duyệt'}</h4>
+                <p>${escapeHtml(request.approvalNotes)}</p>
+            </div>
+            ` : ''}
 
             ${request.resolution ? `
             <div class="sr-resolution-box">
@@ -352,70 +312,61 @@ const ServiceRequest = (() => {
             </div>
 
             <!-- Action Buttons -->
-            <div class="sr-detail-actions">
-                ${canTake ? `
-                    <button class="primary" onclick="ServiceRequest.handleTakeOwnership(${request.id})">
-                        Nhận yêu cầu
-                    </button>
-                ` : ''}
-                ${canComplete ? `
-                    <button class="primary" onclick="ServiceRequest.openCompleteModal(${request.id})">
-                        Hoàn thành
-                    </button>
-                ` : ''}
-                ${canConfirm ? `
-                    <button class="success" onclick="ServiceRequest.handleConfirm(${request.id})">
-                        Xác nhận hoàn thành
-                    </button>
-                ` : ''}
-                ${canReopen ? `
-                    <button class="warning" onclick="ServiceRequest.openReopenModal(${request.id})">
-                        Yêu cầu mở lại
-                    </button>
-                ` : ''}
+            <div class="sr-detail-actions button-row">
+                ${btn(p.canApprove, 'success', 'Phê duyệt', `toggleActionModal('approve', ${id}, true)`)}
+                ${btn(p.canApprove, 'danger', 'Từ chối', `toggleActionModal('reject', ${id}, true)`)}
+                ${btn(p.canTake, 'primary', 'Nhận yêu cầu', `handleTakeOwnership(${id})`)}
+                ${btn(p.canAssign, 'secondary', 'Phân công', `openAssignModal(${id})`)}
+                ${btn(p.canComplete, 'primary', 'Hoàn thành', `toggleActionModal('complete', ${id}, true)`)}
+                ${btn(p.canConfirm, 'success', 'Xác nhận hoàn thành', `handleConfirm(${id})`)}
+                ${btn(p.canReopen, 'warning', 'Yêu cầu mở lại', `toggleActionModal('reopen', ${id}, true)`)}
+                ${btn(p.canEdit, 'ghost', 'Sửa', `openEditModal(${id})`)}
+                ${btn(p.canCancel, 'warning', 'Hủy yêu cầu', `handleCancel(${id})`)}
+                ${btn(p.canDelete, 'danger', 'Xóa', `handleDelete(${id})`)}
             </div>
 
-            <!-- Complete Modal -->
-            <div id="complete-modal-${request.id}" class="sr-action-modal hidden">
-                <div class="modal-content">
-                    <h4>Hoàn thành yêu cầu</h4>
-                    <textarea id="complete-text-${request.id}" placeholder="Nhập mô tả giải pháp..." rows="4"></textarea>
-                    <div class="modal-actions">
-                        <button class="secondary" onclick="ServiceRequest.closeCompleteModal(${request.id})">Hủy</button>
-                        <button class="primary" onclick="ServiceRequest.handleComplete(${request.id})">Xác nhận</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Reopen Modal -->
-            <div id="reopen-modal-${request.id}" class="sr-action-modal hidden">
-                <div class="modal-content">
-                    <h4>Yêu cầu mở lại</h4>
-                    <textarea id="reopen-text-${request.id}" placeholder="Lý do mở lại..." rows="3"></textarea>
-                    <div class="modal-actions">
-                        <button class="secondary" onclick="ServiceRequest.closeReopenModal(${request.id})">Hủy</button>
-                        <button class="warning" onclick="ServiceRequest.handleReopen(${request.id})">Gửi yêu cầu</button>
-                    </div>
-                </div>
-            </div>
+            ${actionModal(id, 'approve', 'Phê duyệt yêu cầu',
+                `<textarea id="sr-approve-text-${id}" placeholder="Ghi chú (không bắt buộc)..." rows="3"></textarea>`,
+                'Phê duyệt', 'success', 'handleApprove')}
+            ${actionModal(id, 'reject', 'Từ chối yêu cầu',
+                `<textarea id="sr-reject-text-${id}" placeholder="Lý do từ chối..." rows="3"></textarea>`,
+                'Từ chối', 'danger', 'handleReject')}
+            ${actionModal(id, 'assign', 'Phân công yêu cầu', `
+                    <label style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                        <span style="font-size: 0.85rem; font-weight: 600;">Chọn người phụ trách:</span>
+                        <select id="sr-assign-select-${id}" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+                            <option value="">-- Chọn nhân viên --</option>
+                        </select>
+                    </label>`,
+                'Phân công', 'primary', 'handleAssign')}
+            ${actionModal(id, 'complete', 'Hoàn thành yêu cầu',
+                `<textarea id="sr-complete-text-${id}" placeholder="Nhập mô tả giải pháp..." rows="4"></textarea>`,
+                'Xác nhận', 'primary', 'handleComplete')}
+            ${actionModal(id, 'reopen', 'Yêu cầu mở lại',
+                `<textarea id="sr-reopen-text-${id}" placeholder="Lý do mở lại..." rows="3"></textarea>`,
+                'Gửi yêu cầu', 'warning', 'handleReopen')}
 
             <!-- Comments Section -->
             <div class="sr-detail-section">
                 <h4>Ghi chú</h4>
                 <div class="add-comment-form">
-                    <textarea id="comment-text-${request.id}" placeholder="Nhập ghi chú..." rows="2"></textarea>
+                    <textarea id="sr-comment-text-${id}" placeholder="Nhập ghi chú..." rows="2"></textarea>
+                    ${p.canInternal ? `
                     <label class="checkbox-label">
-                        <input type="checkbox" id="comment-internal-${request.id}">
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="sr-comment-internal-${id}">
+                            <span class="toggle-slider"></span>
+                        </span>
                         Ghi chú nội bộ (chỉ IT nhìn thấy)
-                    </label>
-                    <button class="secondary btn-sm" onclick="ServiceRequest.handleAddComment(${request.id})">Thêm ghi chú</button>
+                    </label>` : ''}
+                    <button class="secondary btn-sm" onclick="ServiceRequest.handleAddComment(${id})">Thêm ghi chú</button>
                 </div>
                 <div class="comments-list">
                     ${comments.length === 0 ? '<p class="muted">Chưa có ghi chú nào</p>' : ''}
                     ${comments.map(c => `
                         <div class="comment-item ${c.visibility === 'INTERNAL' ? 'internal' : ''}">
                             <div class="comment-header">
-                                <span class="comment-author">${c.authorName || 'Hệ thống'}</span>
+                                <span class="comment-author">${escapeHtml(nameOf(c.authorUsername) || c.authorName || 'Hệ thống')}</span>
                                 <span class="comment-time">${formatDate(c.createdAt)}</span>
                                 ${c.visibility === 'INTERNAL' ? '<span class="comment-badge">Nội bộ</span>' : ''}
                             </div>
@@ -428,9 +379,9 @@ const ServiceRequest = (() => {
             <div class="sr-detail-section">
                 <h4>Thông tin</h4>
                 <div class="sr-info-grid">
-                    <div><span>Người yêu cầu:</span> ${request.requesterName || request.requesterUsername || 'N/A'}</div>
-                    <div><span>Phòng ban:</span> ${request.requesterDepartment || 'N/A'}</div>
-                    <div><span>Email:</span> ${request.requesterEmail || 'N/A'}</div>
+                    <div><span>Người yêu cầu:</span> ${escapeHtml(nameOf(request.requesterUsername) || request.requesterName || 'N/A')}</div>
+                    <div><span>Phòng ban:</span> ${escapeHtml(departmentNames[request.requesterDepartment] || request.requesterDepartment || 'N/A')}</div>
+                    <div><span>Email:</span> ${escapeHtml(request.requesterEmail || 'N/A')}</div>
                     <div><span>Ngày tạo:</span> ${formatDate(request.createdAt)}</div>
                     <div><span>Hạn:</span> ${request.slaResolutionAt ? formatDate(request.slaResolutionAt) : 'N/A'}</div>
                 </div>
@@ -438,99 +389,148 @@ const ServiceRequest = (() => {
         `;
 
         document.getElementById('sr-detail-modal')?.classList.remove('hidden');
+        document.body.classList.add('modal-open');
     }
 
     function closeDetail() {
         document.getElementById('sr-detail-modal')?.classList.add('hidden');
+        document.body.classList.remove('modal-open');
         currentRequest = null;
     }
 
-    function openCompleteModal(id) {
-        document.getElementById(`complete-modal-${id}`)?.classList.remove('hidden');
+    function toggleActionModal(kind, id, show) {
+        document.getElementById(`sr-${kind}-modal-${id}`)?.classList.toggle('hidden', !show);
     }
 
-    function closeCompleteModal(id) {
-        document.getElementById(`complete-modal-${id}`)?.classList.add('hidden');
-    }
-
-    function openReopenModal(id) {
-        document.getElementById(`reopen-modal-${id}`)?.classList.remove('hidden');
-    }
-
-    function closeReopenModal(id) {
-        document.getElementById(`reopen-modal-${id}`)?.classList.add('hidden');
-    }
-
-    async function handleTakeOwnership(id) {
+    // Same flow as Incident.openAssignModal: load IT staff first, then show the modal.
+    async function openAssignModal(id) {
         try {
-            await takeOwnership(id);
-            Toast.show('Đã nhận yêu cầu', 'success');
-            viewRequest(id);
+            const staff = await api('/api/users/engineers');
+            const select = document.getElementById(`sr-assign-select-${id}`);
+            if (select) {
+                select.innerHTML = '<option value="">-- Chọn nhân viên --</option>' + staff
+                    .map(u => `<option value="${escapeHtml(u.username)}" ${u.username === currentRequest?.assignedTo ? 'selected' : ''}>${escapeHtml(u.displayName || nameOf(u.username))}</option>`)
+                    .join('');
+            }
+            toggleActionModal('assign', id, true);
+        } catch (error) {
+            console.error('Error loading IT staff:', error);
+            Toast.show('Không thể tải danh sách nhân viên IT', 'error');
+        }
+    }
+
+    /** Run an action, then refresh detail (or close it) and the list. */
+    async function act(id, promise, successMsg, { close = false } = {}) {
+        try {
+            await promise;
+            Toast.show(successMsg, 'success');
+            if (close) closeDetail(); else viewRequest(id);
             loadRequests();
         } catch (error) {
             Toast.show(error.message, 'error');
         }
     }
 
-    async function handleComplete(id) {
-        const resolution = document.getElementById(`complete-text-${id}`)?.value?.trim();
-        try {
-            await completeRequest(id, resolution);
-            Toast.show('Đã hoàn thành yêu cầu', 'success');
-            closeCompleteModal(id);
-            viewRequest(id);
-            loadRequests();
-        } catch (error) {
-            Toast.show(error.message, 'error');
-        }
+    const textOf = (kind, id) => document.getElementById(`sr-${kind}-text-${id}`)?.value?.trim();
+
+    function handleApprove(id) {
+        act(id, api(`${API_BASE}/${id}/approve`, 'PATCH', { notes: textOf('approve', id) }), 'Đã phê duyệt yêu cầu');
     }
 
-    async function handleConfirm(id) {
+    function handleReject(id) {
+        const reason = textOf('reject', id);
+        if (!reason) {
+            Toast.show('Vui lòng nhập lý do từ chối', 'error');
+            return;
+        }
+        act(id, api(`${API_BASE}/${id}/reject`, 'PATCH', { notes: reason }), 'Đã từ chối yêu cầu');
+    }
+
+    function handleAssign(id) {
+        const assignee = document.getElementById(`sr-assign-select-${id}`)?.value;
+        if (!assignee) {
+            Toast.show('Vui lòng chọn người phụ trách', 'error');
+            return;
+        }
+        act(id, api(`${API_BASE}/${id}/assign`, 'PATCH', { assignee }), 'Đã phân công yêu cầu');
+    }
+
+    function handleTakeOwnership(id) {
+        act(id, api(`${API_BASE}/${id}/take-ownership`, 'PATCH'), 'Đã nhận yêu cầu');
+    }
+
+    function handleComplete(id) {
+        act(id, api(`${API_BASE}/${id}/complete`, 'PATCH', { resolution: textOf('complete', id) }), 'Đã hoàn thành yêu cầu');
+    }
+
+    function handleConfirm(id) {
         if (!confirm('Xác nhận hoàn thành yêu cầu này?')) return;
-        try {
-            await confirmCompletion(id);
-            Toast.show('Đã xác nhận và đóng yêu cầu', 'success');
-            closeDetail();
-            loadRequests();
-        } catch (error) {
-            Toast.show(error.message, 'error');
-        }
+        act(id, api(`${API_BASE}/${id}/confirm`, 'PATCH'), 'Đã xác nhận và đóng yêu cầu', { close: true });
     }
 
-    async function handleReopen(id) {
-        const reason = document.getElementById(`reopen-text-${id}`)?.value?.trim();
-        try {
-            await reopenRequest(id, reason);
-            Toast.show('Đã yêu cầu mở lại', 'success');
-            closeReopenModal(id);
-            viewRequest(id);
-            loadRequests();
-        } catch (error) {
-            Toast.show(error.message, 'error');
-        }
+    function handleReopen(id) {
+        act(id, api(`${API_BASE}/${id}/reopen`, 'PATCH', { reason: textOf('reopen', id) }), 'Đã yêu cầu mở lại');
+    }
+
+    function handleCancel(id) {
+        if (!confirm('Hủy yêu cầu này?')) return;
+        act(id, api(`${API_BASE}/${id}/cancel`, 'PATCH'), 'Đã hủy yêu cầu');
+    }
+
+    function handleDelete(id) {
+        if (!confirm('Xóa vĩnh viễn yêu cầu này? Thao tác không thể hoàn tác.')) return;
+        act(id, api(`${API_BASE}/${id}`, 'DELETE'), 'Đã xóa yêu cầu', { close: true });
     }
 
     async function handleAddComment(id) {
-        const body = document.getElementById(`comment-text-${id}`)?.value?.trim();
-        const isInternal = document.getElementById(`comment-internal-${id}`)?.checked;
+        const body = textOf('comment', id);
+        const isInternal = document.getElementById(`sr-comment-internal-${id}`)?.checked || false;
         if (!body) {
             Toast.show('Vui lòng nhập ghi chú', 'error');
             return;
         }
         try {
-            await addComment(id, body, isInternal);
+            await api(`${API_BASE}/${id}/comments`, 'POST', { body, internal: isInternal });
             Toast.show('Đã thêm ghi chú', 'success');
-            document.getElementById(`comment-text-${id}`).value = '';
             viewRequest(id);
         } catch (error) {
             Toast.show(error.message, 'error');
         }
     }
 
-    function openCreateModal() {
-        currentService = null;
+    // ==================== Create / Edit Modal ====================
+
+    function selectService(serviceId) {
+        const service = catalog.find(s => s.id === serviceId);
+        if (!service) return;
+
         resetForm();
-        document.getElementById('sr-modal-title').textContent = 'Tạo Service Request';
+        document.getElementById('sr-modal-title').textContent = 'Tạo yêu cầu dịch vụ';
+        document.getElementById('sr-service-name').textContent = service.name;
+        document.getElementById('sr-service-id').value = service.id;
+        document.getElementById('sr-form-title').value = service.name;
+        document.getElementById('sr-form-description').value = service.description || '';
+        openModal();
+    }
+
+    function openCreateModal() {
+        resetForm();
+        document.getElementById('sr-modal-title').textContent = 'Tạo yêu cầu dịch vụ';
+        document.getElementById('sr-service-name').textContent = 'Yêu cầu chung (không thuộc danh mục)';
+        openModal();
+    }
+
+    function openEditModal(id) {
+        const request = currentRequest;
+        if (!request || request.id !== id) return;
+        resetForm();
+        editingId = id;
+        document.getElementById('sr-modal-title').textContent = `Sửa yêu cầu ${request.requestNumber}`;
+        document.getElementById('sr-service-name').textContent = request.serviceName || 'Yêu cầu chung';
+        document.getElementById('sr-form-title').value = request.title || '';
+        document.getElementById('sr-form-description').value = request.description || '';
+        const submitBtn = document.getElementById('sr-submit-btn');
+        if (submitBtn) submitBtn.textContent = 'Lưu thay đổi';
         openModal();
     }
 
@@ -546,54 +546,63 @@ const ServiceRequest = (() => {
         const modal = document.getElementById('sr-modal');
         if (modal) {
             modal.classList.add('hidden');
-            document.body.classList.remove('modal-open');
+            // keep scroll lock while the detail modal is still open underneath
+            if (document.getElementById('sr-detail-modal')?.classList.contains('hidden') !== false) {
+                document.body.classList.remove('modal-open');
+            }
         }
-        currentService = null;
         resetForm();
     }
 
     function resetForm() {
-        const form = document.getElementById('sr-form');
-        if (form) form.reset();
+        document.getElementById('sr-form')?.reset();
+        // form.reset() does not clear a hidden input set via .value
+        const serviceId = document.getElementById('sr-service-id');
+        if (serviceId) serviceId.value = '';
+        const submitBtn = document.getElementById('sr-submit-btn');
+        if (submitBtn) submitBtn.textContent = 'Gửi yêu cầu';
+        editingId = null;
     }
 
     async function submitRequestForm() {
         if (isSubmitting) return;
-        isSubmitting = true;
 
+        const data = {
+            title: document.getElementById('sr-form-title').value.trim(),
+            description: document.getElementById('sr-form-description').value.trim()
+        };
+        if (!data.title) {
+            Toast.show('Vui lòng nhập tiêu đề', 'error');
+            return;
+        }
+
+        isSubmitting = true;
         const submitBtn = document.getElementById('sr-submit-btn');
+        const idleLabel = submitBtn?.textContent;
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.textContent = 'Đang gửi...';
         }
 
-        const data = {
-            title: document.getElementById('sr-form-title').value.trim(),
-            description: document.getElementById('sr-form-description').value.trim(),
-            serviceId: parseInt(document.getElementById('sr-service-id').value) || null
-        };
-
-        if (!data.title) {
-            Toast.show('Vui lòng nhập tiêu đề', 'error');
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Gửi yêu cầu';
-            }
-            isSubmitting = false;
-            return;
-        }
-
+        const id = editingId;
         try {
-            await submitRequest(data);
-            Toast.show('Đã gửi yêu cầu thành công!', 'success');
+            if (id) {
+                await api(`${API_BASE}/${id}`, 'PUT', data);
+                Toast.show('Đã cập nhật yêu cầu', 'success');
+            } else {
+                data.serviceId = parseInt(document.getElementById('sr-service-id').value) || null;
+                await api(API_BASE, 'POST', data);
+                Toast.show('Đã gửi yêu cầu thành công!', 'success');
+            }
             closeModal();
             loadRequests();
+            if (id) viewRequest(id);
         } catch (error) {
             Toast.show(error.message, 'error');
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Gửi yêu cầu';
+                if (submitBtn.textContent === 'Đang gửi...') submitBtn.textContent = idleLabel;
             }
             isSubmitting = false;
         }
@@ -635,17 +644,21 @@ const ServiceRequest = (() => {
         loadRequests,
         viewRequest,
         openCreateModal,
+        openEditModal,
         closeModal,
         closeDetail,
+        toggleActionModal,
+        openAssignModal,
+        handleApprove,
+        handleReject,
+        handleAssign,
         handleTakeOwnership,
         handleComplete,
         handleConfirm,
         handleReopen,
-        handleAddComment,
-        openCompleteModal,
-        closeCompleteModal,
-        openReopenModal,
-        closeReopenModal
+        handleCancel,
+        handleDelete,
+        handleAddComment
     };
 })();
 

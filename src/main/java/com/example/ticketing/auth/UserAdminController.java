@@ -115,6 +115,25 @@ public class UserAdminController {
                 .toList();
     }
 
+    /**
+     * Danh bạ tối giản (username -> họ tên) để mọi màn hình hiển thị họ tên thay vì tên đăng nhập.
+     * Chỉ trả trường công khai; không có email, role hay trạng thái tài khoản.
+     */
+    @GetMapping("/directory")
+    @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG', 'NHAN_VIEN')")
+    public List<java.util.Map<String, String>> directory() {
+        return userAccountRepository.findAll().stream()
+                .map(u -> {
+                    java.util.Map<String, String> entry = new java.util.HashMap<>();
+                    entry.put("username", u.getUsername());
+                    entry.put("displayName", u.getDisplayName());
+                    entry.put("avatarUrl", u.getAvatarUrl());
+                    entry.put("departmentCode", u.getDepartment() != null ? u.getDepartment().getCode() : null);
+                    return entry;
+                })
+                .toList();
+    }
+
     @GetMapping("/by-department/{departmentId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'GIAM_DOC', 'TRUONG_PHONG')")
     public List<UserDtos.UserResponse> listUsersByDepartment(

@@ -52,6 +52,7 @@ class JwtAuthenticationFilterRoleSourceTest {
         alice.setUsername("alice");
         alice.setRole(UserRole.Role.NHAN_VIEN);
         alice.setEnabled(true);
+        alice.setPasswordMustChange(false);
         when(users.findByUsername("alice")).thenReturn(Optional.of(alice));
         when(blacklist.isBlacklisted(anyString())).thenReturn(false);
         when(blacklist.isUserRevoked("alice")).thenReturn(false);

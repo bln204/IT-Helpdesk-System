@@ -195,7 +195,7 @@ export const loadManagersForDepartment = async (selectedId = null) => {
       
       const option = document.createElement('option');
       option.value = user.id;
-      option.textContent = `${user.displayName || user.username} (${user.username})`;
+      option.textContent = user.displayName || user.username;
       if (selectedId && user.id === selectedId) {
         option.selected = true;
       }

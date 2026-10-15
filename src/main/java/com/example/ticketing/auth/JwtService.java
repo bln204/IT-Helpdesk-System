@@ -156,6 +156,7 @@ public class JwtService {
     public Claims parseClaims(String token) {
         return Jwts.parser()
             .verifyWith(Keys.hmacShaKeyFor(secret))
+            .requireIssuer(issuer)
             .build()
             .parseSignedClaims(token)
             .getPayload();

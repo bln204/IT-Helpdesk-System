@@ -41,6 +41,9 @@ public class SecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     @org.springframework.beans.factory.annotation.Value("${app.security.swagger-public:false}")
     private boolean swaggerPublic;
 
@@ -97,17 +100,17 @@ public class SecurityConfig {
                             log.error("AUTH ENTRY POINT: {} {} - {}", request.getMethod(), request.getRequestURI(),
                                     authException.getMessage());
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType("application/json");
-                            response.getWriter().write(
-                                    "{\"error\":\"Unauthorized\",\"message\":\"" + authException.getMessage() + "\"}");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(JSON.writeValueAsString(
+                                    java.util.Map.of("error", "Unauthorized", "message", "Unauthorized")));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             log.error("ACCESS DENIED: {} {} - {}", request.getMethod(), request.getRequestURI(),
                                     accessDeniedException.getMessage());
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"error\":\"Access denied\",\"message\":\""
-                                    + accessDeniedException.getMessage() + "\"}");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write(JSON.writeValueAsString(
+                                    java.util.Map.of("error", "Access denied", "message", "Access denied")));
                         }))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> {

@@ -478,7 +478,7 @@ const DashboardModule = (() => {
                     <div class="ticket-title">${ticket.title}</div>
                     <div class="ticket-meta">
                         <span>📅 ${formatDate(ticket.createdAt)}</span>
-                        <span>👤 ${ticket.requesterName || ticket.requesterUsername || 'N/A'}</span>
+                        <span>👤 ${(window.displayNameOf ? window.displayNameOf(ticket.requesterUsername || ticket.requesterName) : (ticket.requesterName || ticket.requesterUsername)) || 'N/A'}</span>
                     </div>
                 </div>
             </li>

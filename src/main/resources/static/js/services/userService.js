@@ -51,12 +51,10 @@ export const updatePendingBadge = (count) => {
 export const loadUserAvatarMap = async () => {
   userAvatarMap.clear();
   userAvatarReady = false;
-  // Load for IT Staff and users who can manage users. auth.js does not export canManageUsers,
-  // so importing it from there threw and silently aborted the startup name loading in app.js.
-  if (!canManageUsers() && !isITStaff()) return;
   try {
-    const data = await request('/api/users?page=0&size=200');
-    data.content.forEach((user) => {
+    // Directory is open to every role so all screens can show full names instead of usernames.
+    const data = await request('/api/users/directory');
+    data.forEach((user) => {
       const entry = {
         avatarUrl: user.avatarUrl,
         displayName: user.displayName,
@@ -94,6 +92,9 @@ export const getDisplayName = (value) => {
   }
   return formatName(value);
 };
+
+// Non-module scripts (incident, problem, change, asset, service request) use this global.
+window.displayNameOf = getDisplayName;
 
 export const getUserAvatarMap = () => userAvatarMap;
 export const setUserAvatarMap = (map) => { userAvatarMap = map; };
@@ -216,6 +217,8 @@ export const loadAdminUsers = async () => {
       params.append('search', userSearch.value.trim());
     }
     const data = await request(`/api/users?${params.toString()}`);
+    // Khoá đăng nhập do sai mật khẩu nằm trong RAM, không có trong /api/users.
+    window.loginLocks = isAdmin() ? await request('/api/admin/users/login-locks').catch(() => ({})) : {};
     if (!adminUsers) return;
     adminUsers.innerHTML = '';
 
@@ -245,7 +248,7 @@ export const loadAdminUsers = async () => {
 
     data.content.forEach((user) => {
       const row = document.createElement('tr');
-      const deptInfo = user.departmentCode ? ` (${user.departmentCode})` : ' (—)';
+      const deptInfo = user.departmentName || user.departmentCode || '—';
 
       let statusBadge = '';
       let statusClass = '';
@@ -257,6 +260,9 @@ export const loadAdminUsers = async () => {
         statusClass = 'status-pending';
       } else if (!user.enabled) {
         statusBadge = 'Vô hiệu hoá';
+        statusClass = 'status-disabled';
+      } else if (isLoginLocked(user)) {
+        statusBadge = 'Khoá đăng nhập';
         statusClass = 'status-disabled';
       } else {
         statusBadge = 'Hoạt động';
@@ -423,7 +429,7 @@ export const loadDeleteRequests = async () => {
     deleteRequests.forEach((user) => {
       const row = document.createElement('tr');
       const deptInfo = user.departmentCode || '—';
-      const requestedBy = user.createdBy || '—';
+      const requestedBy = user.createdBy ? getDisplayName(user.createdBy) : '—';
 
       let actionHtml = '';
       if (isAdmin()) {
@@ -513,7 +519,7 @@ export const selectUser = async (user) => {
   }
   if (userDetailHeader) {
     const deptInfo = user.departmentName ? ` - ${user.departmentName}` : '';
-    userDetailHeader.textContent = `${formatName(user.username)} (${formatRole(user.role)}${deptInfo})`;
+    userDetailHeader.textContent = `${user.displayName || getDisplayName(user.username)} (${formatRole(user.role)}${deptInfo})`;
   }
   
   const userDisplayName = document.getElementById('user-display-name');
@@ -772,7 +778,15 @@ export const applyUserDetailControls = () => {
   if (userDelete) {
     userDelete.disabled = !canDelete;
   }
+
+  const userUnlockLogin = document.getElementById('user-unlock-login');
+  if (userUnlockLogin) {
+    userUnlockLogin.classList.toggle('hidden', !(isAdmin() && isLoginLocked(selectedUser)));
+  }
 };
+
+export const isLoginLocked = (user) =>
+  Boolean(user && window.loginLocks?.[String(user.username).trim().toLowerCase()]);
 
 export const renderUserAuditPage = () => {
   const userAudit = document.getElementById('user-audit');
@@ -792,7 +806,7 @@ export const renderUserAuditPage = () => {
       const actionLabel = formatAuditAction(entry.action);
       const actorRoleLabel = formatRole(entry.actorRole);
       const when = entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : 'không rõ thời gian';
-      item.textContent = `${when} • ${actionLabel} bởi ${entry.actorUsername} (${actorRoleLabel})`;
+      item.textContent = `${when} • ${actionLabel} bởi ${getDisplayName(entry.actorUsername)} (${actorRoleLabel})`;
       userAudit.appendChild(item);
     });
   }
@@ -1012,6 +1026,7 @@ const formatAuditAction = (action) => {
     USER_ENABLED: 'Kích hoạt người dùng',
     ROLE_CHANGED: 'Thay đổi vai trò',
     PROFILE_UPDATED: 'Cập nhật hồ sơ',
+    LOGIN_UNLOCKED: 'Mở khoá đăng nhập',
   };
   return AUDIT_ACTION_LABELS[upper] || formatName(action.replace(/_/g, ' '));
 };

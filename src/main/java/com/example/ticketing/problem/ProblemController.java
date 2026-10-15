@@ -467,7 +467,7 @@ public class ProblemController {
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
         log.error("Internal server error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Đã xảy ra lỗi nội bộ: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     // ==================== DTOs ====================

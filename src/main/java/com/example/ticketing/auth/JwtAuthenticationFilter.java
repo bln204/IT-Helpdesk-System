@@ -23,6 +23,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtBlacklistService jwtBlacklistService;
     private final UserAccountRepository userAccountRepository;
 
+    /** Endpoint vẫn dùng được khi user phải đổi mật khẩu (spec auth-foundation §3.3). */
+    private static final java.util.Set<String> PASSWORD_CHANGE_ALLOWED = java.util.Set.of(
+        "POST /api/auth/logout",
+        "GET /api/users/me",
+        "GET /api/users/me/status",
+        "POST /api/users/me/force-password-change",
+        "PATCH /api/users/me/password"
+    );
+
     public JwtAuthenticationFilter(
         JwtService jwtService, 
         JwtBlacklistService jwtBlacklistService,
@@ -97,9 +106,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
                 
-                // NOTE: passwordMustChange check is handled at the frontend level via login response
-                // The JWT is valid, user is authenticated. The frontend will show a modal
-                // prompting user to change their password. We don't block API access here.
+                // Mật khẩu tạm: chỉ cho gọi các endpoint đổi mật khẩu/đăng xuất (spec auth-foundation §3.3).
+                // Body có passwordMustChange=true để static/js/core/api.js tự mở modal đổi mật khẩu.
+                if (user.isPasswordMustChange()
+                        && !PASSWORD_CHANGE_ALLOWED.contains(request.getMethod() + " " + request.getRequestURI())) {
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"error\":\"PASSWORD_CHANGE_REQUIRED\",\"errorCode\":\"PASSWORD_CHANGE_REQUIRED\","
+                        + "\"message\":\"Bạn cần đổi mật khẩu trước khi tiếp tục.\",\"passwordMustChange\":true}");
+                    return;
+                }
                 
                 // Check if password was changed after token was issued
                 if (user != null && user.getPasswordChangedAt() != null) {

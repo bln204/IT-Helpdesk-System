@@ -171,7 +171,13 @@ public class ServiceRequestController {
             Authentication authentication) {
         log.info("PUT /api/service-requests/{}", id);
         ActorContext actor = actor(authentication);
-        ActorTiers.require(authz.canProcess(actor), "Chỉ nhân viên IT được xử lý yêu cầu dịch vụ.");
+        ServiceRequest existing = serviceRequestService.getRequestById(id);
+        // Requester may still edit while nobody has picked the request up.
+        boolean requesterEditable = authz.isRequester(actor, existing)
+                && (existing.getStatus() == ServiceRequest.ServiceStatus.SUBMITTED
+                        || existing.getStatus() == ServiceRequest.ServiceStatus.PENDING_APPROVAL);
+        ActorTiers.require(authz.canProcess(actor) || requesterEditable,
+                "Chỉ nhân viên IT hoặc người yêu cầu (khi chưa xử lý) được sửa yêu cầu dịch vụ.");
 
         ServiceRequest updates = new ServiceRequest();
         updates.setTitle(request.getTitle());
@@ -335,7 +341,7 @@ public class ServiceRequestController {
     public ResponseEntity<ErrorResponse> handleNullPointer(NullPointerException ex) {
         log.error("NullPointerException: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -358,7 +364,7 @@ public class ServiceRequestController {
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
         log.error("General error: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi không xác định: " + ex.getMessage()));
+                .body(new ErrorResponse("INTERNAL_ERROR", "Lỗi hệ thống. Vui lòng thử lại sau."));
     }
 
     /**
@@ -424,6 +430,20 @@ public class ServiceRequestController {
         ServiceRequest updated = serviceRequestService.confirmCompletion(id, authentication.getName());
 
         return ResponseEntity.ok(ServiceRequestDto.fromEntity(updated));
+    }
+
+    /**
+     * Hủy request: người yêu cầu hoặc nhân viên IT.
+     * PATCH /api/service-requests/{id}/cancel
+     */
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<ServiceRequestDto> cancelRequest(@PathVariable Long id, Authentication authentication) {
+        log.info("PATCH /api/service-requests/{}/cancel - by: {}", id, authentication.getName());
+        ActorContext actor = actor(authentication);
+        ActorTiers.require(authz.canProcess(actor) || authz.isRequester(actor, serviceRequestService.getRequestById(id)),
+                "Chỉ người yêu cầu hoặc nhân viên IT được hủy yêu cầu dịch vụ.");
+        return ResponseEntity.ok(ServiceRequestDto.fromEntity(
+                serviceRequestService.cancelRequest(id, authentication.getName())));
     }
 
     /**
@@ -594,9 +614,19 @@ public class ServiceRequestController {
         private Boolean billable;
         private java.time.LocalDateTime completedAt;
         private java.time.LocalDateTime createdAt;
+        private String requesterEmail;
+        private String requesterDepartment;
+        private String resolution;
+        private String approvedBy;
+        private String approvalNotes;
 
         public static ServiceRequestDto fromEntity(ServiceRequest sr) {
             ServiceRequestDto dto = new ServiceRequestDto();
+            dto.requesterEmail = sr.getRequesterEmail();
+            dto.requesterDepartment = sr.getRequesterDepartment();
+            dto.resolution = sr.getResolution();
+            dto.approvedBy = sr.getApprovedBy();
+            dto.approvalNotes = sr.getApprovalNotes();
             dto.setId(sr.getId());
             dto.setRequestNumber(sr.getRequestNumber());
             dto.setServiceId(sr.getServiceId());
@@ -618,6 +648,11 @@ public class ServiceRequestController {
             return dto;
         }
 
+        public String getRequesterEmail() { return requesterEmail; }
+        public String getRequesterDepartment() { return requesterDepartment; }
+        public String getResolution() { return resolution; }
+        public String getApprovedBy() { return approvedBy; }
+        public String getApprovalNotes() { return approvalNotes; }
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
         public String getRequestNumber() { return requestNumber; }

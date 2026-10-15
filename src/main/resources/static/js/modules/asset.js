@@ -3,6 +3,8 @@
  */
 const AssetManagement = (() => {
     'use strict';
+    // Họ tên từ danh bạ (userService.getDisplayName); fallback về giá trị gốc khi chưa nạp.
+    const nameOf = (u) => (u && window.displayNameOf ? window.displayNameOf(u) : u) || '';
 
     const API_BASE = '/api/assets';
     const ASSET_TYPE_LABELS = {
@@ -507,7 +509,7 @@ const AssetManagement = (() => {
         console.log('openCreateModal called');
         currentAsset = null;
         activeTab = 'basic';
-        document.getElementById('asset-modal-title').textContent = 'New Asset';
+        document.getElementById('asset-modal-title').textContent = 'Thêm thiết bị';
         document.getElementById('asset-modal').classList.remove('detail-mode');
         renderCreateForm();
         document.getElementById('asset-modal').classList.remove('hidden');
@@ -616,11 +618,11 @@ const AssetManagement = (() => {
             </div>
 
             <div class="detail-actions">
-                <button class="btn-secondary asset-edit-btn">
-                    <span>✏️</span> Edit
+                <button class="btn-secondary asset-edit-btn ${window.Auth?.isItOperator?.() ? '' : 'hidden'}">
+                    <span>✏️</span> Sửa
                 </button>
-                <button class="btn-danger asset-delete-btn">
-                    <span>🗑️</span> Delete
+                <button class="btn-danger asset-delete-btn ${window.Auth?.isAdmin?.() ? '' : 'hidden'}">
+                    <span>🗑️</span> Xóa
                 </button>
             </div>
 
@@ -652,7 +654,7 @@ const AssetManagement = (() => {
                 <div class="detail-section">
                     <h4>Phân công</h4>
                     <div class="detail-grid">
-                        <div class="detail-item"><label>Người sử dụng</label><span>${asset.assignedTo || 'Chưa phân công'}</span></div>
+                        <div class="detail-item"><label>Người sử dụng</label><span>${escapeHtml(nameOf(asset.assignedTo) || 'Chưa phân công')}</span></div>
                         <div class="detail-item"><label>Phòng ban</label><span>${asset.assignedDepartment || 'N/A'}</span></div>
                         <div class="detail-item"><label>Vị trí sử dụng</label><span>${asset.assignedLocation || 'N/A'}</span></div>
                     </div>
@@ -746,9 +748,9 @@ const AssetManagement = (() => {
                 <div class="detail-section metadata">
                     <div class="detail-grid">
                         <div class="detail-item"><label>Ngày tạo</label><span>${asset.createdAt ? new Date(asset.createdAt).toLocaleString() : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Người tạo</label><span>${asset.createdBy || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Người tạo</label><span>${escapeHtml(nameOf(asset.createdBy) || 'N/A')}</span></div>
                         <div class="detail-item"><label>Cập nhật</label><span>${asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : 'N/A'}</span></div>
-                        <div class="detail-item"><label>Người cập nhật</label><span>${asset.updatedBy || 'N/A'}</span></div>
+                        <div class="detail-item"><label>Người cập nhật</label><span>${escapeHtml(nameOf(asset.updatedBy) || 'N/A')}</span></div>
                     </div>
                 </div>
             </div>
@@ -888,12 +890,12 @@ const AssetManagement = (() => {
                 <div class="form-group">
                     <label class="form-field"><span>Mã thiết bị</span><input type="text" id="asset-number" maxlength="50" readonly /></label>
                     <label class="form-field"><span>Loại thiết bị</span><select id="asset-type" required><option value="">Chọn loại</option>${ASSET_TYPES.map(t => `<option value="${t}">${ASSET_TYPE_LABELS[t] || t}</option>`).join('')}</select></label>
-                    <label class="form-field full"><span>Tên thiết bị</span><input type="text" id="asset-name" maxlength="200" required placeholder="e.g., Dell PowerEdge R740 Server" /></label>
-                    <label class="form-field"><span>Danh mục</span><input type="text" id="asset-category" maxlength="100" placeholder="e.g., Server, Desktop" /></label>
+                    <label class="form-field full"><span>Tên thiết bị</span><input type="text" id="asset-name" maxlength="200" required placeholder="VD: Dell PowerEdge R740" /></label>
+                    <label class="form-field"><span>Danh mục</span><input type="text" id="asset-category" maxlength="100" placeholder="VD: Máy chủ, Máy trạm" /></label>
                     <label class="form-field"><span>Trạng thái</span><select id="asset-status"><option value="ACTIVE" selected>Đang sử dụng</option>${ASSET_STATUSES.filter(s => s !== 'ACTIVE').map(s => `<option value="${s}">${s.replace(/_/g, ' ')}</option>`).join('')}</select></label>
                     <label class="form-field"><span>Tình trạng</span><select id="asset-health-status"><option value="HEALTHY" selected>Tốt</option>${HEALTH_STATUSES.filter(h => h !== 'HEALTHY').map(h => `<option value="${h}">${h}</option>`).join('')}</select></label>
-                    <label class="form-field"><span>Nhà sản xuất</span><input type="text" id="asset-manufacturer" maxlength="100" placeholder="e.g., Dell, HP, Cisco" /></label>
-                    <label class="form-field"><span>Model</span><input type="text" id="asset-model" maxlength="100" placeholder="e.g., PowerEdge R740" /></label>
+                    <label class="form-field"><span>Nhà sản xuất</span><input type="text" id="asset-manufacturer" maxlength="100" placeholder="VD: Dell, HP, Cisco" /></label>
+                    <label class="form-field"><span>Model</span><input type="text" id="asset-model" maxlength="100" placeholder="VD: PowerEdge R740" /></label>
                     <label class="form-field"><span>Số serial</span><input type="text" id="asset-serial" maxlength="100" placeholder="Số serial của nhà sản xuất" /></label>
                     <label class="form-field"><span>Mã linh kiện</span><input type="text" id="asset-part-number" maxlength="100" placeholder="Mã sản phẩm / linh kiện" /></label>
                     <label class="form-field full"><span>Mô tả</span><textarea id="asset-description" rows="2" placeholder="Thông tin thêm..."></textarea></label>
@@ -902,7 +904,7 @@ const AssetManagement = (() => {
 
             <div class="form-tab-content" data-tab="location">
                 <div class="form-group">
-                    <label class="form-field full"><span>Vị trí</span><input type="text" id="asset-location" maxlength="200" placeholder="e.g., Data Center A, Floor 3" /></label>
+                    <label class="form-field full"><span>Vị trí</span><input type="text" id="asset-location" maxlength="200" placeholder="VD: Data Center A, tầng 3" /></label>
                     <label class="form-field"><span>Tòa nhà</span><input type="text" id="asset-building" maxlength="100" /></label>
                     <label class="form-field"><span>Tầng</span><input type="text" id="asset-floor" maxlength="50" /></label>
                     <label class="form-field"><span>Phòng</span><input type="text" id="asset-room" maxlength="100" /></label>

@@ -114,6 +114,7 @@ import {
 
 // Import event handlers
 import { attachEventHandlers } from './handlers/eventHandlers.js';
+import { initDatePickers } from './ui/datePicker.js';
 
 // Register notification functions for auth.js
 import { setLoadNotifications, setStartNotificationPolling, setStopNotificationPolling } from './core/auth.js';
@@ -137,29 +138,35 @@ const checkDraftRecovery = () => {
     const drafts = listDrafts();
     const ticketDrafts = drafts.filter(d => d.type === 'ticket-create');
     
-    if (ticketDrafts.length > 0) {
+    if (ticketDrafts.length > 0 && !createForm.querySelector('.draft-banner')) {
         const latestDraft = ticketDrafts[0];
-        const recovery = confirm(
-            `Tìm thấy bản nháp được lưu lúc ${latestDraft.age}.\n\n` +
-            `Bạn có muốn khôi phục nội dung đã nhập trước đó không?\n\n` +
-            `Nhấn OK để khôi phục.\n` +
-            `Nhấn Cancel để xóa bản nháp và bắt đầu mới.`
-        );
-        
-        if (recovery && latestDraft.formData) {
-            // Populate form with draft data
-            Object.entries(latestDraft.formData).forEach(([key, value]) => {
-                const input = createForm.querySelector(`[name="${key}"]`);
-                if (input) {
-                    input.value = value;
-                }
-            });
-        } else {
-            // Clear the draft
-            import('./services/draftService.js').then(module => {
-                module.deleteDraft(latestDraft.key);
-            });
-        }
+        // Inline banner inside the create form instead of a page-blocking confirm() on load.
+        const banner = document.createElement('div');
+        banner.className = 'draft-banner';
+        banner.innerHTML = `
+            <span>Có bản nháp chưa gửi (lưu lúc ${latestDraft.age}).</span>
+            <div class="draft-banner-actions">
+                <button type="button" class="ghost btn-sm" data-draft="discard">Bỏ bản nháp</button>
+                <button type="button" class="primary btn-sm" data-draft="restore">Khôi phục</button>
+            </div>`;
+        banner.addEventListener('click', (e) => {
+            const action = e.target.closest('[data-draft]')?.dataset.draft;
+            if (!action) return;
+            if (action === 'restore' && latestDraft.formData) {
+                Object.entries(latestDraft.formData).forEach(([key, value]) => {
+                    const input = createForm.querySelector(`[name="${key}"]`);
+                    if (input) {
+                        input.value = value;
+                    }
+                });
+            } else if (action === 'discard') {
+                import('./services/draftService.js').then(module => {
+                    module.deleteDraft(latestDraft.key);
+                });
+            }
+            banner.remove();
+        });
+        createForm.prepend(banner);
     }
 };
 
@@ -174,8 +181,9 @@ const init = async () => {
   // Initialize tabs
   initTabs();
   
-  // Initialize report dates
+  // Initialize report dates, then swap date inputs for dd/mm/yyyy pickers (keeps ISO values)
   initReportDates();
+  initDatePickers();
 
   // Attach all event handlers
   attachEventHandlers();
@@ -189,10 +197,19 @@ const init = async () => {
   // Check for draft recovery on page load
   checkDraftRecovery();
   
+  // Restore the cached profile first: nav visibility and the route guard need the department
+  // (IT operator vs business user), which the JWT alone does not carry.
+  if (isTokenValid()) {
+    try {
+      const cachedUser = JSON.parse(localStorage.getItem('ticketing.currentUser') || 'null');
+      if (cachedUser) Auth.setCurrentUser(cachedUser);
+    } catch (e) { /* ignore corrupt cache; loadProfile() refreshes it */ }
+  }
+
   // Update token status and nav visibility
   updateTokenStatus();
   updateNavVisibility();
-  
+
   // Route guard
   routeGuard();
   
@@ -216,10 +233,8 @@ const init = async () => {
     // Load profile first
     await loadProfile()
       .then(() => {
-        // Load user avatar map first (needed for getDisplayName in engineer options)
-        if (checkCanManageUsers() || isITStaff()) {
-          return loadUserAvatarMap();
-        }
+        // Load user directory first (needed for getDisplayName everywhere)
+        return loadUserAvatarMap();
       })
       .then(() => {
         // Then load engineer options

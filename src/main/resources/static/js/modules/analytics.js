@@ -183,7 +183,7 @@ const AnalyticsModule = (() => {
         if (!container) return;
 
         container.innerHTML = `
-            <div class="kpi-card kpi-tickets">
+            <div class="kpi-card kpi-tickets">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.tickets.total}</span>
                     <span class="kpi-label">Tổng số phiếu hỗ trợ</span>
@@ -194,7 +194,7 @@ const AnalyticsModule = (() => {
                 </div>
             </div>
 
-            <div class="kpi-card kpi-resolution">
+            <div class="kpi-card kpi-resolution">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.tickets.resolutionRate}%</span>
                     <span class="kpi-label">Tỷ lệ giải quyết</span>
@@ -205,7 +205,7 @@ const AnalyticsModule = (() => {
                 </div>
             </div>
 
-            <div class="kpi-card kpi-assets">
+            <div class="kpi-card kpi-assets">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.assets.total}</span>
                     <span class="kpi-label">Tổng số thiết bị</span>
@@ -216,7 +216,7 @@ const AnalyticsModule = (() => {
                 </div>
             </div>
 
-            <div class="kpi-card kpi-changes">
+            <div class="kpi-card kpi-changes">
                 <div class="kpi-content">
                     <span class="kpi-value">${metrics.changes.total}</span>
                     <span class="kpi-label">Tổng số thay đổi</span>
@@ -300,13 +300,14 @@ const AnalyticsModule = (() => {
         }
 
         // Simple bar chart using divs
-        const maxValue = Math.max(...data.map(d => d.value));
-        
+        // max >= 1 so an all-zero range does not divide by zero (NaN height)
+        const maxValue = Math.max(1, ...data.map(d => d.value));
+
         container.innerHTML = `
             <div class="bar-chart">
                 ${data.slice(-14).map(item => `
-                    <div class="bar-container" title="${item.date}: ${item.value} tickets">
-                        <div class="bar" style="height: ${(item.value / maxValue) * 100}%"></div>
+                    <div class="bar-container" title="${item.date}: ${item.value} phiếu">
+                        <div class="bar-track"><div class="bar" style="height: ${(item.value / maxValue) * 100}%"></div></div>
                         <span class="bar-label">${formatShortDate(item.date)}</span>
                     </div>
                 `).join('')}
@@ -464,7 +465,7 @@ const AnalyticsModule = (() => {
                                 <td>${t.title}</td>
                                 <td><span class="priority-badge ${t.priority}">${t.priority}</span></td>
                                 <td>${t.status}</td>
-                                <td>${t.assigneeName || '-'}</td>
+                                <td>${(t.assigneeName && window.displayNameOf ? window.displayNameOf(t.assigneeName) : t.assigneeName) || '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -543,7 +544,7 @@ const AnalyticsModule = (() => {
                                     ${d.resolutionSlaMet === false ? '<span class="sla-status breached">Vi phạm</span>' : ''}
                                     ${d.resolutionSlaMet === null ? '<span class="sla-status pending">Đang chờ</span>' : ''}
                                 </td>
-                                <td>${d.assignee || '-'}</td>
+                                <td>${(d.assignee && window.displayNameOf ? window.displayNameOf(d.assignee) : d.assignee) || '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>

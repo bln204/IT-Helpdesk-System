@@ -69,7 +69,8 @@
 }
 
 .new-report-modal {
-  background: var(--surface);
+  /* --surface is near-transparent in dark mode; a modal needs an opaque panel */
+  background: var(--panel);
   border-radius: 16px;
   width: 100%;
   max-width: 480px;
@@ -84,7 +85,7 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
-.modal-header {
+.new-report-modal .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -92,13 +93,13 @@
   border-bottom: 1px solid var(--border);
 }
 
-.modal-header h3 {
+.new-report-modal .modal-header h3 {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
 }
 
-.modal-close {
+.new-report-modal .modal-close {
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -108,15 +109,15 @@
   line-height: 1;
 }
 
-.modal-close:hover {
+.new-report-modal .modal-close:hover {
   color: var(--text);
 }
 
-.modal-body {
+.new-report-modal .modal-body {
   padding: 24px;
 }
 
-.modal-footer {
+.new-report-modal .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -125,15 +126,15 @@
 }
 
 /* Form elements in modal */
-.form-group {
+.new-report-modal .form-group {
   margin-bottom: 20px;
 }
 
-.form-group:last-child {
+.new-report-modal .form-group:last-child {
   margin-bottom: 0;
 }
 
-.form-group label {
+.new-report-modal .form-group label {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
@@ -141,7 +142,7 @@
   color: var(--text);
 }
 
-.form-control {
+.new-report-modal .form-control {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
@@ -152,20 +153,20 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.form-control:focus {
+.new-report-modal .form-control:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(215, 107, 45, 0.15);
 }
 
-.date-range-custom {
+.new-report-modal .date-range-custom {
   padding: 16px;
   background: var(--bg);
   border-radius: 8px;
   margin-top: 12px;
 }
 
-.form-row {
+.new-report-modal .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
@@ -729,4 +730,8 @@
   text-align: center;
   background: rgba(244, 63, 94, 0.1);
   border-radius: 8px;
+}
+
+.new-report-modal select {
+  width: 100%;
 }
