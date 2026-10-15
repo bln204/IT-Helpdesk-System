@@ -254,8 +254,10 @@ const appendLoadingMessage = () => {
     msg.textContent = 'AI đang xử lý...';
     dom.body.appendChild(msg);
     scrollBodyToBottom();
-    state.messages.push({ role: 'loading', node: msg });
-    return msg;
+    // Return the entry (not the node): removeMessage() expects { node }.
+    const entry = { role: 'loading', node: msg };
+    state.messages.push(entry);
+    return entry;
 };
 
 const removeMessage = (entry) => {
