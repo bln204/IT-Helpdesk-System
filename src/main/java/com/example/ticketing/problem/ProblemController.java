@@ -60,7 +60,8 @@ public class ProblemController {
         Page<Problem> problems;
 
         if (search != null && !search.isBlank()) {
-            problems = problemService.searchProblems(search, pageable);
+            problems = problemService.searchProblems(search,
+                    status != null && !status.isBlank() ? Problem.ProblemStatus.valueOf(status) : null, pageable);
         } else if (status != null && !status.isBlank()) {
             Problem.ProblemStatus problemStatus = Problem.ProblemStatus.valueOf(status);
             problems = problemService.getProblemsByStatus(problemStatus, pageable);

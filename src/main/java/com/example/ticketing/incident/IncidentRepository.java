@@ -38,11 +38,12 @@ public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSp
             @Param("statuses") List<Incident.IncidentStatus> statuses,
             Pageable pageable);
 
-    @Query("SELECT i FROM Incident i WHERE " +
+    @Query("SELECT i FROM Incident i WHERE (:status IS NULL OR i.status = :status) AND " +
            "(LOWER(i.title) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "LOWER(i.description) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "i.incidentNumber LIKE CONCAT('%', :search, '%'))")
-    Page<Incident> searchIncidents(@Param("search") String search, Pageable pageable);
+    Page<Incident> searchIncidents(@Param("search") String search,
+            @Param("status") Incident.IncidentStatus status, Pageable pageable);
 
     @Query("SELECT i FROM Incident i WHERE i.assignedTo.username = :username ORDER BY i.createdAt DESC")
     List<Incident> findByAssignedToUsername(@Param("username") String username);

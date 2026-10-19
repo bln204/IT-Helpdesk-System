@@ -18,6 +18,7 @@ const ChangeManagement = (() => {
     let changes = [];
     let currentChange = null;
     let isSubmitting = false;
+    let listenersBound = false;
 
     // ==================== Initialization ====================
 
@@ -28,12 +29,27 @@ const ChangeManagement = (() => {
         }
 
         window.Auth.onAuthReady(() => {
-            setupEventListeners();
+            // init() runs on every page visit; bind document listeners only once
+            if (!listenersBound) { setupEventListeners(); listenersBound = true; }
             loadChanges();
         });
     }
 
+    function currentFilters() {
+        return {
+            search: document.getElementById('change-search')?.value.trim(),
+            status: document.getElementById('change-status-filter')?.value,
+        };
+    }
+
     function setupEventListeners() {
+        let searchTimer = null;
+        document.getElementById('change-search')?.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => loadChanges(), 300);
+        });
+        document.getElementById('change-status-filter')?.addEventListener('change', () => loadChanges());
+
         document.addEventListener('click', (e) => {
             if (e.target.closest('#refresh-change-btn')) {
                 loadChanges();
@@ -72,6 +88,7 @@ const ChangeManagement = (() => {
     // ==================== API Calls ====================
 
     async function loadChanges(params = {}) {
+        params = { ...currentFilters(), ...params };
         try {
             let url = API_BASE;
             const queryParams = new URLSearchParams();

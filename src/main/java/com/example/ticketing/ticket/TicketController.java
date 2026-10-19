@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -128,7 +129,13 @@ public class TicketController {
         String sortField = parts[0];
         String sortDirection = parts.length > 1 ? parts[1] : "asc";
         Sort.Direction direction = Sort.Direction.fromOptionalString(sortDirection).orElse(Sort.Direction.ASC);
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(direction, sortField));
+        // priority is stored as a string, so sort by severity rank instead of alphabetically
+        Sort sortSpec = "priority".equals(sortField)
+                // parentheses stop Spring Data from prefixing the alias onto the expression
+                ? JpaSort.unsafe(direction, "(CASE t.priority WHEN 'CRITICAL' THEN 5 WHEN 'URGENT' THEN 4"
+                        + " WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 ELSE 1 END)")
+                : Sort.by(direction, sortField);
+        PageRequest pageRequest = PageRequest.of(page, size, sortSpec);
 
         // PHASE 5.1 (C-7): the read scope is decided inside the service from the actor
         // context. The controller no longer needs to compute the scope itself.

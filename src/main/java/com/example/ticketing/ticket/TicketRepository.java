@@ -39,9 +39,6 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
 
     long countByRequesterUsernameAndStatus(String requesterUsername, TicketTypes.TicketStatus status);
 
-    /** Tickets created by the given requester. Used as the read scope for a non-IT actor with no department. */
-    Page<Ticket> findByRequesterUsername(String requesterUsername, Pageable pageable);
-
     Page<Ticket> findByStatus(TicketTypes.TicketStatus status, Pageable pageable);
 
     List<Ticket> findByCreatedAtBetween(java.time.LocalDateTime from, java.time.LocalDateTime to);
@@ -298,7 +295,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
     @Query("""
         SELECT t FROM Ticket t
         WHERE (:status IS NULL OR t.status = :status)
-          AND (:assignee IS NULL OR t.assigneeName = :assignee)
+          AND (:assignee IS NULL OR t.assigneeName = :assignee
+               OR (:assignee = '' AND (t.assigneeName IS NULL OR t.assigneeName = '')))
+          AND (:applyExcludeClosed = false OR t.status <> :excludedStatus)
           AND (:search IS NULL OR :search = '' OR
                LOWER(t.title) LIKE LOWER(CONCAT('%', :search, '%'))
             OR LOWER(t.description) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -321,7 +320,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
         SELECT t FROM Ticket t
         WHERE t.department.id = :departmentId
           AND (:status IS NULL OR t.status = :status)
-          AND (:assignee IS NULL OR t.assigneeName = :assignee)
+          AND (:assignee IS NULL OR t.assigneeName = :assignee
+               OR (:assignee = '' AND (t.assigneeName IS NULL OR t.assigneeName = '')))
+          AND (:applyExcludeClosed = false OR t.status <> :excludedStatus)
           AND (:search IS NULL OR :search = '' OR
                LOWER(t.title) LIKE LOWER(CONCAT('%', :search, '%'))
             OR LOWER(t.description) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -349,7 +350,9 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
         SELECT t FROM Ticket t
         WHERE (t.department.id = :departmentId OR LOWER(t.requesterUsername) = LOWER(:username))
           AND (:status IS NULL OR t.status = :status)
-          AND (:assignee IS NULL OR t.assigneeName = :assignee)
+          AND (:assignee IS NULL OR t.assigneeName = :assignee
+               OR (:assignee = '' AND (t.assigneeName IS NULL OR t.assigneeName = '')))
+          AND (:applyExcludeClosed = false OR t.status <> :excludedStatus)
           AND (:search IS NULL OR :search = '' OR
                LOWER(t.title) LIKE LOWER(CONCAT('%', :search, '%'))
             OR LOWER(t.description) LIKE LOWER(CONCAT('%', :search, '%'))
@@ -360,6 +363,32 @@ public interface TicketRepository extends JpaRepository<Ticket, Long>, JpaSpecif
         """)
     Page<Ticket> findAuthorizedByDepartmentOrOwner(
         @Param("departmentId") Long departmentId,
+        @Param("username") String username,
+        @Param("status") TicketTypes.TicketStatus status,
+        @Param("assignee") String assignee,
+        @Param("search") String search,
+        @Param("excludedStatus") TicketTypes.TicketStatus excludedStatus,
+        @Param("applyExcludeClosed") boolean applyExcludeClosed,
+        Pageable pageable
+    );
+
+    /** Requester-only scope: a non-IT actor with no department sees only tickets they created. */
+    @Query("""
+        SELECT t FROM Ticket t
+        WHERE LOWER(t.requesterUsername) = LOWER(:username)
+          AND (:status IS NULL OR t.status = :status)
+          AND (:assignee IS NULL OR t.assigneeName = :assignee
+               OR (:assignee = '' AND (t.assigneeName IS NULL OR t.assigneeName = '')))
+          AND (:applyExcludeClosed = false OR t.status <> :excludedStatus)
+          AND (:search IS NULL OR :search = '' OR
+               LOWER(t.title) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(t.description) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(t.ticketNumber) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(t.requesterName) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(t.requesterEmail) LIKE LOWER(CONCAT('%', :search, '%'))
+            OR LOWER(t.assigneeName) LIKE LOWER(CONCAT('%', :search, '%')))
+        """)
+    Page<Ticket> findAuthorizedByOwner(
         @Param("username") String username,
         @Param("status") TicketTypes.TicketStatus status,
         @Param("assignee") String assignee,

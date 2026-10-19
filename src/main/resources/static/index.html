@@ -131,8 +131,14 @@
           <select id="filter-status">
             <option value="">Tất cả trạng thái</option>
             <option value="NEW">Mới</option>
+            <option value="ASSIGNED">Đã phân công</option>
             <option value="IN_PROGRESS">Đang xử lý</option>
+            <option value="WAITING_FOR_USER">Chờ người dùng</option>
+            <option value="RESOLVED">Đã giải quyết</option>
             <option value="BLOCKED">Bị chặn</option>
+            <option value="ESCALATED">Đã chuyển cấp</option>
+            <option value="REOPENED">Mở lại</option>
+            <option value="CANCELLED">Đã hủy</option>
             <option value="CLOSED">Đã đóng</option>
           </select>
         </div>
@@ -489,6 +495,7 @@
           <select id="incident-status-filter">
             <option value="">Tất cả trạng thái</option>
             <option value="INVESTIGATING">Đang điều tra</option>
+            <option value="IN_PROGRESS">Đang xử lý</option>
             <option value="IDENTIFIED">Đã xác định</option>
             <option value="RESOLVED">Đã giải quyết</option>
             <option value="CLOSED">Đã đóng</option>
@@ -577,6 +584,7 @@
               <option value="IDENTIFIED">Đã xác định</option>
               <option value="SOLVING">Đang giải quyết</option>
               <option value="RESOLVED">Đã giải quyết</option>
+              <option value="CLOSED">Đã đóng</option>
             </select>
           </div>
           <button id="refresh-problem-btn" class="secondary" type="button">Làm mới</button>
@@ -618,11 +626,15 @@
             <select id="change-status-filter">
               <option value="">Tất cả trạng thái</option>
               <option value="DRAFT">Nháp</option>
+              <option value="SUBMITTED">Đã gửi</option>
               <option value="PENDING_APPROVAL">Chờ phê duyệt</option>
               <option value="APPROVED">Đã phê duyệt</option>
+              <option value="REJECTED">Từ chối</option>
               <option value="SCHEDULED">Đã lên lịch</option>
               <option value="IN_PROGRESS">Đang thực hiện</option>
               <option value="COMPLETED">Hoàn thành</option>
+              <option value="ROLLED_BACK">Đã hoàn tác</option>
+              <option value="CANCELLED">Hủy bỏ</option>
             </select>
           </div>
           <button id="refresh-change-btn" class="secondary" type="button">Làm mới</button>
@@ -667,7 +679,14 @@
               <option value="WORKSTATION">Máy trạm</option>
               <option value="LAPTOP">Laptop</option>
               <option value="NETWORK_DEVICE">Mạng</option>
+              <option value="PRINTER">Máy in</option>
+              <option value="MONITOR">Màn hình</option>
+              <option value="MOBILE_DEVICE">Thiết bị di động</option>
               <option value="SOFTWARE_LICENSE">Phần mềm</option>
+              <option value="DATABASE">Cơ sở dữ liệu</option>
+              <option value="STORAGE">Lưu trữ</option>
+              <option value="CLOUD_RESOURCE">Tài nguyên đám mây</option>
+              <option value="OTHER">Khác</option>
             </select>
           </div>
           <div class="custom-select">
@@ -676,6 +695,7 @@
               <option value="HEALTHY">Tốt</option>
               <option value="WARNING">Cảnh báo</option>
               <option value="CRITICAL">Nghiêm trọng</option>
+              <option value="UNKNOWN">Không xác định</option>
             </select>
           </div>
           <button id="refresh-asset-btn" class="secondary" type="button">Làm mới</button>

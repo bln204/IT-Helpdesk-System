@@ -15,6 +15,7 @@ const ProblemManagement = (() => {
     let currentProblem = null;
     let currentKnownError = null;
     let isSubmitting = false;
+    let listenersBound = false;
 
     // ==================== Initialization ====================
 
@@ -25,13 +26,23 @@ const ProblemManagement = (() => {
         }
 
         window.Auth.onAuthReady(() => {
-            setupEventListeners();
+            // init() runs on every page visit; bind document listeners only once
+            if (!listenersBound) { setupEventListeners(); listenersBound = true; }
             loadProblems();
             loadKnownErrors();
         });
     }
 
+    function currentFilters() {
+        return {
+            search: document.getElementById('problem-search')?.value.trim(),
+            status: document.getElementById('problem-status-filter')?.value,
+        };
+    }
+
     function setupEventListeners() {
+        document.getElementById('problem-status-filter')?.addEventListener('change', () => loadProblems());
+
         document.addEventListener('click', (e) => {
             if (e.target.closest('#refresh-problem-btn')) {
                 const currentTab = document.querySelector('.problem-tab-btn.active')?.dataset.problemTab || 'problems';
@@ -55,7 +66,7 @@ const ProblemManagement = (() => {
             if (e.target.closest('.known-error-search-btn')) {
                 searchKnownErrors();
             }
-            if (e.target.closest('.problem-search-btn')) {
+            if (e.target.closest('#problem-search-btn')) {
                 searchProblems();
             }
             if (e.target.closest('#close-problem-modal') || e.target.id === 'problem-modal') {
@@ -114,6 +125,7 @@ const ProblemManagement = (() => {
     // ==================== API Calls ====================
 
     async function loadProblems(params = {}) {
+        params = { ...currentFilters(), ...params };
         try {
             let url = API_BASE;
             const queryParams = new URLSearchParams();
@@ -400,9 +412,7 @@ const ProblemManagement = (() => {
     }
 
     function searchProblems() {
-        const searchInput = document.getElementById('problem-search');
-        const query = searchInput?.value?.trim() || '';
-        loadProblems({ search: query });
+        loadProblems();
     }
 
     // ==================== Modal ====================

@@ -29,6 +29,7 @@ const AssetManagement = (() => {
     let currentAsset = null;
     let stats = null;
     let isSubmitting = false;
+    let listenersBound = false;
     let activeTab = 'basic';
 
     // ==================== Initialization ====================
@@ -40,13 +41,25 @@ const AssetManagement = (() => {
         }
 
         window.Auth.onAuthReady(() => {
-            setupEventListeners();
+            // init() runs on every page visit; bind document listeners only once
+            if (!listenersBound) { setupEventListeners(); listenersBound = true; }
             loadStatistics();
             loadAssets();
         });
     }
 
+    function currentFilters() {
+        return {
+            search: document.getElementById('asset-search')?.value.trim(),
+            type: document.getElementById('asset-type-filter')?.value,
+            health: document.getElementById('asset-health-filter')?.value,
+        };
+    }
+
     function setupEventListeners() {
+        document.getElementById('asset-type-filter')?.addEventListener('change', () => loadAssets());
+        document.getElementById('asset-health-filter')?.addEventListener('change', () => loadAssets());
+
         // Track listener registration
         if (window._assetListenersSet) {
             return;
@@ -59,8 +72,7 @@ const AssetManagement = (() => {
 
             // Search
             if (e.target.closest('#asset-search-btn')) {
-                const searchValue = document.getElementById('asset-search')?.value || '';
-                loadAssets({ search: searchValue });
+                loadAssets();
             }
 
             // Refresh
@@ -91,8 +103,7 @@ const AssetManagement = (() => {
         document.addEventListener('keydown', (e) => {
             if (e.target.id === 'asset-search' && e.key === 'Enter') {
                 e.preventDefault();
-                const searchValue = e.target.value || '';
-                loadAssets({ search: searchValue });
+                loadAssets();
             }
         });
 
@@ -259,6 +270,7 @@ const AssetManagement = (() => {
     }
 
     async function loadAssets(params = {}) {
+        params = { ...currentFilters(), ...params };
         try {
             let url = API_BASE;
             const queryParams = new URLSearchParams();

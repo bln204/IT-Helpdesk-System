@@ -563,8 +563,8 @@ public class IncidentService {
      * Tìm kiếm incidents.
      */
     @Transactional(readOnly = true)
-    public Page<Incident> searchIncidents(String search, Pageable pageable) {
-        return incidentRepository.searchIncidents(search, pageable);
+    public Page<Incident> searchIncidents(String search, Incident.IncidentStatus status, Pageable pageable) {
+        return incidentRepository.searchIncidents(search, status, pageable);
     }
 
     // ==================== Helper Methods ====================

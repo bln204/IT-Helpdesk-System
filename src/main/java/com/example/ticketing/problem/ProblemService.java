@@ -601,8 +601,8 @@ public class ProblemService {
      * Tìm kiếm problems.
      */
     @Transactional(readOnly = true)
-    public Page<Problem> searchProblems(String search, Pageable pageable) {
-        return problemRepository.searchProblems(search, pageable);
+    public Page<Problem> searchProblems(String search, Problem.ProblemStatus status, Pageable pageable) {
+        return problemRepository.searchProblems(search, status, pageable);
     }
 
     /**
