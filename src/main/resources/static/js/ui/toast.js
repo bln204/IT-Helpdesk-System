@@ -63,10 +63,10 @@ const Toast = (() => {
       min-width: 200px;
     `;
     
-    toast.innerHTML = `
-      <span style="font-size: 1.1rem;">${icon}</span>
-      <span>${message}</span>
-    `;
+    toast.innerHTML = `<span style="font-size: 1.1rem;">${icon}</span><span></span>`;
+    // textContent: messages often carry server error text, never render it as HTML
+    toast.lastChild.textContent = message;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     
     cont.appendChild(toast);
     

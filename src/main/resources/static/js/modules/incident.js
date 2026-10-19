@@ -829,7 +829,7 @@ const Incident = (() => {
     }
 
     async function handleConfirmResolution(incidentId) {
-        if (!confirm('Bạn có chắc chắn xác nhận giải pháp này?\nIncident sẽ được đóng.')) {
+        if (!(await Dialog.confirm('Giải pháp này đã khắc phục được sự cố của bạn?', { title: 'Xác nhận giải pháp', note: 'Sau khi xác nhận, sự cố sẽ được đóng.', okText: 'Xác nhận và đóng', cancelText: 'Chưa' }))) {
             return;
         }
         
@@ -1027,8 +1027,8 @@ const Incident = (() => {
         }
     }
 
-    function confirmDelete(id) {
-        if (confirm('Bạn có chắc muốn xóa sự cố này?\n\nHành động này không thể hoàn tác.')) {
+    async function confirmDelete(id) {
+        if (await Dialog.confirm('Bạn có chắc muốn xóa sự cố này?', { title: 'Xóa sự cố', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true })) {
             deleteIncident(id)
                 .then(() => {
                     Toast.show('Đã xóa sự cố', 'success');
@@ -1041,8 +1041,8 @@ const Incident = (() => {
         }
     }
     
-    function confirmDeleteFromDetail(id) {
-        if (confirm('Bạn có chắc muốn xóa sự cố này?\n\nHành động này không thể hoàn tác.')) {
+    async function confirmDeleteFromDetail(id) {
+        if (await Dialog.confirm('Bạn có chắc muốn xóa sự cố này?', { title: 'Xóa sự cố', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true })) {
             deleteIncident(id)
                 .then(() => {
                     Toast.show('Đã xóa sự cố', 'success');

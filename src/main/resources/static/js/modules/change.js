@@ -427,7 +427,7 @@ const ChangeManagement = (() => {
                             await updateChangeStatus(id, 'approve', { approver: 'admin', notes: 'Đã phê duyệt' });
                             break;
                         case 'reject':
-                            const reason = prompt('Nhập lý do từ chối:');
+                            const reason = await Dialog.prompt('Cho người yêu cầu biết vì sao thay đổi này bị từ chối.', { title: 'Từ chối thay đổi', placeholder: 'Nhập lý do từ chối...', okText: 'Từ chối', cancelText: 'Quay lại', danger: true, required: true, requiredText: 'Bạn hãy nhập lý do từ chối nhé.' });
                             if (reason) {
                                 await updateChangeStatus(id, 'reject', { approver: 'admin', notes: reason });
                             }
@@ -436,7 +436,8 @@ const ChangeManagement = (() => {
                             await updateChangeStatus(id, 'start');
                             break;
                         case 'complete':
-                            const notes = prompt('Nhập ghi chú hoàn thành:');
+                            const notes = await Dialog.prompt('Ghi lại kết quả thực hiện (không bắt buộc).', { title: 'Hoàn thành thay đổi', placeholder: 'Nhập ghi chú hoàn thành...', okText: 'Hoàn thành', cancelText: 'Quay lại' });
+                            if (notes === null) break;
                             await updateChangeStatus(id, 'complete', { notes: notes || 'Hoàn thành' });
                             break;
                         case 'cancel':

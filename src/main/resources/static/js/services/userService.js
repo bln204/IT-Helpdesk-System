@@ -362,14 +362,14 @@ export const loadPendingUsers = async () => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const userId = btn.dataset.userId;
-        if (!confirm('Bạn có chắc muốn duyệt tài khoản này?')) return;
+        if (!(await Dialog.confirm('Bạn có chắc muốn duyệt tài khoản này?', { title: 'Duyệt tài khoản', okText: 'Duyệt', cancelText: 'Để sau' }))) return;
         try {
           await request(`/api/admin/users/${userId}/approve`, { method: 'POST', body: JSON.stringify({}) });
           await loadPendingUsers();
           await loadAdminUsers();
-          alert('Đã duyệt tài khoản thành công!');
+          Toast.success('Đã duyệt tài khoản.');
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
         }
       });
     });
@@ -464,16 +464,16 @@ export const loadDeleteRequests = async () => {
         e.stopPropagation();
         const userId = btn.dataset.deleteUserId;
         const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
-        if (!confirm(`Bạn có chắc muốn xóa tài khoản "${userDisplayName}"?\n\nHành động này không thể hoàn tác.`)) return;
+        if (!(await Dialog.confirm(`Bạn có chắc muốn xóa tài khoản "${userDisplayName}"?`, { title: 'Xóa tài khoản', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa tài khoản', cancelText: 'Giữ lại', danger: true }))) return;
         try {
           await request(`/api/users/${userId}/delete-request`, { method: 'DELETE' });
           const { addNotification } = await import('./notificationService.js');
           addNotification('delete', 'Xóa tài khoản', `Tài khoản "${userDisplayName}" đã được xóa.`);
-          alert('Đã xóa tài khoản thành công!');
+          Toast.success('Đã xóa tài khoản.');
           await loadDeleteRequests();
           await loadAdminUsers();
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
         }
       });
     });
@@ -483,16 +483,16 @@ export const loadDeleteRequests = async () => {
         e.stopPropagation();
         const userId = btn.dataset.cancelRequestId;
         const userDisplayName = btn.closest('tr').querySelector('td:nth-child(2)')?.textContent || btn.closest('tr').querySelector('td:first-child')?.textContent;
-        if (!confirm(`Bạn có chắc muốn hủy yêu cầu xóa tài khoản "${userDisplayName}"?`)) return;
+        if (!(await Dialog.confirm(`Hủy yêu cầu xóa tài khoản "${userDisplayName}"?`, { title: 'Hủy yêu cầu xóa', note: 'Tài khoản sẽ được giữ nguyên.', okText: 'Hủy yêu cầu', cancelText: 'Quay lại' }))) return;
         try {
           await request(`/api/admin/users/${userId}/cancel-delete-request`, { method: 'POST' });
           const { addNotification } = await import('./notificationService.js');
           addNotification('reject', 'Hủy yêu cầu xóa', `Yêu cầu xóa tài khoản "${userDisplayName}" đã bị hủy.`);
-          alert('Đã hủy yêu cầu xóa!');
+          Toast.success('Đã hủy yêu cầu xóa.');
           await loadDeleteRequests();
           await loadAdminUsers();
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
         }
       });
     });

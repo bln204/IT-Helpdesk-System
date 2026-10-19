@@ -668,7 +668,7 @@ const ProblemManagement = (() => {
     }
 
     async function confirmDeleteKnownError(id) {
-        if (!confirm('Bạn có chắc muốn xóa lỗi đã biết này?')) {
+        if (!(await Dialog.confirm('Bạn có chắc muốn xóa lỗi đã biết này?', { title: 'Xóa lỗi đã biết', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true }))) {
             return;
         }
 
@@ -970,8 +970,8 @@ const ProblemManagement = (() => {
         }
     }
 
-    function confirmUnlinkKnownError(problemId) {
-        if (!confirm('Bỏ liên kết lỗi đã biết khỏi vấn đề này?')) {
+    async function confirmUnlinkKnownError(problemId) {
+        if (!(await Dialog.confirm('Bỏ liên kết lỗi đã biết khỏi vấn đề này?', { title: 'Bỏ liên kết', okText: 'Bỏ liên kết', cancelText: 'Giữ lại', danger: true }))) {
             return;
         }
         unlinkKnownErrorFromProblem(problemId)
