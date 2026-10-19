@@ -11,13 +11,18 @@
 //   text, no Markdown parser, no new dependencies.
 // - Role gate uses the existing window.Auth.hasRole helper; this is
 //   purely UX — backend @PreAuthorize remains the security boundary.
-// - Conversation state lives in memory only (this module). No database,
-//   no localStorage, no conversationId. The /api/ai/ask contract does
-//   not include such a field.
+// - Conversations are stored server-side (ai_session / ai_message). The
+//   panel has a history drawer (GET/DELETE /api/ai/sessions) and the
+//   current sessionId is remembered per user in localStorage so a reload
+//   resumes the open thread.
 
 import { request } from '../core/api.js';
+import { Dialog } from '../ui/dialog.js';
+import { Toast } from '../ui/toast.js';
 
 const ENDPOINT = '/api/ai/ask';
+const SESSIONS_ENDPOINT = '/api/ai/sessions';
+const SESSIONS_LIMIT = 50;
 const AI_REQUEST_TIMEOUT_MS = 180000;
 const MAX_QUESTION_LENGTH = 500;
 const MIN_QUESTION_LENGTH = 5;
@@ -80,6 +85,10 @@ let state = {
     sessionId: null,    // current conversation thread (Phase 7)
     pendingDraft: null, // TicketDraft awaiting user confirmation
     messages: [], // [{role: 'user'|'ai'|'error', node: HTMLElement}]
+    historyOpen: false,
+    sessions: [],       // SessionSummary[] from GET /api/ai/sessions
+    loadToken: 0,       // bumps on every thread switch; stale loads are dropped
+    restoredFor: null,  // username whose saved thread was already restored
 };
 
 let dom = null;
@@ -142,6 +151,15 @@ const buildDom = () => {
 
     const headerActions = document.createElement('div');
     headerActions.className = 'ai-panel-header-actions';
+    const historyBtn = document.createElement('button');
+    historyBtn.type = 'button';
+    historyBtn.id = 'ai-history-btn';
+    historyBtn.setAttribute('aria-label', 'Lịch sử trò chuyện');
+    historyBtn.setAttribute('title', 'Lịch sử trò chuyện');
+    historyBtn.setAttribute('aria-expanded', 'false');
+    historyBtn.setAttribute('aria-controls', 'ai-history');
+    historyBtn.textContent = '☰';
+    headerActions.appendChild(historyBtn);
     const minBtn = document.createElement('button');
     minBtn.type = 'button';
     minBtn.id = 'ai-minimize-btn';
@@ -191,6 +209,21 @@ const buildDom = () => {
     footer.appendChild(inputRow);
     footer.appendChild(hint);
 
+    // History drawer (left of the chat column)
+    const history = document.createElement('aside');
+    history.className = 'ai-history';
+    history.id = 'ai-history';
+    history.setAttribute('aria-label', 'Lịch sử trò chuyện');
+    const newChatBtn = document.createElement('button');
+    newChatBtn.type = 'button';
+    newChatBtn.className = 'ai-history-new';
+    newChatBtn.textContent = '+ Cuộc trò chuyện mới';
+    const historyList = document.createElement('div');
+    historyList.className = 'ai-history-list';
+    history.appendChild(newChatBtn);
+    history.appendChild(historyList);
+
+    panel.appendChild(history);
     panel.appendChild(header);
     panel.appendChild(body);
     panel.appendChild(footer);
@@ -202,6 +235,10 @@ const buildDom = () => {
         fab,
         panel,
         header,
+        historyBtn,
+        history,
+        historyList,
+        newChatBtn,
         minBtn,
         closeBtn,
         body,
@@ -404,6 +441,9 @@ const setBusy = (busy) => {
     if (!dom) return;
     dom.sendBtn.disabled = busy;
     dom.textarea.disabled = busy;
+    // Switching threads mid-answer would drop the reply into the wrong thread.
+    dom.history.classList.toggle('is-locked', busy);
+    dom.newChatBtn.disabled = busy;
     if (busy) {
         dom.textarea.setAttribute('aria-busy', 'true');
     } else {
@@ -429,6 +469,7 @@ const openPanel = () => {
     dom.minBtn.textContent = '−';
     dom.minBtn.setAttribute('title', 'Thu nhỏ');
     dom.minBtn.setAttribute('aria-label', 'Thu nhỏ');
+    restoreLastSession();
     if (state.messages.length === 0) {
         renderIntro();
     }
@@ -451,6 +492,7 @@ const closePanel = () => {
 const toggleMinimize = () => {
     if (!dom) return;
     state.isMinimized = !state.isMinimized;
+    if (state.isMinimized && state.historyOpen) setHistoryOpen(false);
     if (state.isMinimized) {
         dom.panel.classList.add('minimized');
         dom.minBtn.textContent = '+';
@@ -463,6 +505,227 @@ const toggleMinimize = () => {
         dom.minBtn.setAttribute('aria-label', 'Thu nhỏ');
         scrollBodyToBottom();
         if (!state.isBusy) dom.textarea.focus();
+    }
+};
+
+// ==================== Conversation history ====================
+
+const storageKey = () => {
+    const user = getAuthUser();
+    return user && user.username ? `ticketing.ai.session.${user.username}` : null;
+};
+
+// localStorage can throw (private mode, blocked site data) — never let it break chat.
+const saveSessionId = (id) => {
+    const key = storageKey();
+    if (!key) return;
+    try {
+        if (id) localStorage.setItem(key, id);
+        else localStorage.removeItem(key);
+    } catch (e) { /* ignore */ }
+};
+
+const readSessionId = () => {
+    const key = storageKey();
+    if (!key) return null;
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        return null;
+    }
+};
+
+// Wipe the visible thread (messages, draft cards, loading bubbles) without touching history.
+const resetThread = () => {
+    if (!dom) return;
+    state.loadToken += 1;
+    state.messages = [];
+    state.pendingDraft = null;
+    dom.body.replaceChildren();
+};
+
+const newChat = () => {
+    if (!dom || state.isBusy) return;
+    resetThread();
+    state.sessionId = null;
+    saveSessionId(null);
+    renderIntro();
+    renderSessions();
+    closeHistoryIfOverlay();
+    dom.textarea.focus();
+};
+
+const dayBucket = (iso) => {
+    const d = iso ? new Date(iso) : null;
+    if (!d || Number.isNaN(d.getTime())) return 'Cũ hơn';
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const diffDays = (startOfToday - d) / 86400000;
+    if (diffDays <= 0) return 'Hôm nay';
+    if (diffDays <= 1) return 'Hôm qua';
+    if (diffDays <= 7) return '7 ngày qua';
+    return 'Cũ hơn';
+};
+
+const renderHistoryStatus = (text, retry) => {
+    const p = document.createElement('p');
+    p.className = 'ai-history-status';
+    p.textContent = text;
+    if (retry) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ai-history-retry';
+        btn.textContent = 'Thử lại';
+        btn.addEventListener('click', loadSessions);
+        p.appendChild(document.createTextNode(' '));
+        p.appendChild(btn);
+    }
+    dom.historyList.replaceChildren(p);
+};
+
+const renderSessions = () => {
+    if (!dom) return;
+    if (state.sessions.length === 0) {
+        renderHistoryStatus('Chưa có cuộc trò chuyện nào. Hãy đặt câu hỏi đầu tiên.');
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    let currentGroup = null;
+    let ul = null;
+    state.sessions.forEach((s) => {
+        const group = dayBucket(s.lastActiveAt || s.createdAt);
+        if (group !== currentGroup) {
+            currentGroup = group;
+            const label = document.createElement('h3');
+            label.className = 'ai-history-group';
+            label.textContent = group;
+            ul = document.createElement('ul');
+            frag.appendChild(label);
+            frag.appendChild(ul);
+        }
+        const li = document.createElement('li');
+        li.className = 'ai-history-item';
+        const isCurrent = s.id === state.sessionId;
+        if (isCurrent) li.classList.add('is-current');
+
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'ai-history-open';
+        open.textContent = s.title || 'Cuộc trò chuyện mới';
+        open.title = s.title || '';
+        if (isCurrent) open.setAttribute('aria-current', 'true');
+        open.addEventListener('click', () => openSession(s.id));
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'ai-history-delete';
+        del.setAttribute('aria-label', `Xóa cuộc trò chuyện "${s.title || ''}"`);
+        del.title = 'Xóa cuộc trò chuyện';
+        del.textContent = '×';
+        del.addEventListener('click', () => deleteSession(s));
+
+        li.appendChild(open);
+        li.appendChild(del);
+        ul.appendChild(li);
+    });
+    dom.historyList.replaceChildren(frag);
+};
+
+const loadSessions = async () => {
+    if (!dom) return;
+    if (state.sessions.length === 0) renderHistoryStatus('Đang tải lịch sử...');
+    try {
+        const data = await request(`${SESSIONS_ENDPOINT}?limit=${SESSIONS_LIMIT}`);
+        state.sessions = Array.isArray(data) ? data : [];
+        renderSessions();
+    } catch (err) {
+        renderHistoryStatus('Không tải được lịch sử.', true);
+    }
+};
+
+const openSession = async (id, { silent = false } = {}) => {
+    if (!dom || !id || state.isBusy) return;
+    resetThread();
+    const token = state.loadToken;
+    state.sessionId = id;
+    renderSessions();
+    closeHistoryIfOverlay();
+    const loadingEntry = appendLoadingMessage();
+    try {
+        // shortcut: loads the whole thread at once; add paging if threads grow past ~200 messages.
+        const data = await request(`${SESSIONS_ENDPOINT}/${encodeURIComponent(id)}/messages`);
+        if (token !== state.loadToken) return; // user switched threads meanwhile
+        removeMessage(loadingEntry);
+        state.messages = [];
+        saveSessionId(id);
+        const rows = Array.isArray(data) ? data : [];
+        rows.forEach((m) => {
+            if (m.role === 'USER') appendUserMessage(m.content || '');
+            // Plain text only: old draft/confirm cards are not rebuilt, so they can't create duplicate tickets.
+            else if (m.role === 'ASSISTANT') appendAiMessage({ answer: m.content || '' });
+        });
+        if (rows.length === 0) renderIntro();
+    } catch (err) {
+        if (token !== state.loadToken) return;
+        removeMessage(loadingEntry);
+        state.sessionId = null;
+        saveSessionId(null);
+        renderIntro();
+        if (Number(err && err.status) === 404) {
+            if (!silent) Toast.error('Cuộc trò chuyện không còn tồn tại.');
+            loadSessions();
+        } else if (!silent) {
+            Toast.error('Không tải được cuộc trò chuyện. Vui lòng thử lại.');
+        }
+        renderSessions();
+    }
+};
+
+const deleteSession = async (session) => {
+    if (!dom || state.isBusy) return;
+    const ok = await Dialog.confirm(
+        `Xóa cuộc trò chuyện "${session.title || 'Cuộc trò chuyện mới'}"?`,
+        { title: 'Xóa cuộc trò chuyện', okText: 'Xóa', cancelText: 'Giữ lại', danger: true }
+    );
+    if (!ok) return;
+    try {
+        await request(`${SESSIONS_ENDPOINT}/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
+    } catch (err) {
+        // 404 means it is already gone — treat as deleted; anything else keeps the row.
+        if (Number(err && err.status) !== 404) {
+            Toast.error('Không xóa được cuộc trò chuyện. Vui lòng thử lại.');
+            return;
+        }
+    }
+    state.sessions = state.sessions.filter((s) => s.id !== session.id);
+    if (state.sessionId === session.id) newChat();
+    else renderSessions();
+    Toast.success('Đã xóa cuộc trò chuyện.');
+};
+
+const isNarrow = () => window.matchMedia('(max-width: 720px)').matches;
+
+const setHistoryOpen = (open) => {
+    if (!dom) return;
+    state.historyOpen = open;
+    dom.panel.classList.toggle('with-history', open);
+    dom.historyBtn.setAttribute('aria-expanded', String(open));
+    if (open) loadSessions();
+};
+
+const closeHistoryIfOverlay = () => {
+    if (state.historyOpen && isNarrow()) setHistoryOpen(false);
+};
+
+// Resume the user's last thread once per login.
+const restoreLastSession = () => {
+    const user = getAuthUser();
+    const username = user && user.username;
+    if (!username || state.restoredFor === username) return;
+    state.restoredFor = username;
+    const saved = readSessionId();
+    if (saved && !state.sessionId && !state.messages.some((m) => m.role === 'user')) {
+        openSession(saved, { silent: true });
     }
 };
 
@@ -528,8 +791,13 @@ const submitQuestion = async (rawQuestion) => {
             typeof data === 'object' &&
             Object.prototype.hasOwnProperty.call(data, 'answer')
         ) {
-            if (data.sessionId) state.sessionId = data.sessionId;
+            if (data.sessionId) {
+                state.sessionId = data.sessionId;
+                saveSessionId(data.sessionId);
+            }
             handleServerAction(data);
+            // Refresh order/title so the active thread sits on top.
+            if (state.historyOpen) loadSessions();
         } else {
             appendErrorMessage(
                 AI_ERROR_MESSAGES['LLM_MALFORMED_RESPONSE'] || FALLBACK_ERROR_MESSAGE
@@ -790,6 +1058,16 @@ const updateAskTicketBanner = () => {
 const applyRoleGate = () => {
     if (!dom) return;
     const allowed = hasAllowedRole();
+    // Logout or account switch: never leave the previous user's thread on screen.
+    const user = getAuthUser();
+    const username = allowed && user ? user.username : null;
+    if (state.restoredFor && state.restoredFor !== username && !state.isBusy) {
+        resetThread();
+        state.sessionId = null;
+        state.sessions = [];
+        state.restoredFor = null;
+        if (state.historyOpen) setHistoryOpen(false);
+    }
     if (allowed) {
         dom.fab.classList.remove('hidden');
         if (state.isOpen) {
@@ -822,6 +1100,8 @@ const attachEvents = () => {
 
     dom.minBtn.addEventListener('click', toggleMinimize);
     dom.closeBtn.addEventListener('click', closePanel);
+    dom.historyBtn.addEventListener('click', () => setHistoryOpen(!state.historyOpen));
+    dom.newChatBtn.addEventListener('click', newChat);
 
     dom.sendBtn.addEventListener('click', () => {
         const value = dom.textarea.value;
@@ -854,7 +1134,11 @@ const attachEvents = () => {
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         if (!state.isOpen) return;
-        if (state.isMinimized) {
+        if (document.querySelector('.app-dialog:not(.hidden)')) return; // let the confirm dialog handle Esc
+        if (state.historyOpen) {
+            setHistoryOpen(false);
+            dom.historyBtn.focus();
+        } else if (state.isMinimized) {
             toggleMinimize();
         } else {
             closePanel();

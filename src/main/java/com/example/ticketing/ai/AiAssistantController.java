@@ -190,12 +190,7 @@ public class AiAssistantController {
             Authentication authentication) {
         String username = (authentication != null) ? authentication.getName() : null;
         // Ownership check: load the session scoped to the user.
-        sessionService.listActive(username, 1000).stream()
-                .filter(s -> s.getId().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Session not found"));
+        sessionService.requireOwned(id, username);
         List<MessageView> out = sessionService.allMessages(id).stream()
                 .map(this::toMessageView)
                 .collect(Collectors.toList());
@@ -232,12 +227,7 @@ public class AiAssistantController {
             Authentication authentication) {
         String username = (authentication != null) ? authentication.getName() : null;
         // Ownership check.
-        sessionService.listActive(username, 1000).stream()
-                .filter(s -> s.getId().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND,
-                        "Session not found"));
+        sessionService.requireOwned(id, username);
 
         // Validate required fields.
         StringBuilder err = new StringBuilder();

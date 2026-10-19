@@ -7,8 +7,10 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Owns ai_session + ai_message lifecycle: create new thread, append
@@ -45,7 +47,9 @@ public class AiSessionService {
             throw new IllegalArgumentException("username is required");
         }
         if (sessionId != null) {
-            var existing = sessionRepo.findByIdAndUserUsername(sessionId, username);
+            // Archived (deleted) sessions are treated as missing so new turns never land in a hidden thread.
+            var existing = sessionRepo.findByIdAndUserUsername(sessionId, username)
+                    .filter(s -> !s.isArchived());
             if (existing.isPresent()) {
                 touch(existing.get());
                 return sessionId;
@@ -116,11 +120,21 @@ public class AiSessionService {
         return messageRepo.findLastAssistantMessage(sessionId);
     }
 
+    /**
+     * Load a non-archived session owned by the user, or fail with 404.
+     * Used by every endpoint that takes a session id from the client.
+     */
+    @Transactional(readOnly = true)
+    public AiSession requireOwned(UUID sessionId, String username) {
+        return sessionRepo.findByIdAndUserUsername(sessionId, username)
+                .filter(s -> !s.isArchived())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Session not found"));
+    }
+
     @Transactional
     public void archive(UUID sessionId, String username) {
-        AiSession s = sessionRepo.findByIdAndUserUsername(sessionId, username)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Session not found: " + sessionId));
+        AiSession s = requireOwned(sessionId, username);
         s.setArchived(true);
         sessionRepo.save(s);
     }
