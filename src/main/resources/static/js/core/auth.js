@@ -407,42 +407,40 @@ function createForcePasswordChangeModal() {
   modal.id = 'force-password-modal';
   modal.className = 'modal hidden';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 450px;">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="force-password-title" style="max-width: 440px;">
       <div class="modal-header">
-        <h3>Đổi mật khẩu bắt buộc</h3>
-      </div>
-      <div class="modal-body">
-        <p style="color: #856404; background: #fff3cd; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
-          <strong>Lưu ý:</strong> Bạn phải đổi mật khẩu trước khi sử dụng hệ thống.
+        <h3 id="force-password-title">Đặt mật khẩu mới</h3>
+        <p style="margin: 6px 0 0; color: var(--muted); font-size: 0.9rem;">
+          Đây là lần đăng nhập đầu tiên. Bạn hãy đặt mật khẩu riêng để bắt đầu sử dụng hệ thống.
         </p>
-        <form id="force-password-form">
+      </div>
+      <form id="force-password-form" novalidate>
+        <div class="modal-body">
           <div class="form-group">
-            <label for="force-new-password">Mật khẩu mới <span style="color: red;">*</span></label>
-            <input type="password" id="force-new-password" name="newPassword" required 
-                   minlength="7" placeholder="Nhập mật khẩu mới (tối thiểu 7 ký tự)">
+            <label for="force-new-password">Nhập mật khẩu mới</label>
+            <input type="password" id="force-new-password" name="newPassword" required
+                   minlength="7" autocomplete="new-password" placeholder="Tối thiểu 7 ký tự">
           </div>
           <div class="form-group">
-            <label for="force-confirm-password">Xác nhận mật khẩu <span style="color: red;">*</span></label>
-            <input type="password" id="force-confirm-password" name="confirmPassword" required 
-                   minlength="7" placeholder="Nhập lại mật khẩu mới">
+            <label for="force-confirm-password">Xác nhận mật khẩu mới</label>
+            <input type="password" id="force-confirm-password" name="confirmPassword" required
+                   minlength="7" autocomplete="new-password" placeholder="Nhập lại mật khẩu mới">
           </div>
-          <div id="force-password-error" class="error-message hidden" style="color: #dc3545; margin-top: 8px;"></div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" id="force-password-submit" class="btn btn-primary">
-          Đổi mật khẩu
-        </button>
-      </div>
+          <p id="force-password-error" class="field-error hidden" role="alert" style="margin: 0;"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" id="force-password-submit">Đổi mật khẩu</button>
+        </div>
+      </form>
     </div>
   `;
   document.body.appendChild(modal);
-  
-  // Add event listener for form submission
-  const submitBtn = document.getElementById('force-password-submit');
-  if (submitBtn) {
-    submitBtn.addEventListener('click', handleForcePasswordSubmit);
-  }
+
+  // Submit via button or Enter key
+  document.getElementById('force-password-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleForcePasswordSubmit();
+  });
 }
 
 /**
@@ -457,7 +455,7 @@ async function handleForcePasswordSubmit() {
   // Validate
   if (!newPassword || newPassword.length < 7) {
     if (errorDiv) {
-      errorDiv.textContent = 'Mật khẩu mới phải có ít nhất 7 ký tự.';
+      errorDiv.textContent = 'Mật khẩu mới cần có ít nhất 7 ký tự.';
       errorDiv.classList.remove('hidden');
     }
     return;
@@ -465,7 +463,7 @@ async function handleForcePasswordSubmit() {
   
   if (newPassword !== confirmPassword) {
     if (errorDiv) {
-      errorDiv.textContent = 'Mật khẩu xác nhận không khớp.';
+      errorDiv.textContent = 'Hai mật khẩu chưa khớp nhau, bạn kiểm tra lại nhé.';
       errorDiv.classList.remove('hidden');
     }
     return;
@@ -516,7 +514,7 @@ async function handleForcePasswordSubmit() {
       setRoute('#/login');
       
       // Show success message
-      alert('Mật khẩu đã được đổi thành công. Vui lòng đăng nhập lại với mật khẩu mới.');
+      Dialog.alert('Mật khẩu của bạn đã được đổi. Vui lòng đăng nhập lại bằng mật khẩu mới nhé.', { title: 'Đổi mật khẩu thành công' });
     }
   } catch (error) {
     console.error('Force password change failed:', error);

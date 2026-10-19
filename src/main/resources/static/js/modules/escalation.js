@@ -317,11 +317,11 @@ const Escalation = (() => {
         }
     }
 
-    function confirmDelete(id) {
+    async function confirmDelete(id) {
         const rule = rules.find(r => r.id === id);
         if (!rule) return;
 
-        if (confirm(`Bạn có chắc muốn xóa Escalation Rule "${rule.name}"?\n\nHành động này không thể hoàn tác.`)) {
+        if (await Dialog.confirm(`Bạn có chắc muốn xóa quy tắc chuyển cấp "${rule.name}"?`, { title: 'Xóa quy tắc chuyển cấp', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true })) {
             deleteRule(id)
                 .then(() => {
                     Toast.show('Đã xóa quy tắc chuyển cấp', 'success');

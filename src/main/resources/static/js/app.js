@@ -10,6 +10,7 @@ window.Auth = Auth;
 
 // Import Toast module first
 import './ui/toast.js';
+import './ui/dialog.js';
 
 // Expose DashboardModule globally
 window.DashboardModule = DashboardModule;

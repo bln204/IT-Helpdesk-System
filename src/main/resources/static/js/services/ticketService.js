@@ -62,7 +62,7 @@ export const initTicketEvents = () => {
         await updateStatus();
       } catch (err) {
         console.error('[initTicketEvents] updateStatus error:', err);
-        alert('Lỗi: ' + err.message);
+        Toast.error('Chưa thực hiện được: ' + err.message);
       }
     };
   }
@@ -75,7 +75,7 @@ export const initTicketEvents = () => {
         await updatePriority();
       } catch (err) {
         console.error('[initTicketEvents] updatePriority error:', err);
-        alert('Lỗi: ' + err.message);
+        Toast.error('Chưa thực hiện được: ' + err.message);
       }
     };
   }
@@ -88,7 +88,7 @@ export const initTicketEvents = () => {
         await updateAssignee();
       } catch (err) {
         console.error('[initTicketEvents] updateAssignee error:', err);
-        alert('Lỗi: ' + err.message);
+        Toast.error('Chưa thực hiện được: ' + err.message);
       }
     };
   }
@@ -101,7 +101,7 @@ export const initTicketEvents = () => {
         await assignToMe();
       } catch (err) {
         console.error('[initTicketEvents] assignToMe error:', err);
-        alert('Lỗi: ' + err.message);
+        Toast.error('Chưa thực hiện được: ' + err.message);
       }
     };
   }
@@ -835,7 +835,7 @@ export const downloadAttachmentFile = async (attachmentId, fileName, contentType
     window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Download error:', error);
-    alert('Lỗi khi tải tệp: ' + error.message);
+    Toast.error('Chưa tải được tệp: ' + error.message);
   }
 };
 
@@ -865,12 +865,12 @@ export const uploadAttachments = async (ticketId, files) => {
         errorCount++;
         const errorText = await response.text();
         console.error(`Upload failed for ${file.name}:`, response.status, errorText);
-        alert(`Lỗi khi tải lên tệp ${file.name}: ${errorText}`);
+        Toast.error(`Chưa tải lên được tệp ${file.name}: ${errorText}`);
       }
     } catch (error) {
       errorCount++;
       console.error('Error uploading attachment:', error);
-      alert(`Lỗi khi tải lên tệp ${file.name}: ${error.message}`);
+      Toast.error(`Chưa tải lên được tệp ${file.name}: ${error.message}`);
     }
   }
   
@@ -914,7 +914,7 @@ export const updateStatus = async () => {
     await selectTicket({ id: window.selectedTicket.id });
   } catch (err) {
     console.error('[updateStatus] API error:', err);
-    alert('Lỗi cập nhật trạng thái: ' + err.message);
+    Toast.error('Chưa cập nhật được trạng thái: ' + err.message);
   }
 };
 
@@ -935,7 +935,7 @@ export const updatePriority = async () => {
     await selectTicket({ id: window.selectedTicket.id });
   } catch (err) {
     console.error('[updatePriority] API error:', err);
-    alert('Lỗi cập nhật độ ưu tiên: ' + err.message);
+    Toast.error('Chưa cập nhật được độ ưu tiên: ' + err.message);
   }
 };
 
@@ -947,7 +947,7 @@ export const updateAssignee = async () => {
   const { canAssignTickets } = await import('./userService.js');
   
   if (!canAssignTickets()) {
-    alert('Bạn không có quyền phân công phiếu. Chỉ IT Staff hoặc Trưởng phòng IT mới có quyền này.');
+    Toast.warning('Chỉ IT Staff hoặc Trưởng phòng IT mới phân công được phiếu.');
     return;
   }
   
@@ -960,7 +960,7 @@ export const updateAssignee = async () => {
   
   const assigneeName = normalizeAssigneeInput(assigneeInput.value);
   if (!assigneeName) {
-    alert('Vui lòng chọn người nhận.');
+    Toast.warning('Bạn chưa chọn người nhận phiếu.');
     return;
   }
   if (assigneeName === (window.selectedTicket.assigneeName || null)) return;
@@ -974,7 +974,7 @@ export const updateAssignee = async () => {
     await selectTicket({ id: window.selectedTicket.id });
   } catch (err) {
     console.error('[updateAssignee] API error:', err);
-    alert('Lỗi cập nhật người phân công: ' + err.message);
+    Toast.error('Chưa cập nhật được người phụ trách: ' + err.message);
   }
 };
 
@@ -985,7 +985,7 @@ export const assignToMe = async () => {
   const { canAssignTickets } = await import('./userService.js');
   
   if (!canAssignTickets()) {
-    alert('Bạn không có quyền phân công phiếu. Chỉ IT Staff hoặc Trưởng phòng IT mới có quyền này.');
+    Toast.warning('Chỉ IT Staff hoặc Trưởng phòng IT mới phân công được phiếu.');
     return;
   }
   
@@ -998,7 +998,7 @@ export const assignToMe = async () => {
     await selectTicket({ id: window.selectedTicket.id });
   } catch (err) {
     console.error('[assignToMe] API error:', err);
-    alert('Lỗi giao phiếu: ' + err.message);
+    Toast.error('Chưa giao được phiếu: ' + err.message);
   }
 };
 
@@ -1018,7 +1018,7 @@ export const addComment = async () => {
     return;
   }
   if (commentVisibility.value === 'INTERNAL' && !canAddInternalComments()) {
-    alert('Bạn không có quyền thêm bình luận nội bộ. Chỉ nhân viên IT mới có quyền này.');
+    Toast.warning('Chỉ nhân viên IT mới thêm được bình luận nội bộ.');
     return;
   }
   

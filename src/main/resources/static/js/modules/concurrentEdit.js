@@ -150,22 +150,15 @@ export const setupConcurrentEditWarning = () => {
  * @returns {Promise<string>} - User choice: 'reload', 'overwrite', or 'cancel'
  */
 export const showConflictDialog = (conflict) => {
-    return new Promise((resolve) => {
-        // Check if browser confirm is enough or if we need custom dialog
-        const choice = confirm(
-            `${conflict.message}\n\n` +
-            `Phiên bản cục bộ: ${conflict.localVersion}\n` +
-            `Phiên bản máy chủ: ${conflict.serverVersion}\n\n` +
-            `Nhấn OK để tải lại với dữ liệu mới nhất.\n` +
-            `Nhấn Cancel để tiếp tục chỉnh sửa (cảnh báo: thay đổi có thể bị ghi đè).`
-        );
-        
-        if (choice) {
-            resolve('reload');
-        } else {
-            resolve('overwrite');
+    return window.Dialog.confirm(
+        `${conflict.message}\nPhiên bản của bạn: ${conflict.localVersion}, phiên bản mới nhất: ${conflict.serverVersion}.`,
+        {
+            title: 'Phiếu vừa được người khác cập nhật',
+            note: 'Nếu tiếp tục chỉnh sửa, thay đổi của người khác có thể bị ghi đè.',
+            okText: 'Tải dữ liệu mới nhất',
+            cancelText: 'Tiếp tục chỉnh sửa',
         }
-    });
+    ).then((reload) => (reload ? 'reload' : 'overwrite'));
 };
 
 /**

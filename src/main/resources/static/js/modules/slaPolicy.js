@@ -458,11 +458,11 @@ const SlaPolicy = (() => {
         }
     }
 
-    function confirmDelete(id) {
+    async function confirmDelete(id) {
         const policy = policies.find(p => p.id === id);
         if (!policy) return;
 
-        if (confirm(`Bạn có chắc muốn xóa SLA Policy "${policy.name}"?\n\nHành động này không thể hoàn tác.`)) {
+        if (await Dialog.confirm(`Bạn có chắc muốn xóa chính sách SLA "${policy.name}"?`, { title: 'Xóa chính sách SLA', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true })) {
             deletePolicy(id)
                 .then(() => {
                     Toast.show('Đã xóa SLA policy', 'success');

@@ -151,3 +151,43 @@
 body.dark .close-btn:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+
+/* System dialog (js/ui/dialog.js) replacing native alert/confirm/prompt */
+.app-dialog {
+  z-index: 1100; /* above other modals, e.g. confirm over reject-modal */
+}
+
+.app-dialog .modal-content {
+  width: min(440px, 90vw);
+  animation: app-dialog-in 0.15s ease-out;
+}
+
+.app-dialog .modal-header h3 {
+  font-size: 1.15rem;
+}
+
+.app-dialog-message {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.app-dialog-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.app-dialog .modal-rejection-form .field-error {
+  margin: 6px 0 0;
+}
+
+@keyframes app-dialog-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-dialog .modal-content { animation: none; }
+}

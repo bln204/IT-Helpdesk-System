@@ -463,8 +463,8 @@ const ServiceRequest = (() => {
         act(id, api(`${API_BASE}/${id}/complete`, 'PATCH', { resolution: textOf('complete', id) }), 'Đã hoàn thành yêu cầu');
     }
 
-    function handleConfirm(id) {
-        if (!confirm('Xác nhận hoàn thành yêu cầu này?')) return;
+    async function handleConfirm(id) {
+        if (!(await Dialog.confirm('Yêu cầu này đã được xử lý xong như bạn mong muốn?', { title: 'Xác nhận hoàn thành', note: 'Sau khi xác nhận, yêu cầu sẽ được đóng.', okText: 'Xác nhận', cancelText: 'Chưa' }))) return;
         act(id, api(`${API_BASE}/${id}/confirm`, 'PATCH'), 'Đã xác nhận và đóng yêu cầu', { close: true });
     }
 
@@ -472,13 +472,13 @@ const ServiceRequest = (() => {
         act(id, api(`${API_BASE}/${id}/reopen`, 'PATCH', { reason: textOf('reopen', id) }), 'Đã yêu cầu mở lại');
     }
 
-    function handleCancel(id) {
-        if (!confirm('Hủy yêu cầu này?')) return;
+    async function handleCancel(id) {
+        if (!(await Dialog.confirm('Bạn có chắc muốn hủy yêu cầu này?', { title: 'Hủy yêu cầu', okText: 'Hủy yêu cầu', cancelText: 'Giữ lại', danger: true }))) return;
         act(id, api(`${API_BASE}/${id}/cancel`, 'PATCH'), 'Đã hủy yêu cầu');
     }
 
-    function handleDelete(id) {
-        if (!confirm('Xóa vĩnh viễn yêu cầu này? Thao tác không thể hoàn tác.')) return;
+    async function handleDelete(id) {
+        if (!(await Dialog.confirm('Bạn có chắc muốn xóa vĩnh viễn yêu cầu này?', { title: 'Xóa yêu cầu', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa', cancelText: 'Giữ lại', danger: true }))) return;
         act(id, api(`${API_BASE}/${id}`, 'DELETE'), 'Đã xóa yêu cầu', { close: true });
     }
 

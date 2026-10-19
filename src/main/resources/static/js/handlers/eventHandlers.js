@@ -186,7 +186,7 @@ export const attachEventHandlers = () => {
           loginError.textContent = error.message;
           loginError.classList.remove('hidden');
         } else {
-          alert(error.message);
+          Toast.error(error.message);
         }
       }
     });
@@ -255,7 +255,7 @@ export const attachEventHandlers = () => {
       // Check for duplicate submission
       const submitBtn = createForm.querySelector('[type="submit"]');
       if (submitBtn?.disabled) {
-        alert('Yêu cầu đang được xử lý. Vui lòng đợi...');
+        Toast.info('Yêu cầu đang được xử lý, bạn chờ một chút nhé...');
         return;
       }
       
@@ -301,9 +301,9 @@ export const attachEventHandlers = () => {
         
         // Handle concurrent modification
         if (error.errorCode === 'CONCURRENT_MODIFICATION') {
-          alert('Phiếu đang được chỉnh sửa bởi người khác. Vui lòng tải lại trang và thử lại.');
+          Dialog.alert('Phiếu này vừa được người khác chỉnh sửa. Bạn hãy tải lại trang để xem dữ liệu mới nhất rồi thử lại nhé.', { title: 'Phiếu đã thay đổi' });
         } else {
-          alert(error.message);
+          Toast.error(error.message);
         }
       }
     });
@@ -313,9 +313,9 @@ export const attachEventHandlers = () => {
   const refreshBtn = document.getElementById('refresh-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
-      loadTickets({ reset: true }).catch((error) => alert(error.message));
-      loadDashboard().catch((error) => alert(error.message));
-      loadQueue().catch((error) => alert(error.message));
+      loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
+      loadDashboard().catch((error) => Toast.error(error.message));
+      loadQueue().catch((error) => Toast.error(error.message));
     });
   }
   
@@ -333,7 +333,7 @@ export const attachEventHandlers = () => {
       if (filterSort) filterSort.value = 'createdAt,desc';
       if (filterSearch) filterSearch.value = '';
       saveTicketFilters();
-      loadTickets({ reset: true }).catch((error) => alert(error.message));
+      loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
     });
   }
   
@@ -347,21 +347,21 @@ export const attachEventHandlers = () => {
     filterAssignee.addEventListener('change', () => {
       window.ticketPage = 0;
       saveTicketFilters();
-      loadTickets({ reset: true }).catch((error) => alert(error.message));
+      loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
     });
   }
   if (filterStatus) {
     filterStatus.addEventListener('change', () => {
       window.ticketPage = 0;
       saveTicketFilters();
-      loadTickets({ reset: true }).catch((error) => alert(error.message));
+      loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
     });
   }
   if (filterSort) {
     filterSort.addEventListener('change', () => {
       window.ticketPage = 0;
       saveTicketFilters();
-      loadTickets({ reset: true }).catch((error) => alert(error.message));
+      loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
     });
   }
   if (filterSearch) {
@@ -371,7 +371,7 @@ export const attachEventHandlers = () => {
       searchTimer = setTimeout(() => {
         window.ticketPage = 0;
         saveTicketFilters();
-        loadTickets({ reset: true }).catch((error) => alert(error.message));
+        loadTickets({ reset: true }).catch((error) => Toast.error(error.message));
       }, 300);
     });
   }
@@ -428,8 +428,8 @@ export const attachEventHandlers = () => {
   const addCommentBtn = document.getElementById('add-comment-btn');
   const auditDownloadBtn = document.getElementById('audit-download-btn');
   
-  if (addCommentBtn) addCommentBtn.addEventListener('click', () => addComment().catch((err) => alert(err.message)));
-  if (auditDownloadBtn) auditDownloadBtn.addEventListener('click', () => downloadAuditCsv().catch((err) => alert(err.message)));
+  if (addCommentBtn) addCommentBtn.addEventListener('click', () => addComment().catch((err) => Toast.error(err.message)));
+  if (auditDownloadBtn) auditDownloadBtn.addEventListener('click', () => downloadAuditCsv().catch((err) => Toast.error(err.message)));
   
   // Report Buttons
   const engineerReportBtn = document.getElementById('engineer-report-btn');
@@ -439,10 +439,10 @@ export const attachEventHandlers = () => {
   const reportDownloadBtn = document.getElementById('report-download-btn');
   const newReportBtn = document.getElementById('new-report-btn');
 
-  if (engineerReportBtn) engineerReportBtn.addEventListener('click', () => loadEngineerReport().catch((err) => alert(err.message)));
-  if (requesterReportBtn) requesterReportBtn.addEventListener('click', () => loadRequesterReport().catch((err) => alert(err.message)));
-  if (backlogReportBtn) backlogReportBtn.addEventListener('click', () => loadBacklogReport().catch((err) => alert(err.message)));
-  if (slaReportBtn) slaReportBtn.addEventListener('click', () => loadSlaReport().catch((err) => alert(err.message)));
+  if (engineerReportBtn) engineerReportBtn.addEventListener('click', () => loadEngineerReport().catch((err) => Toast.error(err.message)));
+  if (requesterReportBtn) requesterReportBtn.addEventListener('click', () => loadRequesterReport().catch((err) => Toast.error(err.message)));
+  if (backlogReportBtn) backlogReportBtn.addEventListener('click', () => loadBacklogReport().catch((err) => Toast.error(err.message)));
+  if (slaReportBtn) slaReportBtn.addEventListener('click', () => loadSlaReport().catch((err) => Toast.error(err.message)));
   if (reportDownloadBtn) reportDownloadBtn.addEventListener('click', downloadReportCsv);
   if (newReportBtn) newReportBtn.addEventListener('click', showNewReportDialog);
   
@@ -460,7 +460,7 @@ export const attachEventHandlers = () => {
   if (userSearchBtn) {
     userSearchBtn.addEventListener('click', () => {
       window.userPage = 0;
-      loadAdminUsers().catch((err) => alert(err.message));
+      loadAdminUsers().catch((err) => Toast.error(err.message));
     });
   }
   if (userSearch) {
@@ -468,7 +468,7 @@ export const attachEventHandlers = () => {
       if (event.key === 'Enter') {
         event.preventDefault();
         window.userPage = 0;
-        loadAdminUsers().catch((err) => alert(err.message));
+        loadAdminUsers().catch((err) => Toast.error(err.message));
       }
     });
   }
@@ -476,14 +476,14 @@ export const attachEventHandlers = () => {
     usersPrev.addEventListener('click', () => {
       if (window.userPage > 0) {
         window.userPage -= 1;
-        loadAdminUsers().catch((err) => alert(err.message));
+        loadAdminUsers().catch((err) => Toast.error(err.message));
       }
     });
   }
   if (usersNext) {
     usersNext.addEventListener('click', () => {
       window.userPage += 1;
-      loadAdminUsers().catch((err) => alert(err.message));
+      loadAdminUsers().catch((err) => Toast.error(err.message));
     });
   }
   if (openUserModal) {
@@ -588,7 +588,7 @@ export const attachEventHandlers = () => {
           userPasswordInput.value = '';
           loadAdminUsers();
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
         }
         return;
       }
@@ -627,7 +627,7 @@ export const attachEventHandlers = () => {
         if (userPasswordInput) userPasswordInput.value = '';
         await loadAdminUsers();
       } catch (error) {
-        alert('Lỗi: ' + error.message);
+        Toast.error('Chưa thực hiện được: ' + error.message);
       }
     });
   }
@@ -642,7 +642,7 @@ export const attachEventHandlers = () => {
         userUnlockLogin.classList.add('hidden');
         await loadAdminUsers();
       } catch (error) {
-        alert('Lỗi: ' + error.message);
+        Toast.error('Chưa thực hiện được: ' + error.message);
       }
     });
   }
@@ -656,27 +656,25 @@ export const attachEventHandlers = () => {
       const { isAdmin, isTruongPhong } = await import('../core/auth.js');
       
       if (isAdmin()) {
-        const confirmMsg = `Bạn có chắc muốn xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}"?\n\nHành động này không thể hoàn tác.`;
-        if (!confirm(confirmMsg)) {
+        if (!(await Dialog.confirm(`Bạn có chắc muốn xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}"?`, { title: 'Xóa tài khoản', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa tài khoản', cancelText: 'Giữ lại', danger: true }))) {
           return;
         }
         try {
           await request(`/api/users/${window.selectedUser.id}`, { method: 'DELETE' });
           addNotification('delete', 'Xóa tài khoản', `Tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" đã được xóa.`);
-          alert('Đã xóa tài khoản thành công!');
+          Toast.success('Đã xóa tài khoản.');
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
           return;
         }
       } else if (isTruongPhong()) {
-        const confirmMsg = `Bạn có chắc muốn yêu cầu xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}"?\n\nSau khi gửi yêu cầu, Admin sẽ xem xét và duyệt xóa.`;
-        if (!confirm(confirmMsg)) return;
+        if (!(await Dialog.confirm(`Gửi yêu cầu xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" cho Admin?`, { title: 'Yêu cầu xóa tài khoản', note: 'Admin sẽ xem xét và duyệt yêu cầu này.', okText: 'Gửi yêu cầu', cancelText: 'Để sau' }))) return;
         try {
           await request(`/api/admin/users/${window.selectedUser.id}/request-delete`, { method: 'POST' });
           addNotification('request-delete', 'Yêu cầu xóa tài khoản', `Yêu cầu xóa tài khoản "${window.selectedUser.displayName || window.selectedUser.username}" đã được gửi cho Admin.`);
-          alert('Yêu cầu xóa đã được gửi cho Admin!');
+          Toast.success('Đã gửi yêu cầu xóa cho Admin.');
         } catch (error) {
-          alert('Lỗi: ' + error.message);
+          Toast.error('Chưa thực hiện được: ' + error.message);
           return;
         }
       }
@@ -728,7 +726,7 @@ export const attachEventHandlers = () => {
         await loadUserAvatarMap();
         await loadEngineerOptions();
       } catch (error) {
-        alert(error.message);
+        Toast.error(error.message);
       }
     });
   }
@@ -750,7 +748,7 @@ export const attachEventHandlers = () => {
         });
         profilePasswordForm.reset();
       } catch (error) {
-        alert(error.message);
+        Toast.error(error.message);
       }
     });
   }
@@ -836,12 +834,12 @@ export const attachEventHandlers = () => {
       const enabled = deptEnabled.checked;
       
       if (!code) {
-        alert('Mã phòng ban là bắt buộc.');
+        Toast.warning('Bạn chưa nhập mã phòng ban.');
         deptCode.focus();
         return;
       }
       if (!name) {
-        alert('Tên phòng ban là bắt buộc.');
+        Toast.warning('Bạn chưa nhập tên phòng ban.');
         deptName.focus();
         return;
       }
@@ -859,7 +857,7 @@ export const attachEventHandlers = () => {
               managerId: managerId
             }),
           });
-          alert('Đã cập nhật phòng ban thành công!');
+          Toast.success('Đã cập nhật phòng ban.');
         } else {
           await request('/api/departments', {
             method: 'POST',
@@ -870,13 +868,13 @@ export const attachEventHandlers = () => {
               managerId: managerId
             }),
           });
-          alert('Đã tạo phòng ban mới thành công!');
+          Toast.success('Đã tạo phòng ban mới.');
         }
         closeDeptModalHandler();
         await loadDepartmentsTable();
         await loadDepartmentsForSelects();
       } catch (error) {
-        alert('Lỗi: ' + error.message);
+        Toast.error('Chưa thực hiện được: ' + error.message);
       }
     });
   }
@@ -884,17 +882,17 @@ export const attachEventHandlers = () => {
   if (deptConfirmDelete) {
     deptConfirmDelete.addEventListener('click', async () => {
       if (!window.selectedDepartmentForDelete) return;
-      if (!confirm(`Xác nhận xóa phòng ban "${window.selectedDepartmentForDelete.name}"?`)) return;
+      if (!(await Dialog.confirm(`Bạn có chắc muốn xóa phòng ban "${window.selectedDepartmentForDelete.name}"?`, { title: 'Xóa phòng ban', note: 'Thao tác này không thể hoàn tác.', okText: 'Xóa phòng ban', cancelText: 'Giữ lại', danger: true }))) return;
       try {
         await request(`/api/departments/${window.selectedDepartmentForDelete.id}`, {
           method: 'DELETE',
         });
-        alert('Đã xóa phòng ban thành công!');
+        Toast.success('Đã xóa phòng ban.');
         closeDeptDeleteModalHandler();
         await loadDepartments();
         await loadDepartmentsForSelects();
       } catch (error) {
-        alert('Lỗi: ' + error.message);
+        Toast.error('Chưa thực hiện được: ' + error.message);
       }
     });
   }
@@ -952,11 +950,11 @@ export const attachEventHandlers = () => {
       const reason = rejectReasonInput?.value.trim();
       
       if (!reason) {
-        alert('Vui lòng nhập lý do từ chối.');
+        Toast.warning('Bạn hãy nhập lý do từ chối trước nhé.');
         rejectReasonInput?.focus();
         return;
       }
-      if (!confirm(`Bạn có chắc muốn từ chối tài khoản "${userDisplayName}"?`)) return;
+      if (!(await Dialog.confirm(`Bạn có chắc muốn từ chối tài khoản "${userDisplayName}"?`, { title: 'Từ chối tài khoản', okText: 'Từ chối', cancelText: 'Quay lại', danger: true }))) return;
       
       try {
         await request(`/api/admin/users/${userId}/reject`, {
@@ -968,9 +966,9 @@ export const attachEventHandlers = () => {
         rejectModal.setAttribute('aria-hidden', 'true');
         if (rejectReasonInput) rejectReasonInput.value = '';
         await loadAdminUsers();
-        alert('Đã từ chối tài khoản.');
+        Toast.success('Đã từ chối tài khoản.');
       } catch (error) {
-        alert('Lỗi: ' + error.message);
+        Toast.error('Chưa thực hiện được: ' + error.message);
       }
     });
   }
@@ -1083,7 +1081,7 @@ const initAttachmentHandlers = () => {
     uploadAttachmentBtn.addEventListener('click', async () => {
       if (!window.selectedTicket) return;
       if (ticketSelectedFilesList.length === 0) {
-        alert('Vui lòng chọn tệp đính kèm.');
+        Toast.warning('Bạn chưa chọn tệp đính kèm nào.');
         return;
       }
       await uploadAttachments(window.selectedTicket.id, ticketSelectedFilesList);

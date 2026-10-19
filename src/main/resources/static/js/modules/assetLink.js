@@ -355,7 +355,7 @@ const AssetLinkModule = (() => {
     }
 
     async function unlinkAsset(linkId, incidentId) {
-        if (!confirm('Bỏ liên kết thiết bị này khỏi sự cố?')) return;
+        if (!(await Dialog.confirm('Bỏ liên kết thiết bị này khỏi sự cố?', { title: 'Bỏ liên kết thiết bị', okText: 'Bỏ liên kết', cancelText: 'Giữ lại', danger: true }))) return;
 
         try {
             const response = await fetch(`${API_BASE}/incident/${incidentId}/asset/${linkId}`, {
