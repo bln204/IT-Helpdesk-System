@@ -597,9 +597,11 @@ public class TicketService {
                 && actorName != null
                 && newAssignee.equalsIgnoreCase(actorName);
         ActorContext actor = actorContextFor(actorName, actorRole, actorDepartmentId);
+        boolean canAssignOthers = ticketAuthorization.canAssignOthers(actor);
+        // Non-manager IT operators may transfer only their own ticket; ownership is checked below.
         boolean allowed = isSelfReceive
                 ? ticketAuthorization.canReceiveTicket(actor)
-                : ticketAuthorization.canAssignOthers(actor);
+                : canAssignOthers || ticketAuthorization.canReceiveTicket(actor);
         if (!allowed) {
             throw new TicketRuleViolationException(
                     isSelfReceive
@@ -609,6 +611,17 @@ public class TicketService {
 
         Ticket ticket = getTicket(id);
         String previousAssignee = ticket.getAssigneeName();
+
+        // NHAN_VIEN + IT: self-receive only unassigned tickets; transfer only tickets they own.
+        if (!canAssignOthers) {
+            if (isSelfReceive && previousAssignee != null && !previousAssignee.isBlank()) {
+                throw new TicketRuleViolationException(
+                        "Ticket is already assigned; only unassigned tickets can be self-received.");
+            }
+            if (!isSelfReceive && (actorName == null || !actorName.equalsIgnoreCase(previousAssignee))) {
+                throw new TicketRuleViolationException("You don't have permission to assign other users.");
+            }
+        }
 
         // PHASE 3 (C-3): validate the target user. This throws TicketNotFoundException
         // for a
@@ -801,6 +814,11 @@ public class TicketService {
             throw new TicketRuleViolationException(
                     "You don't have permission to modify ticket status.");
         }
+        if (newStatus == TicketTypes.TicketStatus.REOPENED) {
+            requireItStaffOwnerToReopen(ticket, actorRole, actorDepartmentId, actorUsername);
+        } else {
+            requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorUsername);
+        }
         if (newStatus == currentStatus) {
             return ticket; // không đổi -> không làm gì
         }
@@ -915,6 +933,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
 
         // Validate transition
@@ -942,6 +961,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
 
         if (!StatusTransitionValidator.isValidTransition(currentStatus, TicketTypes.TicketStatus.WAITING_FOR_USER)) {
@@ -996,6 +1016,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
 
         if (!StatusTransitionValidator.isValidTransition(currentStatus, TicketTypes.TicketStatus.RESOLVED)) {
@@ -1048,6 +1069,9 @@ public class TicketService {
                 throw new TicketRuleViolationException(
                         "You don't have permission to close this ticket.");
             }
+            if (actor.role() == UserRole.Role.NHAN_VIEN && actor.isItDepartmentMember()) {
+                requireOwner(ticket, actorUsername);
+            }
         }
 
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
@@ -1072,6 +1096,7 @@ public class TicketService {
             String actorName,
             String reason) {
         Ticket ticket = getTicket(id);
+        requireItStaffOwnerToReopen(ticket, actorRole, actorDepartmentId, actorUsername);
 
         // PHASE 2.1: the requester's own-ticket reopen path for NHAN_VIEN is preserved
         // verbatim (brief \u00a74). For everyone else, the canonical processing gate
@@ -1124,6 +1149,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         TicketTypes.TicketStatus currentStatus = ticket.getStatus();
 
         if (!StatusTransitionValidator.isValidTransition(currentStatus, TicketTypes.TicketStatus.ESCALATED)) {
@@ -1182,6 +1208,35 @@ public class TicketService {
         // Sẽ được filter ở controller level
 
         return valid;
+    }
+
+    // NHAN_VIEN + IT may only update tickets they own; unassigned ones must be taken via "Giao cho tôi" first.
+    private void requireItStaffCanUpdate(Ticket ticket, UserRole.Role actorRole, Long actorDepartmentId,
+            String actorUsername) {
+        if (actorRole == UserRole.Role.NHAN_VIEN && isITDepartment(actorDepartmentId)) {
+            requireOwner(ticket, actorUsername);
+        }
+    }
+
+    private static void requireOwner(Ticket ticket, String actorUsername) {
+        if (ticket.getAssigneeName() == null || ticket.getAssigneeName().isBlank()) {
+            throw new TicketRuleViolationException(
+                    "Ticket is unassigned; assign it to yourself before updating.");
+        }
+        if (actorUsername == null || !actorUsername.equalsIgnoreCase(ticket.getAssigneeName())) {
+            throw new TicketRuleViolationException("Only the ticket owner can update this ticket.");
+        }
+    }
+
+    // NHAN_VIEN + IT may reopen a closed ticket only when they own it or requested it.
+    private void requireItStaffOwnerToReopen(Ticket ticket, UserRole.Role actorRole, Long actorDepartmentId,
+            String actorUsername) {
+        if (actorRole == UserRole.Role.NHAN_VIEN && isITDepartment(actorDepartmentId)
+                && (actorUsername == null
+                        || !(actorUsername.equalsIgnoreCase(ticket.getAssigneeName())
+                                || actorUsername.equalsIgnoreCase(ticket.getRequesterUsername())))) {
+            throw new TicketRuleViolationException("Only the ticket owner or requester can reopen this ticket.");
+        }
     }
 
     /**
@@ -1257,6 +1312,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         TicketTypes.TicketPriority currentPriority = ticket.getPriority();
         if (newPriority == currentPriority) {
             return ticket; // không đổi -> không recalc SLA, không ghi audit
@@ -1301,6 +1357,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
 
         // Validate subcategory belongs to category
         Category newCategory = null;
@@ -1390,6 +1447,7 @@ public class TicketService {
         }
 
         Ticket ticket = getTicket(id);
+        requireItStaffCanUpdate(ticket, actorRole, actorDepartmentId, actorName);
         boolean contentChanged = false;
 
         // Update title if provided

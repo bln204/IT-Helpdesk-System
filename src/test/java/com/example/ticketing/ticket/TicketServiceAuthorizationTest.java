@@ -65,6 +65,14 @@ class TicketServiceAuthorizationTest {
     @Autowired
     private UserAccountRepository userAccountRepository;
 
+    // NHAN_VIEN + IT may only update tickets that are assigned, so processing tests start from an owned ticket.
+    private Ticket savedOwnedByItStaff() {
+        Ticket ticket = fixtures.mktRequestedTicket();
+        ticket.setAssignee(fixtures.nhanVienIT());
+        ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
+        return ticketRepository.save(ticket);
+    }
+
 
     // PHASE 3: helper for tests that need an extra user beyond the standard fixtures.
     private UserAccount persistUser(String username, UserRole.Role role,
@@ -215,7 +223,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("CURRENT: NHAN_VIEN + IT can start progress - matches intended policy")
         void currentNhanVienItCanStartProgress() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount actor = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.startProgress(
@@ -284,7 +292,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("CURRENT: NHAN_VIEN + IT can resolve and escalate - matches intended policy")
         void currentNhanVienItCanResolveAndEscalate() {
-            Ticket resolvedTicket = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket resolvedTicket = savedOwnedByItStaff();
             UserAccount actor = fixtures.nhanVienIT();
             ticketService.startProgress(resolvedTicket.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername());
 
@@ -292,7 +300,7 @@ class TicketServiceAuthorizationTest {
                 resolvedTicket.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername(), "Replaced cable");
             assertEquals(TicketStatus.RESOLVED, resolved.getStatus());
 
-            Ticket escalateTarget = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket escalateTarget = savedOwnedByItStaff();
             ticketService.startProgress(escalateTarget.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername());
             Ticket escalated = ticketService.escalateTicket(
                 escalateTarget.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername(), "Needs vendor");
@@ -349,7 +357,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("CURRENT: updateStatus cannot move to CANCELLED for a non-ADMIN actor")
         void currentUpdateStatusBlocksNonAdminCancel() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount actor = fixtures.nhanVienIT();
 
             TicketRuleViolationException error = assertThrows(
@@ -368,7 +376,7 @@ class TicketServiceAuthorizationTest {
         void currentUpdateStatusStillEnforcesTheTransitionGraph() {
             // RESOLVED -> IN_PROGRESS is not a legal edge. Actor authorization permitting
             // startProgress does not mean the transition graph is bypassed.
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount actor = fixtures.nhanVienIT();
             ticketService.startProgress(saved.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername());
             ticketService.resolveTicket(saved.getId(), actor.getRole(), actor.getDepartmentId(), actor.getUsername(), "done");
@@ -674,7 +682,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("CURRENT: NHAN_VIEN + IT can change priority - matches intended policy")
         void currentNhanVienItCanChangePriority() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount actor = fixtures.nhanVienIT();
 
             Ticket updated = ticketService.updatePriority(
@@ -918,7 +926,7 @@ class TicketServiceAuthorizationTest {
             // Phase 2.1: the INTERNAL comment written by the resolution is now visible to the
             // IT Helpdesk operator (NHAN_VIEN + IT) under canViewInternalComments. The
             // requester (non-IT MKT) still cannot see it.
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount itStaff = fixtures.nhanVienIT();
             UserAccount requester = fixtures.nhanVienMkt();
             ticketService.startProgress(
@@ -950,7 +958,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("CURRENT: the requester may close their own RESOLVED ticket - rule preserved")
         void currentRequesterCanCloseOwnResolvedTicket() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount requester = fixtures.nhanVienMkt();
             UserAccount itStaff = fixtures.nhanVienIT();
             ticketService.startProgress(
@@ -992,7 +1000,7 @@ class TicketServiceAuthorizationTest {
             // GIAM_DOC and non-IT TRUONG_PHONG are no longer permitted.
             // IT operators (TRUONG_PHONG + IT) are still allowed.
             UserAccount itManager = fixtures.truongPhongIT();
-            Ticket toClose = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket toClose = savedOwnedByItStaff();
             UserAccount itStaff = fixtures.nhanVienIT();
             ticketService.startProgress(
                 toClose.getId(), itStaff.getRole(), itStaff.getDepartmentId(), itStaff.getUsername());
@@ -1014,7 +1022,7 @@ class TicketServiceAuthorizationTest {
             for (UserAccount actor : List.of(
                     fixtures.admin(), fixtures.giamDoc(), fixtures.truongPhongMkt())) {
 
-                Ticket toDeny = ticketRepository.save(fixtures.mktRequestedTicket());
+                Ticket toDeny = savedOwnedByItStaff();
                 ticketService.startProgress(
                     toDeny.getId(), itStaff.getRole(), itStaff.getDepartmentId(), itStaff.getUsername());
                 ticketService.resolveTicket(
@@ -1036,7 +1044,7 @@ class TicketServiceAuthorizationTest {
         @Test
         @DisplayName("UNRESOLVED: a non-IT NHAN_VIEN may reopen their own closed ticket")
         void currentRequesterCanReopenOwnClosedTicket() {
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount requester = fixtures.nhanVienMkt();
             UserAccount itStaff = fixtures.nhanVienIT();
             ticketService.startProgress(

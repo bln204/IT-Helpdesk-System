@@ -54,6 +54,14 @@ class TicketServicePhase21IntegrationTest {
     @Autowired
     private TicketAuthorizationFixtures fixtures;
 
+    // NHAN_VIEN + IT may only update tickets that are assigned, so processing tests start from an owned ticket.
+    private Ticket savedOwnedByItStaff() {
+        Ticket ticket = fixtures.mktRequestedTicket();
+        ticket.setAssignee(fixtures.nhanVienIT());
+        ticket.setAssigneeName(fixtures.nhanVienIT().getUsername());
+        return ticketRepository.save(ticket);
+    }
+
     // ========================================================================
     // §23 - Processing integration test
     // ADMIN / GIAM_DOC cannot process tickets
@@ -94,7 +102,7 @@ class TicketServicePhase21IntegrationTest {
         void nhanVienItMayProcessMktRequesterTicketEndToEnd() {
             // This single test exercises §25 + §23 + the full happy path of an IT operator
             // working on a cross-department ticket.
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             UserAccount itStaff = fixtures.nhanVienIT();
 
             Ticket inProgress = ticketService.startProgress(
@@ -176,6 +184,139 @@ class TicketServicePhase21IntegrationTest {
 
             assertEquals(TicketStatus.ASSIGNED, self.getStatus());
             assertEquals(itStaff.getUsername(), self.getAssigneeName());
+        }
+
+        @Test
+        @DisplayName("NHAN_VIEN + IT self-receives a ticket already assigned to a peer - denied")
+        void nhanVienItCannotSelfReceiveAssignedTicket() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itStaff = fixtures.nhanVienIT();
+            UserAccount peer = fixtures.nhanVienIT2();
+            ticketService.assignTicket(saved.getId(), peer.getUsername(), peer.getRole(),
+                peer.getDepartmentId(), peer.getUsername());
+
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.assignTicket(
+                    saved.getId(), itStaff.getUsername(), itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+        }
+
+        @Test
+        @DisplayName("NHAN_VIEN + IT owner transfers own ticket to a peer - allowed")
+        void nhanVienItOwnerCanTransfer() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itStaff = fixtures.nhanVienIT();
+            UserAccount peer = fixtures.nhanVienIT2();
+            ticketService.assignTicket(saved.getId(), itStaff.getUsername(), itStaff.getRole(),
+                itStaff.getDepartmentId(), itStaff.getUsername());
+
+            Ticket transferred = ticketService.assignTicket(
+                saved.getId(), peer.getUsername(), itStaff.getRole(),
+                itStaff.getDepartmentId(), itStaff.getUsername());
+
+            assertEquals(peer.getUsername(), transferred.getAssigneeName());
+        }
+
+        @Test
+        @DisplayName("NHAN_VIEN + IT transfers a ticket owned by someone else - denied")
+        void nhanVienItNonOwnerCannotTransfer() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itStaff = fixtures.nhanVienIT();
+            UserAccount peer = fixtures.nhanVienIT2();
+            ticketService.assignTicket(saved.getId(), peer.getUsername(), peer.getRole(),
+                peer.getDepartmentId(), peer.getUsername());
+
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.assignTicket(
+                    saved.getId(), peer.getUsername(), itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+        }
+
+        @Test
+        @DisplayName("NHAN_VIEN + IT cannot update status / priority of an unassigned ticket")
+        void nhanVienItCannotUpdateUnassignedTicket() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itStaff = fixtures.nhanVienIT();
+
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.updatePriority(saved.getId(), TicketPriority.HIGH, itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.updateStatus(saved.getId(), TicketStatus.IN_PROGRESS, itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername(), itStaff.getUsername(), null));
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.startProgress(saved.getId(), itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+        }
+
+        @Test
+        @DisplayName("TRUONG_PHONG + IT may still update priority of an unassigned ticket")
+        void itManagerMayUpdateUnassignedTicket() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itManager = fixtures.truongPhongIT();
+
+            Ticket updated = ticketService.updatePriority(saved.getId(), TicketPriority.HIGH, itManager.getRole(),
+                itManager.getDepartmentId(), itManager.getUsername());
+
+            assertEquals(TicketPriority.HIGH, updated.getPriority());
+        }
+
+        @Test
+        @DisplayName("Closed ticket: only the NHAN_VIEN + IT owner may reopen")
+        void onlyOwnerItStaffMayReopenClosedTicket() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount owner = fixtures.nhanVienIT();
+            UserAccount other = fixtures.nhanVienIT2();
+            Ticket owned = ticketService.assignTicket(saved.getId(), owner.getUsername(), owner.getRole(),
+                owner.getDepartmentId(), owner.getUsername());
+            owned.setStatus(TicketStatus.CLOSED);
+            ticketRepository.save(owned);
+
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.updateStatus(saved.getId(), TicketStatus.REOPENED, other.getRole(),
+                    other.getDepartmentId(), other.getUsername(), other.getUsername(), null));
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.reopenTicket(saved.getId(), other.getUsername(), other.getRole(),
+                    other.getDepartmentId(), other.getUsername(), "again"));
+
+            Ticket reopened = ticketService.updateStatus(saved.getId(), TicketStatus.REOPENED, owner.getRole(),
+                owner.getDepartmentId(), owner.getUsername(), owner.getUsername(), null);
+            assertEquals(TicketStatus.REOPENED, reopened.getStatus());
+        }
+
+        @Test
+        @DisplayName("NHAN_VIEN + IT cannot update a ticket owned by a peer")
+        void nhanVienItNonOwnerCannotUpdate() {
+            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            UserAccount itStaff = fixtures.nhanVienIT();
+            UserAccount peer = fixtures.nhanVienIT2();
+            ticketService.assignTicket(saved.getId(), peer.getUsername(), peer.getRole(),
+                peer.getDepartmentId(), peer.getUsername());
+
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.updatePriority(saved.getId(), TicketPriority.HIGH, itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+            assertThrows(TicketRuleViolationException.class,
+                () -> ticketService.startProgress(saved.getId(), itStaff.getRole(),
+                    itStaff.getDepartmentId(), itStaff.getUsername()));
+        }
+
+        @Test
+        @DisplayName("Closed ticket: NHAN_VIEN + IT requester (not owner) may reopen")
+        void itStaffRequesterMayReopenClosedTicket() {
+            UserAccount requester = fixtures.nhanVienIT();
+            UserAccount owner = fixtures.nhanVienIT2();
+            Ticket ticket = fixtures.mktRequestedTicket();
+            ticket.setRequesterUsername(requester.getUsername());
+            ticket.setAssignee(owner);
+            ticket.setAssigneeName(owner.getUsername());
+            ticket.setStatus(TicketStatus.CLOSED);
+            Ticket saved = ticketRepository.save(ticket);
+
+            Ticket reopened = ticketService.reopenTicket(saved.getId(), requester.getUsername(), requester.getRole(),
+                requester.getDepartmentId(), requester.getUsername(), "still broken");
+
+            assertEquals(TicketStatus.REOPENED, reopened.getStatus());
         }
 
         @Test
@@ -262,7 +403,7 @@ class TicketServicePhase21IntegrationTest {
         void itOperatorProcessesMktTicket() {
             // MKT-requester, IT-operator: the canonical "department is the requester's"
             // invariant. The IT operator must NOT be blocked by requester.department.
-            Ticket saved = ticketRepository.save(fixtures.mktRequestedTicket());
+            Ticket saved = savedOwnedByItStaff();
             assertEquals("MKT", saved.getDepartment().getCode(),
                 "sanity: ticket.department == requester.department == MKT");
 

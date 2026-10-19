@@ -139,6 +139,10 @@ export const populateAssigneeSelect = (
   }
 };
 
+// Valid "Chuyển phụ trách" targets: backend only accepts NHAN_VIEN of the IT department.
+let transferTargets = [];
+export const getTransferTargets = () => transferTargets;
+
 export const getEngineerOptions = () => engineerOptions;
 export const setEngineerOptions = (options) => { engineerOptions = options; };
 
@@ -173,6 +177,7 @@ export const loadEngineerOptions = async () => {
     
     // Update both local and global engineerOptions
     engineerOptions = parsed;
+    transferTargets = response.filter((u) => u.role === 'NHAN_VIEN').map((u) => u.username);
     globalEngineerOptions.length = 0;
     globalEngineerOptions.push(...parsed);
     
@@ -975,7 +980,23 @@ export const applyRoleControls = () => {
   if (assignMeBtn) {
     assignMeBtn.classList.toggle('hidden', !canAssignTickets());
   }
-  
+  // IT staff: "Giao cho tôi" only on unassigned tickets, "Chuyển phụ trách" only on own tickets
+  if (isITStaffUser && window.selectedTicket) {
+    const username = getCurrentUser()?.username;
+    const isOwner = !!username && window.selectedTicket.assigneeName === username;
+    const isUnassigned = !window.selectedTicket.assigneeName;
+    if (assignMeBtn) assignMeBtn.classList.toggle('hidden', !isUnassigned);
+    if (updateAssigneeBtn) updateAssigneeBtn.classList.toggle('hidden', !isOwner);
+    if (assigneeInput) assigneeInput.disabled = !isOwner;
+    // Only the owner may update; a closed ticket may also be reopened by its requester.
+    const isRequester = !!username && window.selectedTicket.requesterUsername === username;
+    const blockStatus = window.selectedTicket.status === 'CLOSED' ? !(isOwner || isRequester) : !isOwner;
+    if (updateStatusBtn) updateStatusBtn.classList.toggle('hidden', blockStatus);
+    if (statusSelect) statusSelect.disabled = blockStatus;
+    if (updatePriorityBtn) updatePriorityBtn.classList.toggle('hidden', !isOwner);
+    if (prioritySelect) prioritySelect.disabled = !isOwner;
+  }
+
   if (commentVisibility) {
     if (!canViewInternalComments()) {
       commentVisibility.value = 'PUBLIC';
