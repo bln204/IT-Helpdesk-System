@@ -222,7 +222,8 @@ public class TicketController {
             @Valid @RequestBody TicketDtos.TicketAssigneeUpdateRequest request,
             Authentication authentication) {
         UserAccount user = getCurrentUser(authentication);
-        requireCanAssignOthers(user, authentication);
+        // IT operators pass here; TicketService restricts NHAN_VIEN + IT to tickets they own.
+        requireCanReceiveTicket(user, authentication);
 
         Ticket updated = ticketService.assignTicket(
                 id,

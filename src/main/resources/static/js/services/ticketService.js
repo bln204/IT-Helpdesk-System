@@ -634,11 +634,19 @@ export const selectTicket = async (ticket) => {
     await loadEngineerOptions();
   }
   
-  const { populateAssigneeSelect, ensureAssigneeOption } = await import('../ui/utils.js');
-  // IMPORTANT: Must await populateAssigneeSelect before setting value
-  await populateAssigneeSelect(assigneeInput, { includeUnassigned: true });
-  await ensureAssigneeOption(assigneeInput, full.assigneeName);
-  assigneeInput.value = full.assigneeName || UNASSIGNED_VALUE;
+  // Transfer list: only valid IT staff, never the logged-in user or the current assignee.
+  const { getTransferTargets, getDisplayName: displayNameOf } = await import('./userService.js');
+  const me = getCurrentUser()?.username;
+  assigneeInput.innerHTML = '<option value="">— Chọn người nhận —</option>';
+  getTransferTargets()
+    .filter((username) => username !== me && username !== full.assigneeName)
+    .forEach((username) => {
+      const option = document.createElement('option');
+      option.value = username;
+      option.textContent = displayNameOf(username);
+      assigneeInput.appendChild(option);
+    });
+  assigneeInput.value = '';
   
   const { applyRoleControls } = await import('./userService.js');
   applyRoleControls();
@@ -951,6 +959,10 @@ export const updateAssignee = async () => {
   };
   
   const assigneeName = normalizeAssigneeInput(assigneeInput.value);
+  if (!assigneeName) {
+    alert('Vui lòng chọn người nhận.');
+    return;
+  }
   if (assigneeName === (window.selectedTicket.assigneeName || null)) return;
 
   try {

@@ -273,7 +273,23 @@ const applyRoleControls = () => {
   if (assignMeBtn) {
     assignMeBtn.classList.toggle('hidden', !canAssignTickets());
   }
-  
+  // IT staff: "Giao cho tôi" only on unassigned tickets, "Chuyển phụ trách" only on own tickets
+  if (isITStaffUser && window.selectedTicket) {
+    const username = getCurrentUsername();
+    const isOwner = !!username && window.selectedTicket.assigneeName === username;
+    const isUnassigned = !window.selectedTicket.assigneeName;
+    if (assignMeBtn) assignMeBtn.classList.toggle('hidden', !isUnassigned);
+    if (updateAssigneeBtn) updateAssigneeBtn.classList.toggle('hidden', !isOwner);
+    if (assigneeInput) assigneeInput.disabled = !isOwner;
+    // Only the owner may update; a closed ticket may also be reopened by its requester.
+    const isRequester = !!username && window.selectedTicket.requesterUsername === username;
+    const blockStatus = window.selectedTicket.status === 'CLOSED' ? !(isOwner || isRequester) : !isOwner;
+    if (updateStatusBtn) updateStatusBtn.classList.toggle('hidden', blockStatus);
+    if (statusSelect) statusSelect.disabled = blockStatus;
+    if (updatePriorityBtn) updatePriorityBtn.classList.toggle('hidden', !isOwner);
+    if (prioritySelect) prioritySelect.disabled = !isOwner;
+  }
+
   // Comment visibility
   if (commentVisibility) {
     const canViewInternalComments = () => !isNhanVien() || isITStaff();
