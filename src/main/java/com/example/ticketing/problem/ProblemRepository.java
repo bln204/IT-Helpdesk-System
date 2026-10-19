@@ -29,11 +29,12 @@ public interface ProblemRepository extends JpaRepository<Problem, Long>, JpaSpec
 
     Page<Problem> findByAssignedToOrderByCreatedAtDesc(String assignedTo, Pageable pageable);
 
-    @Query("SELECT p FROM Problem p WHERE " +
+    @Query("SELECT p FROM Problem p WHERE (:status IS NULL OR p.status = :status) AND (" +
            "LOWER(p.title) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
            "LOWER(p.description) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "p.problemNumber LIKE CONCAT('%', :search, '%')")
-    Page<Problem> searchProblems(@Param("search") String search, Pageable pageable);
+           "p.problemNumber LIKE CONCAT('%', :search, '%'))")
+    Page<Problem> searchProblems(@Param("search") String search,
+            @Param("status") Problem.ProblemStatus status, Pageable pageable);
 
     @Query("SELECT p FROM Problem p WHERE p.status IN :statuses ORDER BY p.priority DESC, p.createdAt DESC")
     Page<Problem> findActiveByStatusIn(@Param("statuses") List<Problem.ProblemStatus> statuses, Pageable pageable);

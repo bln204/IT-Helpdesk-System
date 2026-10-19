@@ -13,6 +13,7 @@ const Incident = (() => {
     let incidents = [];
     let currentIncident = null;
     let isSubmitting = false;
+    let listenersBound = false;
 
     // ==================== Initialization ====================
 
@@ -23,12 +24,27 @@ const Incident = (() => {
         }
 
         window.Auth.onAuthReady(() => {
-            setupEventListeners();
+            // init() runs on every page visit; bind document listeners only once
+            if (!listenersBound) { setupEventListeners(); listenersBound = true; }
             loadIncidents();
         });
     }
 
+    function currentFilters() {
+        return {
+            search: document.getElementById('incident-search')?.value.trim(),
+            status: document.getElementById('incident-status-filter')?.value,
+        };
+    }
+
     function setupEventListeners() {
+        let searchTimer = null;
+        document.getElementById('incident-search')?.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => loadIncidents(), 300);
+        });
+        document.getElementById('incident-status-filter')?.addEventListener('change', () => loadIncidents());
+
         document.addEventListener('click', (e) => {
             if (e.target.closest('#refresh-incidents-btn')) {
                 loadIncidents();
@@ -73,6 +89,7 @@ const Incident = (() => {
     // ==================== API Calls ====================
 
     async function loadIncidents(params = {}) {
+        params = { ...currentFilters(), ...params };
         try {
             let url = API_BASE;
             const queryParams = new URLSearchParams();

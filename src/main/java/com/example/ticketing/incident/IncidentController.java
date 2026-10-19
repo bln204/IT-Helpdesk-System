@@ -52,7 +52,8 @@ public class IncidentController {
         Page<Incident> incidents;
 
         if (search != null && !search.isBlank()) {
-            incidents = incidentService.searchIncidents(search, pageable);
+            incidents = incidentService.searchIncidents(search,
+                    status != null && !status.isBlank() ? Incident.IncidentStatus.valueOf(status) : null, pageable);
         } else if (status != null && !status.isBlank()) {
             List<Incident.IncidentStatus> statuses = List.of(Incident.IncidentStatus.valueOf(status));
             incidents = incidentService.getIncidentsByStatus(statuses, pageable);

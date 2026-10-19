@@ -486,7 +486,8 @@ public class TicketService {
             Long deptId = userDepartmentId;
             if (deptId == null) {
                 // A non-IT user with no department can only see their own requests.
-                return ticketRepository.findByRequesterUsername(actor.username(), pageable);
+                return ticketRepository.findAuthorizedByOwner(actor.username(),
+                        status, assigneeFilter, searchParam, excludedStatus, applyExcludeClosed, pageable);
             }
             return ticketRepository.findAuthorizedByDepartmentOrOwner(
                     deptId, actor.username(),
