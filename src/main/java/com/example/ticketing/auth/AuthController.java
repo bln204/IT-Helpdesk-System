@@ -108,7 +108,12 @@ public class AuthController {
                 log.warn("Login attempt with disabled account: {}", request.getUsername());
                 throw new UserDisabledException(request.getUsername());
             }
-            
+
+            if (account.isDepartmentDisabled()) {
+                log.warn("Login attempt with account in disabled department: {}", request.getUsername());
+                throw UserDisabledException.departmentDisabled(request.getUsername());
+            }
+
             // ============ END Approval Check ============
 
             // Log audit

@@ -322,6 +322,11 @@ public class UserAccount implements UserDetails {
         return enabled;
     }
 
+    /** Phòng ban bị vô hiệu hoá thì mọi account thuộc phòng đó không được truy cập. */
+    public boolean isDepartmentDisabled() {
+        return department != null && !department.isEnabled();
+    }
+
     // ==================== Role Check Helpers ====================
 
     public boolean isAdmin() {

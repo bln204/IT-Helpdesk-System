@@ -105,7 +105,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     response.getWriter().write("{\"error\":\"Account disabled\",\"message\":\"Your account has been disabled. Please contact your administrator.\"}");
                     return;
                 }
-                
+
+                // Phòng ban bị tắt: chặn ngay cả token đã cấp trước đó. Không trả errorCode AUTH_USER* để api.js tự logout.
+                if (user.isDepartmentDisabled()) {
+                    logger.warn("Rejected token - user's department is disabled: {}", username);
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"error\":\"Department disabled\",\"message\":\"Your department has been disabled. Please contact your administrator.\"}");
+                    return;
+                }
+
                 // Mật khẩu tạm: chỉ cho gọi các endpoint đổi mật khẩu/đăng xuất (spec auth-foundation §3.3).
                 // Body có passwordMustChange=true để static/js/core/api.js tự mở modal đổi mật khẩu.
                 if (user.isPasswordMustChange()

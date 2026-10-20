@@ -30,4 +30,14 @@ public class UserDisabledException extends UserAccountException {
     public UserDisabledException(String message, Throwable cause) {
         super(ERROR_CODE, message, cause);
     }
+
+    private UserDisabledException(String errorCode, String message) {
+        super(errorCode, message);
+    }
+
+    /** Tài khoản thuộc phòng ban đang bị vô hiệu hoá. */
+    public static UserDisabledException departmentDisabled(String username) {
+        return new UserDisabledException("AUTH_USER_DEPARTMENT_DISABLED",
+            String.format("Phòng ban của tài khoản '%s' đang bị vô hiệu hoá.", username));
+    }
 }

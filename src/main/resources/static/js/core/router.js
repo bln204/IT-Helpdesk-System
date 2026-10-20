@@ -1,5 +1,5 @@
 // ==================== Router Module ====================
-import { isTokenValid, getToken, hasRole, isTruongPhong, isAdmin, getCurrentUser, checkPasswordMustChange } from './auth.js';
+import { isTokenValid, getToken, hasRole, isTruongPhong, isAdmin, getCurrentUser, checkPasswordMustChange, seesAll } from './auth.js';
 import { setToken, setCurrentUser } from './auth.js';
 import { canManageUsers } from '../services/userService.js';
 
@@ -90,12 +90,6 @@ export const showView = (viewName) => {
   }
 };
 
-const isStaff = () => {
-  const hasNhansVien = hasRole('ROLE_NHAN_VIEN');
-  const isITStaff = hasNhansVien && currentUser?.departmentCode === 'IT';
-  return !hasNhansVien || isITStaff;
-};
-
 export const routeGuard = () => {
   const token = isTokenValid() ? getToken() : null;
   if (!token && getToken()) {
@@ -149,7 +143,8 @@ export const routeGuard = () => {
   }
 
   // Role-based route guards
-  if (viewName === 'reports' && !isStaff()) {
+  // Mirror backend ReportingAuthorization: báo cáo/phân tích chỉ cho GS + IT.
+  if ((viewName === 'reports' || viewName === 'analytics') && !seesAll()) {
     showView('tickets');
     return;
   }
