@@ -142,13 +142,14 @@ export const attachEventHandlers = () => {
           }
           return;
         }
-        if (errorCode === 'AUTH_USER_DISABLED') {
+        if (errorCode === 'AUTH_USER_DISABLED' || errorCode === 'AUTH_USER_DEPARTMENT_DISABLED') {
+          const deptDisabled = errorCode === 'AUTH_USER_DEPARTMENT_DISABLED';
           if (loginError) {
             loginError.innerHTML = `
               <div class="login-error-icon">🔒</div>
-              <div class="login-error-title">Tài khoản đang bị vô hiệu hoá</div>
+              <div class="login-error-title">${deptDisabled ? 'Phòng ban đang bị vô hiệu hoá' : 'Tài khoản đang bị vô hiệu hoá'}</div>
               <div class="login-error-message">
-                Tài khoản của bạn hiện đang bị vô hiệu hoá.
+                ${deptDisabled ? 'Phòng ban của bạn hiện đang bị vô hiệu hoá nên tài khoản không thể truy cập hệ thống.' : 'Tài khoản của bạn hiện đang bị vô hiệu hoá.'}
                 Vui lòng liên hệ <strong>Trưởng phòng</strong> hoặc <strong>Quản trị viên</strong> để được hỗ trợ.
               </div>
             `;
